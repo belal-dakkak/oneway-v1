@@ -1,0 +1,34 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* Custom styles for RTL support */
+.rtl {
+  direction: rtl;
+}
+
+.ltr {
+  direction: ltr;
+}
+
+.transition-all-300 {
+  transition: all 0.3s ease;
+}
+
+.gold-gradient {
+  background: linear-gradient(135deg, #D4AF37, #B8941F);
+}
+
+.charcoal-gradient {
+  background: linear-gradient(135deg, #2C1810, #3D2817);
+}
+
+/* Custom scrollbar */
+.scrollbar-hide {
+  -ms-overflow-style: none;
+  scrollbar-width: none;
+}
+
+.scrollbar-hide::-webkit-scrollbar {
+  display: none;
+}

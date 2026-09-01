@@ -1,0 +1,48 @@
+{
+    "private": true,
+    "scripts": {
+        "dev": "npm run development",
+        "development": "mix",
+        "watch": "mix watch",
+        "watch-poll": "mix watch -- --watch-options-poll=1000",
+        "hot": "mix watch --hot",
+        "prod": "npm run production",
+        "production": "mix --production"
+    },
+    "devDependencies": {
+        "@inertiajs/inertia": "^0.11.0",
+        "@inertiajs/inertia-vue3": "^0.6.0",
+        "@inertiajs/progress": "^0.2.7",
+        "@tailwindcss/forms": "^0.5.0",
+        "@tailwindcss/typography": "^0.5.2",
+        "@vue/compiler-sfc": "^3.2.31",
+        "axios": "^0.21",
+        "laravel-echo": "^1.11.7",
+        "laravel-mix": "^6.0.49",
+        "lodash": "^4.17.21",
+        "postcss": "^8.1.14",
+        "postcss-import": "^14.0.2",
+        "pusher-js": "^7.1.0-beta",
+        "tailwindcss": "^3.0.0",
+        "vue": "^3.3.8",
+        "vue-loader": "^17.0.0"
+    },
+    "dependencies": {
+        "@popperjs/core": "^2.11.5",
+        "@suadelabs/vue3-multiselect": "^1.0.2",
+        "@vuepic/vue-datepicker": "^3.2.2",
+        "ag-grid-community": "^29.1.0",
+        "ag-grid-vue3": "^29.1.0",
+        "esc-pos-encoder": "^2.0.1",
+        "escpos-buffer": "^4.1.0",
+        "feather-icons": "^4.29.0",
+        "fuse.js": "^6.6.2",
+        "pinia": "^3.0.4",
+        "vue-feather": "^2.0.0",
+        "vue-i18n": "^9.2.2",
+        "vue-json-csv": "^2.1.0",
+        "vue-sweetalert2": "^5.0.5",
+        "vue3-carousel": "^0.1.46",
+        "vue3-colorpicker": "^2.0.4"
+    }
+}

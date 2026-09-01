@@ -1,0 +1,1551 @@
+
+
+namespace App\Repositories;
+
+use App\Http\Traits\ReceiptTrait;
+use App\Jobs\NotificationOrderJob;
+use App\Models\ClientDebit;
+use App\Models\ClientDebitLog;
+use App\Models\Currency;
+use App\Models\Order;
+use App\Models\OrderItem;
+use App\Models\Product;
+use App\Models\ProductColor;
+use App\Models\Refund;
+use App\Models\User;
+use App\Models\UserProduct;
+use App\Models\Wallet;
+use Carbon\Carbon;
+use Carbon\CarbonPeriod;
+use Exception;
+use Illuminate\Contracts\Pagination\LengthAwarePaginator;
+use Illuminate\Http\Request;
+use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Log;
+use Illuminate\Support\Facades\Session;
+use Psr\Log\LogLevel;
+
+class OrderRepository
+{
+    use ReceiptTrait;
+
+    public function add(Request $request)
+    {
+        try {
+            DB::beginTransaction();
+            $orderCash = $request->get('type') == Order::TYPE_CASH;
+            $payment = $request->get('payment') ? $request->get('payment')['value']:0;
+
+            generate:
+            $barcode = generateRandomNumber(10);
+            if (Order::query()->where('barcode', $barcode)->exists())
+                goto generate;
+
+            $totalPriceBeforeDisc = number_format((float)$request->get('total_price_before_discount'), 2, '.', '');
+
+            $order_total_tax_ratio         = 0;
+
+            if ($orderCash) {
+
+                // new code
+				$userId = $request->get('user') ? $request->get('user')['id'] : null;
+                //$userId = auth()->id();
+
+                $order = new Order([
+                    'notes' => $request->get('notes'),
+                    'trn' => $request->get('trn'),
+                    'seller_id' => auth()->id(),
+                    'type' => Order::TYPE_CASH,
+					'buyer_id' => $userId,  // new code
+                    'barcode' => $barcode,
+                    'payment_type' => $payment,
+                    'curr_type' => $request->get('currency')['value'],
+                    'curr_rate' => $request->get('currency')['rate'],
+                    'discount' => $request->get('discount', 0),
+                    'total_price_before_discount' => $totalPriceBeforeDisc,
+                ]);
+
+            } else{
+
+
+                $userId = $request->get('user') ? $request->get('user')['id'] : null;
+                $order = new Order([
+                    'notes' => $request->get('notes'),
+                    'trn' => $request->get('trn'),
+                    'seller_id' => auth()->id(),
+                    'type' => $request->get('type') == Order::TYPE_FOR_CLIENT ? Order::TYPE_FOR_CLIENT : Order::TYPE_APP,
+                    'buyer_id' => $userId,
+                    'shipper_id' => $request->get('shipper') ? $request->get('shipper')['id'] : null,
+                    'paid_price' => number_format((float)$request->get('paid_price'), 2, '.', ''),
+                    'barcode' => $barcode,
+                    'payment_type' => $payment,
+                    'curr_type' => $request->get('currency')['value'],
+                    'curr_rate' => $request->get('currency')['rate'],
+                    'discount' => $request->get('discount', 0),
+                    'total_price_before_discount' => $totalPriceBeforeDisc,
+                ]);
+            }
+
+            $order->save();
+
+            $totalPrice = 0;
+
+            foreach ($request->get('selected_products') as $product){
+
+                $itemTotalPrice = (float)number_format((float)$product['price'] * $product['qty'], 2, '.', '');
+
+                $item_price = $product['price']/$request->get('currency')['rate'];
+
+                $item_price_paid        = $item_price * $order->curr_rate;
+                $total_price_paid       = $product['qty'] * $item_price * $order->curr_rate;
+                $tax_value_paid         = 0;
+                $price_without_tax_paid = $item_price * $order->curr_rate;
+
+                $order_item = $order->items()->create([
+
+                    'user_product_id' => $product['product_id'],
+                    'qty' => $product['qty'],
+                    'item_price' => $item_price,
+                    'total_price' => $itemTotalPrice/$request->get('currency')['rate'],
+
+                    'tax_ratio'              => 0,
+                    'tax_value'              => 0,
+                    'price_without_tax'      => $item_price,
+                    'item_price_paid'        => ($item_price_paid),
+                    'total_price_paid'       => ($total_price_paid),
+                    'tax_value_paid'         => ($tax_value_paid),
+                    'price_without_tax_paid' => ($price_without_tax_paid),
+                ]);
+
+                $totalPrice += $itemTotalPrice;
+
+                $userProduct = UserProduct::query()->find($product['product_id']);
+
+                $oldStock = $userProduct->stock;
+                $newStock = $oldStock - $product['qty'];
+                $userProduct->update(['stock' => $newStock]);
+
+                if($userProduct) {
+
+                    if($userProduct->user) {
+
+                        if($userProduct->user->enable_tax == 'yes') {
+
+                            $tax_ratio             = $userProduct->user->tax_ratio;
+                            $order_total_tax_ratio = $tax_ratio;
+
+                            if($request->order_type == 'complex_from_multi') {
+
+                                $price_without_tax = $item_price;
+                                $tax_value         = ($price_without_tax * ($tax_ratio / 100));
+                                $price_with_vat    = $price_without_tax + $tax_value;
+
+                            } else {
+                                $price_without_tax = $item_price / (1 + ($tax_ratio / 100) );
+                                $tax_value         = $item_price - $price_without_tax;
+                                $price_with_vat       = $item_price;
+                            }
+
+                            $item_price_paid        = $price_with_vat * $order->curr_rate;
+                            $total_price_paid       = $order_item->qty * $price_with_vat * $order->curr_rate;
+                            $tax_value_paid         = $tax_value * $order->curr_rate;
+                            $price_without_tax_paid = $price_without_tax * $order->curr_rate;
+
+                            $order_item->update([
+                                'tax_ratio'              => $tax_ratio,
+                                'tax_value'              => $tax_value,
+                                'price_without_tax'      => $price_without_tax,
+                                'total_price'            => $price_with_vat *  $order_item->qty,
+                                'item_price'             => $price_with_vat,
+                                'item_price_paid'        => ($item_price_paid),
+                                'total_price_paid'       => ($total_price_paid),
+                                'tax_value_paid'         => ($tax_value_paid),
+                                'price_without_tax_paid' => ($price_without_tax_paid),
+                            ]);
+
+
+                        }
+                    }
+                }
+            }
+
+
+
+            $totalPriceAfterDiscount = number_format((float)$totalPrice - $request->get('discount', 0), 2, '.', '');
+            //        $receipt = $this->generatePDF($order->id);
+            if($request->has('paid_price'))
+                $paidPrice = number_format((float)$request->get('paid_price'), 2, '.', '');
+            else
+                $paidPrice = number_format((float)$totalPriceAfterDiscount, 2, '.', '');
+            // return ['paid_price' => $paidPrice,
+            //         'total_price' => $totalPriceAfterDiscount,
+            //         'remain_price' => 0,
+            //         'credit' => auth()->user()->wallet->credit + ($paidPrice/$request->get('currency')['rate']),
+            //         'credit1' => auth()->user()->wallet->credit
+            //     ];
+
+
+            if ($orderCash)
+                $order->update([
+                    'paid_price' => $paidPrice,
+                    'total_price' => $totalPriceAfterDiscount,
+                    'remain_price' => 0
+                ]);
+            else{
+                $remainPrice = $totalPriceAfterDiscount - $paidPrice;
+                $order->update([
+                    'paid_price' => $paidPrice,
+                    'total_price' => $totalPriceAfterDiscount,
+                    'remain_price' => $remainPrice,
+                ]);
+
+            //    if ($remainPrice > 0){
+            //        if (!$userId)
+            //            throw new Exception('رجاءً اختر الزبون عند إنشاء طلبية بالدين');
+
+            //        $clientDebit = ClientDebit::query()->firstOrCreate([
+            //            'creditor_id' => auth()->id(),
+            //            'debtor_id' => $userId
+            //        ],[
+            //            'creditor_id' => auth()->id(),
+            //            'debtor_id' => $userId,
+            //            'amount' => $remainPrice/$request->get('currency')['rate']
+            //        ]);
+
+            //        $am = number_format((float)$remainPrice/$request->get('currency')['rate'], 2, '.', '');
+
+            //        $clientName = $clientDebit->debtor->name;
+            //        $totalQty = $order->items()->sum('qty');
+            //        $shopName = $clientDebit->creditor->name;
+
+            //        $note = "فام الزبون $clientName بشراء $totalQty قطع بسعر $totalPriceAfterDiscount ".$request->get('currency')['name']." من المحل $shopName";
+            //        $note .= " وقام بدفع $paidPrice ".$request->get('currency')['name']." والباقي $remainPrice ".$request->get('currency')['name'];
+
+
+            //        if ($clientDebit->debtor->wallet->credit > 0) {
+            //            if ($clientDebit->debtor->wallet->credit > $am) {
+            //                $rm = $clientDebit->debtor->wallet->credit - $am;
+            //                $clientDebit->debtor->wallet->update(['credit' => $rm, 'debit' => 0]);
+
+            //            } else {
+            //                $rm = $am - $clientDebit->debtor->wallet->credit;
+            //                $clientDebit->debtor->wallet->update(['debit' => $rm, 'credit' => 0]);
+            //            }
+            //            $rmCurrency = number_format((float)$rm * $request->get('currency')['rate'], 2, '.', '');
+            //            $note .= " وتم خصم مبلغ $rmCurrency من الرصيد";
+            //            if (!$clientDebit->wasRecentlyCreated){
+            //                $clientDebit->update(['amount' => $clientDebit->debtor->wallet->credit - $clientDebit->debtor->wallet->debit]);
+            //            }
+            //        }else {
+            //            $rm = $am;
+            //            if (!$clientDebit->wasRecentlyCreated){
+            //                $clientDebit->update(['amount' => DB::raw("amount + ".$rm)]);
+            //            }
+            //            $clientDebit->debtor->wallet->update(['debit' => DB::raw("debit + ".$rm)]);
+            //        }
+
+            //        ClientDebitLog::query()->create([
+            //            'client_debit_id' => $clientDebit->id,
+            //            'order_id' => $order->id,
+            //            'amount' => $rm,
+            //            'note' => $note
+            //        ]);
+            //    }
+            }
+
+            if($request->order_type == 'complex_from_multi') {
+
+                $order_total_price_without_tax = $order->total_price;
+                $order_total_tax_value         = ($order_total_price_without_tax * $order_total_tax_ratio) / 100;
+                $order_total_price             = $order_total_price_without_tax + $order_total_tax_value;
+
+            } else {
+
+                $order_total_price       = $order->total_price;
+                $order_total_price_without_tax = $order_total_price / (1 + ($order_total_tax_ratio / 100) );
+                $order_total_tax_value         = $order_total_price - $order_total_price_without_tax;
+
+                // $order_total_tax_value        = ($order_total_price  * $order_total_tax_ratio) / 100;
+                // $order_total_price_without_tax = $order_total_price - $order_total_tax_value;
+
+            }
+
+            $calc_remain_price = $order_total_price - $order->paid_price;
+            $calc_total_price  = $order_total_price;
+            $calc_paid_price   = $order->paid_price;
+
+            $order->update([
+                'tax_ratio'         => $order_total_tax_ratio,
+                'tax_value'         => $order_total_tax_value,
+                'price_without_tax' => $order_total_price_without_tax,
+                'total_price'       => $order_total_price,
+                'remain_price'       => $calc_remain_price,
+            ]);
+
+
+            // start new code
+
+            if (! $orderCash && $calc_remain_price > 0) {
+
+                if (!$userId)
+                       throw new Exception('رجاءً اختر الزبون عند إنشاء طلبية بالدين');
+
+                $clientDebit = ClientDebit::query()->firstOrCreate([
+                    'creditor_id' => auth()->id(),
+                    'debtor_id' => $userId
+                ],[
+                    'creditor_id' => auth()->id(),
+                    'debtor_id' => $userId,
+                    'amount' => $calc_remain_price/$request->get('currency')['rate']
+                ]);
+
+                $am = number_format((float)$calc_remain_price/$request->get('currency')['rate'], 2, '.', '');
+
+                $clientName = $clientDebit->debtor->name;
+                $totalQty = $order->items()->sum('qty');
+                $shopName = $clientDebit->creditor->name;
+
+                $note = "فام الزبون $clientName بشراء $totalQty قطع بسعر $calc_total_price ".$request->get('currency')['name']." من المحل $shopName";
+                $note .= " وقام بدفع $calc_paid_price ".$request->get('currency')['name']." والباقي $calc_remain_price ".$request->get('currency')['name'];
+
+
+                if ($clientDebit->debtor->wallet->credit > 0) {
+                    if ($clientDebit->debtor->wallet->credit > $am) {
+                        $rm = $clientDebit->debtor->wallet->credit - $am;
+                        $clientDebit->debtor->wallet->update(['credit' => $rm, 'debit' => 0]);
+
+                    } else {
+                        $rm = $am - $clientDebit->debtor->wallet->credit;
+                        $clientDebit->debtor->wallet->update(['debit' => $rm, 'credit' => 0]);
+                    }
+                    $rmCurrency = number_format((float)$rm * $request->get('currency')['rate'], 2, '.', '');
+                    $note .= " وتم خصم مبلغ $rmCurrency من الرصيد";
+                    if (!$clientDebit->wasRecentlyCreated){
+                        $clientDebit->update(['amount' => $clientDebit->debtor->wallet->credit - $clientDebit->debtor->wallet->debit]);
+                    }
+                }else {
+                    $rm = $am;
+                    if (!$clientDebit->wasRecentlyCreated){
+                        $clientDebit->update(['amount' => DB::raw("amount + ".$rm)]);
+                    }
+                    $clientDebit->debtor->wallet->update(['debit' => DB::raw("debit + ".$rm)]);
+                }
+
+                ClientDebitLog::query()->create([
+                    'client_debit_id' => $clientDebit->id,
+                    'order_id' => $order->id,
+                    'amount' => $rm,
+                    'note' => $note
+                ]);
+
+            }
+
+            // end new code
+
+
+            Wallet::query()->updateOrCreate([
+                'user_id' => auth()->id()
+            ],[
+                'credit' => auth()->user()->wallet->credit + ($paidPrice/$request->get('currency')['rate']),
+                'user_id' => auth()->id()
+            ]);
+        }catch (Exception $exception){
+            DB::rollBack();
+            Log::error($exception->getLine().'-'.$exception->getMessage());
+            return false;
+        }
+
+        DB::commit();
+        return $order;
+
+    }
+
+    public function addForOnline(Request $request)
+    {
+        try {
+            DB::beginTransaction();
+
+            generate:
+            $barcode = generateRandomNumber(10);
+            if (Order::query()->where('barcode', $barcode)->exists())
+                goto generate;
+
+
+            $userId = auth()->id();
+            $order = new Order([
+                'notes' => $request->get('notes'),
+                'seller_id' => auth()->id(),
+                'type' => Order::TYPE_APP,
+                'buyer_id' => $userId,
+                'shipper_id' => $request->get('shipper') ? $request->get('shipper')['id'] : null,
+                'barcode' => $barcode,
+                'shipping_details_id' => $request->get('shipping_details_id'),
+                'total_price_before_discount' => 0,
+                'discount' => 0,
+                'invoice' => $request->get('tap_id'),
+                'payment_type' => $request->get('payment')['name']
+            ]);
+
+            $order->save();
+
+            $totalPrice = 0;
+            $totalPriceBeforeDiscount = 0;
+            foreach ($request->get('items') as $product){
+                $productObj = ProductColor::query()->where('id', $product['product_id'])->first();
+                $itemTotalPrice = ceil($productObj->product->retail_price * $product['qty']);
+                $order->productItems()->create([
+                    'product_color_id' => $productObj->id,
+                    'qty' => $product['qty'],
+                    'item_price' => ceil($productObj->product->retail_price),
+                    'total_price' => ceil($itemTotalPrice),
+                    'size' => $product['size']??null
+                ]);
+                $totalPrice += $itemTotalPrice;
+                $totalPriceBeforeDiscount += ceil($productObj->product->price_before_discount);
+
+                //  $newStock = $productObj->stock - $product['qty'];
+                //  $productObj->update(['stock' => $newStock]);
+            }
+
+            $discount = ceil($totalPriceBeforeDiscount - $totalPrice);
+
+            $order->update([
+                'paid_price' => $totalPrice,
+                'total_price' => $totalPrice,
+                'remain_price' => 0,
+                'discount' => $discount,
+                'total_price_before_discount' => $totalPriceBeforeDiscount,
+            ]);
+
+            //            Wallet::query()->updateOrCreate([
+            //                'user_id' => auth()->id()
+            //            ],[
+            //                'credit' => auth()->user()->wallet->credit + $totalPrice,
+            //                'user_id' => auth()->id()
+            //            ]);
+
+            $admin = User::query()->find(1);
+            $lbShop = User::query()->find(184);
+            $aeShop = User::query()->find(189);
+            $user = User::query()->find(auth()->id());
+            $note = "New Order";
+            NotificationOrderJob::dispatch($admin, $user, $order, $note)->onQueue('notify');
+            NotificationOrderJob::dispatch($lbShop, $user, $order, $note)->onQueue('notify');
+            NotificationOrderJob::dispatch($aeShop, $user, $order, $note)->onQueue('notify');
+
+        }catch (Exception $exception){
+            DB::rollBack();
+            Log::error($exception->getMessage());
+            return $exception->getMessage();
+        }
+
+        DB::commit();
+        return $order;
+
+    }
+
+    public function update(Request $request, Order $order)
+    {
+        try {
+            DB::beginTransaction();
+
+            $orderCash = $request->get('type') == Order::TYPE_CASH;
+
+            $orderOldPrice = $orderCash ? $order->total_price : $order->paid_price;
+
+            $order_total_tax_ratio         = 0;
+
+            /* if ($orderCash) */
+            /*     $order->update([ */
+            /*         'discount' => $request->get('discount', 0), */
+            /*         'total_price_before_discount' => $request->get('total_price_before_discount'), */
+            /*         'paid_price' => $request->get('paid_price'), */
+            /*     ]); */
+            /* else{ */
+            /*     $order->update([ */
+            /*         'buyer_id' => $request->get('user') ? $request->get('user')['id'] : null, */
+            /*         'shipper_id' => $request->get('shipper') ? $request->get('shipper')['id'] : null, */
+            /*         'paid_price' => $request->get('paid_price'), */
+            /*         'discount' => $request->get('discount', 0), */
+            /*         'total_price_before_discount' => $request->get('total_price_before_discount'), */
+            /*     ]); */
+            /* } */
+
+
+            if(auth()->user()->country_id == User::COUNTRY_UAE)
+                $rate = Currency::where('name','aed')->first()->rate;
+            else
+                $rate = 1;
+
+            $totalPrice = 0;
+            Log::log(LogLevel::INFO, $request->get('selected_products'));
+
+            foreach ($request->get('selected_products') as $product) {
+
+                if (isset($product['product_id'])){
+
+                    $userProduct = UserProduct::query()->find($product['product_id']);
+
+                    $product['price'] /= $rate;
+
+                    $item_price = $product['price'];
+
+                    $itemTotalPrice = $product['price'] * $product['qty'];
+
+                    $orderItem = OrderItem::query()
+                        ->where('order_id', $order->id)
+                        ->where('user_product_id', $product['product_id'])
+                        ->first();
+
+                    $oldStock = $userProduct->stock;
+
+                    if (!$orderItem){
+
+                        $item_price_paid        = $product['price'] * $order->curr_rate;
+                        $total_price_paid       = $product['qty'] * $product['price'] * $order->curr_rate;
+                        $tax_value_paid         = 0;
+                        $price_without_tax_paid = $item_price_paid;
+
+                        $orderItem = OrderItem::query()->create([
+                            'user_product_id' => $product['product_id'],
+                            'qty' => $product['qty'],
+                            'item_price' => $product['price'],
+                            'total_price' => $itemTotalPrice,
+                            'order_id' => $order->id,
+
+                            'tax_ratio'              => 0,
+                            'tax_value'              => 0,
+                            'price_without_tax'      => $product['price'],
+
+                            'item_price_paid'        => ($item_price_paid),
+                            'total_price_paid'       => ($total_price_paid),
+                            'tax_value_paid'         => ($tax_value_paid),
+                            'price_without_tax_paid' => ($price_without_tax_paid),
+
+                        ]);
+
+                        $newStock = $oldStock - $product['qty'];
+                        $userProduct->update(['stock' => $newStock]);
+
+                    } else {
+
+                        $oldQty = $orderItem->qty;
+
+                        $item_price_paid        = $product['price'] * $order->curr_rate;
+                        $total_price_paid       = $product['qty'] * $product['price'] * $order->curr_rate;
+                        $tax_value_paid         = 0;
+                        $price_without_tax_paid = $item_price_paid;
+
+                        $orderItem->update([
+                            'qty' => $product['qty'],
+                            'item_price' => $product['price'],
+                            'total_price' => $itemTotalPrice,
+
+                            'tax_ratio'              => 0,
+                            'tax_value'              => 0,
+                            'price_without_tax'      => $product['price'],
+
+                            'item_price_paid'        => ($item_price_paid),
+                            'total_price_paid'       => ($total_price_paid),
+                            'tax_value_paid'         => ($tax_value_paid),
+                            'price_without_tax_paid' => ($price_without_tax_paid),
+                        ]);
+
+                        Log::log(LogLevel::INFO, $oldStock);
+                        Log::log(LogLevel::INFO, $oldQty);
+                        Log::log(LogLevel::INFO, $product['qty']);
+
+                        if ($product['qty'] > $oldQty){
+                            $newStock = $oldStock - ($product['qty'] - $oldQty);
+                            $userProduct->update(['stock' => $newStock]);
+                        } elseif($oldQty > $product['qty']){
+                            $newStock = $oldStock + ($oldQty - $product['qty']);
+                            $userProduct->update(['stock' => $newStock]);
+                        }
+                    }
+
+                    $totalPrice += $itemTotalPrice;
+
+                    ///////////////////////////////// new code ///////////////////////////
+
+                    if($userProduct) {
+
+                        if($userProduct->user) {
+
+                            if($userProduct->user->enable_tax == 'yes') {
+
+                                $tax_ratio             = $userProduct->user->tax_ratio;
+                                $order_total_tax_ratio = $tax_ratio;
+
+                                if($request->order_type == 'complex_from_multi') {
+
+                                    $price_without_tax = $item_price;
+                                    $tax_value         = ($price_without_tax * ($tax_ratio / 100));
+                                    $price_with_vat    = $price_without_tax + $tax_value;
+
+                                } else {
+                                    $price_without_tax = $item_price / (1 + ($tax_ratio / 100) );
+                                    $tax_value         = $item_price - $price_without_tax;
+                                    $price_with_vat       = $item_price;
+                                }
+
+
+                                $item_price_paid        = $price_without_tax * $order->curr_rate;
+                                $total_price_paid       = $price_with_vat * $order->curr_rate;
+                                $tax_value_paid         = $tax_value * $order->curr_rate;
+                                $price_without_tax_paid = $price_without_tax * $order->curr_rate;
+
+                                $orderItem->update([
+                                    'tax_ratio'              => $tax_ratio,
+                                    'tax_value'              => $tax_value,
+                                    'price_without_tax'      => $price_without_tax,
+                                    'total_price'            => $orderItem->qty * $price_with_vat,
+                                    'item_price'             => $price_with_vat,
+                                    'item_price_paid'        => ($item_price_paid),
+                                    'total_price_paid'       => ($orderItem->qty * $total_price_paid),
+                                    'tax_value_paid'         => ($tax_value_paid),
+                                    'price_without_tax_paid' => ($price_without_tax_paid),
+                                ]);
+
+                            }
+                        }
+                    }
+
+                    ///////////////////////////////// end new code ///////////////////////////
+
+                }
+            }
+
+            $discount = $request->get('discount', 0) / $rate;
+
+            $totalPriceAfterDiscount = $totalPrice - $discount;
+
+            // $paidPrice = $request->get('paid_price');
+            $paidPrice   = !is_null($request->get('paid_price')) ? ($request->get('paid_price') / $rate) : ($totalPriceAfterDiscount);
+
+            $remainPrice = currencyExchange($totalPriceAfterDiscount - $paidPrice, $rate);
+            $paidPrice   = currencyExchange($paidPrice, $rate);
+
+            if ($orderCash)
+                $order->update([
+                    'discount'                    => $request->get('discount', 0),
+                    'total_price_before_discount' => $request->get('total_price_before_discount'),
+                    'paid_price'                  => $paidPrice,
+                    'total_price'                 => currencyExchange($totalPriceAfterDiscount, $rate),
+                    'remain_price'                => $remainPrice,
+                ]);
+            else {
+                $order->update([
+                    'buyer_id'                    => $request->get('user') ? $request->get('user')['id'] : null,
+                    'shipper_id'                  => $request->get('shipper') ? $request->get('shipper')['id'] : null,
+                    'discount'                    => $request->get('discount', 0),
+                    'total_price_before_discount' => $request->get('total_price_before_discount'),
+                    'paid_price'                  => $paidPrice,
+                    'total_price'                 => currencyExchange($totalPriceAfterDiscount, $rate),
+                    'remain_price'                => $remainPrice,
+                ]);
+
+                // new code for if
+                //if ($remainPrice > 0){
+
+                    // old code
+                    // $clientDebit = ClientDebit::query()
+                    //     ->where('creditor_id', auth()->id())
+                    //     ->where('debtor_id', $order->buyer_id)
+                    //     ->first();
+
+					 if ($remainPrice > 0){
+						// new code
+						$clientDebit = ClientDebit::query()->firstOrCreate([
+								'creditor_id' => auth()->id(),
+								'debtor_id' => $order->buyer_id
+                        ],[
+                            'creditor_id' => auth()->id(),
+                            'debtor_id' => $order->buyer_id,
+                            //'amount' => $remainPrice/$request->get('currency')['rate'],
+                            'amount' => $remainPrice
+                        ]);
+
+					 } else {
+
+					 	 $clientDebit = ClientDebit::query()
+                          ->where('creditor_id', auth()->id())
+                          ->where('debtor_id', $order->buyer_id)
+                          ->first();
+					 }
+
+                    $clientName = $clientDebit != null ?  ($clientDebit->debtor != null ? $clientDebit->debtor->name : '') : '';
+                    $totalQty = $order->items()->sum('qty');
+                    $shopName = $clientDebit != null ?  ($clientDebit->creditor != null ? $clientDebit->creditor->name : '') : '';;
+                    $note = "فام الزبون $clientName بشراء $totalQty قطع بسعر $totalPriceAfterDiscount من المحل $shopName";
+                    $note .= " وقام بدفع $paidPrice والباقي $remainPrice";
+
+                    $log = ClientDebitLog::query()
+                        ->where('client_debit_id', ($clientDebit != null ? $clientDebit->id : 0))
+                        ->where('order_id', $order->id)
+                        ->first();
+                    if($log){
+                        if ($log->amount > $totalPriceAfterDiscount){
+                            $newPrice = (int)ceil($log->amount - $totalPriceAfterDiscount/$order->curr_rate);
+
+                            $log->update(['amount' => DB::raw("amount - $newPrice"), 'note' => $note]);
+
+                            if($clientDebit) {
+                                $clientDebit->update(['amount' => DB::raw("amount - $newPrice")]);
+                                $clientDebit->debtor->wallet->update(['debit' => DB::raw("debit - $newPrice")]);
+                            }
+
+                        } elseif($log->amount < $totalPriceAfterDiscount){
+                            $newPrice = (int)ceil($totalPriceAfterDiscount - $log->amount);
+
+                            $log->update(['amount' => DB::raw("amount + $newPrice"), 'note' => $note]);
+
+                            if($clientDebit) {
+                                $clientDebit->update(['amount' => DB::raw("amount + $newPrice")]);
+                                $clientDebit->debtor->wallet->update(['debit' => DB::raw("debit + $newPrice")]);
+                            }
+                        }
+                    }
+
+
+                    $debtor = $clientDebit != null ? $clientDebit->debtor()->get()->first() : null;
+                    $debt   = $totalPriceAfterDiscount - currencyExchange($paidPrice, 1 / $rate);
+
+                    if($clientDebit) {
+                        $clientDebit->update([
+                            'amount' => $debt
+                        ]);
+                    }
+
+
+					if($debtor != null) {
+						Wallet::query()->updateOrCreate([
+							'user_id' => $debtor != null ? $debtor->id : 0
+						],[
+							'debit' => $debt,
+							'user_id' => $debtor != null ? $debtor->id : 0
+						]);
+					}
+
+                //} // end // new code for if
+            }
+
+            ///////////////////////////////////////////////////////////////
+
+            if($request->order_type == 'complex_from_multi') {
+
+                $order_total_price_without_tax = $order->total_price;
+                $order_total_tax_value         = ($order_total_price_without_tax * $order_total_tax_ratio) / 100;
+                $order_total_price             = $order_total_price_without_tax + $order_total_tax_value;
+
+            } else {
+
+                $order_total_price       = $order->total_price;
+                $order_total_price_without_tax = $order_total_price / (1 + ($order_total_tax_ratio / 100) );
+                $order_total_tax_value         = $order_total_price - $order_total_price_without_tax;
+
+                // $order_total_tax_value        = ($order_total_price  * $order_total_tax_ratio) / 100;
+                // $order_total_price_without_tax = $order_total_price - $order_total_tax_value;
+
+            }
+
+            $calc_remain_price = $order_total_price - $order->paid_price;
+            $calc_total_price  = $order_total_price;
+            $calc_paid_price   = $order->paid_price;
+
+            $order->update([
+                'tax_ratio'         => $order_total_tax_ratio,
+                'tax_value'         => $order_total_tax_value,
+                'price_without_tax' => $order_total_price_without_tax,
+                'total_price'       => $order_total_price,
+                'remain_price'       => $calc_remain_price,
+            ]);
+
+
+
+            ///////////////////////////////////////////////////////////////
+
+            if ($paidPrice > $orderOldPrice)
+                Wallet::query()->updateOrCreate([
+                    'user_id' => auth()->id()
+                ],[
+                    'credit' => auth()->user()->wallet->credit + ($paidPrice - $orderOldPrice) / $rate,
+                    'user_id' => auth()->id()
+                ]);
+            else if ($paidPrice < $orderOldPrice)
+                Wallet::query()->updateOrCreate([
+                    'user_id' => auth()->id()
+                ],[
+                    'credit' => auth()->user()->wallet->credit - ($orderOldPrice - $paidPrice)/ $rate,
+                    'user_id' => auth()->id()
+                ]);
+        }catch (Exception $exception){
+            dd($exception->getMessage());
+            DB::rollBack();
+            Log::error($exception->getLine().'-'.$exception->getMessage());
+            return false;
+        }
+
+        DB::commit();
+        return $order;
+    }
+
+    private function returnRefoundOrdersArr($request, $debts = false, $profits = false, $with = null,$pagination = true,$withItems = true) {
+
+        if (!$with)
+            if($withItems)
+                $with = ['buyer', 'productItems','seller', 'shipper', 'items.product.productColor'];
+            else
+                $with = ['buyer', 'productItems','seller', 'shipper'];
+
+            // $with = ['buyer', 'productItems','seller', 'shipper', 'items.product.productColor'];
+
+        $orders = Order::query()->with($with);
+        $country = auth()->user()->country_id;
+        $orders->whereHas('seller', function ($query) use ($country){
+            $query->where('country_id',$country);
+        });
+        if (auth()->user()->role_id != User::ROLE_ADMIN)
+            $orders->where('seller_id', auth()->id());
+
+        if ($debts)
+            $orders->where('remain_price', '>', 0);
+
+        if ($type = $request->get('type'))
+            $orders->where('type', $type);
+
+        if ($search = $request->get('search'))
+            $orders->where('barcode', 'LIKE', "%$search%");
+
+        if ($buyerSearch = $request->query('buyerName'))
+        {
+            $orders->join('users', 'orders.buyer_id', '=', 'users.id')
+            ->where('users.name', 'LIKE', "%{$buyerSearch}%");
+        }
+
+        if ($buyerId = $request->get('buyer_id'))
+            $orders->where('buyer_id',"$buyerId");
+
+        if ($buyerId = $request->get('buyer'))
+            $orders->where('buyer_id',"$buyerId");
+
+        if ($sellerId = $request->get('seller_id'))
+            $orders->where('seller_id',"$sellerId");
+
+        if ($sellerId = $request->get('shop'))
+            $orders->where('seller_id',"$sellerId");
+
+        if ($shipperId = $request->get('shipper_id'))
+            $orders->where('shipper_id',"$shipperId");
+
+
+        if ($request->has(['field', 'direction'])){
+            $field = $request->get('field');
+            $direction = $request->get('direction');
+
+            $sortableArray = app(Order::class)->getFillable();
+            $sortableArray[] = 'id';
+            if(in_array($field, $sortableArray)){
+                $orders->orderBy($field, $direction);
+            }else{
+                $orders->orderByDesc('orders.id');
+            }
+        }else{
+            $orders->orderByDesc('orders.id');
+        }
+
+        $ids = $orders->pluck('orders.id');
+
+        return $ids;
+    }
+
+    public function getOrders(Request $request, $debts = false, $profits = false, $with = null,$pagination = true,$withItems = true)
+    {
+        info($request->all());
+
+        if (!$with)
+            if($withItems)
+                $with = ['buyer', 'productItems','seller', 'shipper', 'items.product.productColor'];
+            else
+                $with = ['buyer', 'productItems','seller', 'shipper'];
+
+            // $with = ['buyer', 'productItems','seller', 'shipper', 'items.product.productColor'];
+
+        $orders = Order::query()->with($with);
+        $country = auth()->user()->country_id;
+        $orders->whereHas('seller', function ($query) use ($country){
+            $query->where('country_id',$country);
+        });
+        if (auth()->user()->role_id != User::ROLE_ADMIN)
+            $orders->where('seller_id', auth()->id());
+
+        if ($debts)
+            $orders->where('remain_price', '>', 0);
+
+        if ($type = $request->get('type'))
+            $orders->where('type', $type);
+
+        if ($search = $request->get('search'))
+            $orders->where('barcode', 'LIKE', "%$search%");
+
+        if ($buyerSearch = $request->query('buyerName'))
+        {
+            $orders->join('users', 'orders.buyer_id', '=', 'users.id')
+            ->where('users.name', 'LIKE', "%{$buyerSearch}%");
+        }
+
+        if ($buyerId = $request->get('buyer_id'))
+            $orders->where('buyer_id',"$buyerId");
+
+        if ($buyerId = $request->get('buyer'))
+            $orders->where('buyer_id',"$buyerId");
+
+        if ($sellerId = $request->get('seller_id'))
+            $orders->where('seller_id',"$sellerId");
+
+        if ($params = $request->get('params')) {
+
+            $arr = json_decode($params,true);
+
+            if(array_key_exists('shop',$arr)) {
+                $orders->where('seller_id',array_key_exists('shop',$arr) ? $arr['shop'] : null);
+            } elseif(array_key_exists('start_date',$arr)) {
+                $orders->whereDate('orders.created_at', '>=', Carbon::parse($arr['start_date']));
+            } elseif(array_key_exists('end_date',$arr)) {
+                $orders->whereDate('orders.created_at', '<=', Carbon::parse($arr['end_date']));
+            } elseif(array_key_exists('date',$arr)) {
+                $orders->whereDate('orders.created_at', Carbon::parse($arr['date']));
+            }
+        }
+
+
+        if ($sellerId = $request->get('shop'))
+            $orders->where('seller_id',"$sellerId");
+
+        if ($shipperId = $request->get('shipper_id'))
+            $orders->where('shipper_id',"$shipperId");
+
+        if ($date = $request->get('date'))
+            $orders->whereDate('orders.created_at', Carbon::parse($date));
+
+        if ($startDate = $request->get('start_date'))
+            $orders->whereDate('orders.created_at', '>=', Carbon::parse($startDate));
+
+        if ($endDate = $request->get('end_date'))
+            $orders->whereDate('orders.created_at', '<=', Carbon::parse($endDate));
+
+        if ($request->has(['field', 'direction'])){
+            $field = $request->get('field');
+            $direction = $request->get('direction');
+
+            $sortableArray = app(Order::class)->getFillable();
+            $sortableArray[] = 'id';
+            if(in_array($field, $sortableArray)){
+                $orders->orderBy($field, $direction);
+            }else{
+                $orders->orderByDesc('orders.id');
+            }
+        }else{
+            $orders->orderByDesc('orders.id');
+        }
+
+        if(auth()->user()->country_id == User::COUNTRY_UAE)
+            $rate = Currency::where('name','aed')->first()->rate;
+        else
+            $rate = 1;
+
+        // Calculate total refunds
+        $ids = $orders->pluck('orders.id');
+
+        $totalAmount  = $orders->sum('orders.total_price');
+
+		//dd($totalAmount);
+
+        //dd($ids);
+        $ids2 = $this->returnRefoundOrdersArr($request, $debts = false, $profits = false, $with = null,$pagination = true,$withItems = true);
+
+
+        $totalRefunds = Refund::query()
+        ->when($request->date,function($q) use($request) {
+            $q->whereDate('refunds.created_at', Carbon::parse($request->date));
+        })->when($request->start_date,function($q) use($request) {
+            $q->whereDate('refunds.created_at', '>=', Carbon::parse($request->start_date));
+        })->when($request->end_date,function($q) use($request) {
+            $q->whereDate('refunds.created_at', '<=', Carbon::parse($request->end_date));
+        })
+        ->join('order_items', 'order_item_id', '=', 'order_items.id')
+        ->join('orders', 'order_items.order_id', '=', 'orders.id')
+        ->selectRaw('SUM(refunds.total_price) as total')
+        ->whereIn('order_items.order_id', $ids2)
+        ->get()->first()->total;
+
+
+        $countRefunds = Refund::query()->when($request->date,function($q) use($request) {
+            $q->whereDate('refunds.created_at', Carbon::parse($request->date));
+        })->when($request->start_date,function($q) use($request) {
+            $q->whereDate('refunds.created_at', '>=', Carbon::parse($request->start_date));
+        })->when($request->end_date,function($q) use($request) {
+            $q->whereDate('refunds.created_at', '<=', Carbon::parse($request->end_date));
+        })
+        ->join('order_items', 'order_item_id', '=', 'order_items.id')
+        ->join('orders', 'order_items.order_id', '=', 'orders.id')
+        ->selectRaw('SUM(refunds.qty) as total')
+        ->whereIn('order_items.order_id', $ids2)
+        ->get()->first()->total;
+
+
+
+		$total_of_products_refuds = Refund::query()->when($request->date,function($q) use($request) {
+            $q->whereDate('refunds.created_at', Carbon::parse($request->date));
+        })->when($request->start_date,function($q) use($request) {
+            $q->whereDate('refunds.created_at', '>=', Carbon::parse($request->start_date));
+        })->when($request->end_date,function($q) use($request) {
+            $q->whereDate('refunds.created_at', '<=', Carbon::parse($request->end_date));
+        })
+        ->join('order_items', 'order_item_id', '=', 'order_items.id')
+		->join('user_products', 'order_items.user_product_id', '=', 'user_products.id')
+        ->join('orders', 'order_items.order_id', '=', 'orders.id')
+		->selectRaw('SUM(user_products.wholesale_price * refunds.qty) as total')
+        ->whereIn('order_items.order_id', $ids2)
+        ->get()->first()->total;
+
+
+
+		//dd($totalRefunds);
+
+
+		//dd($profits);
+
+        $count = OrderItem::query()->selectRaw('SUM(order_items.qty) as total_count')
+                ->whereIn('order_id', $ids)
+                ->get()->first()->total_count;
+
+        $total_tax_value = OrderItem::query()->selectRaw('SUM(order_items.tax_value_paid * order_items.qty) as total_tax_value')
+                ->whereIn('order_id', $ids)
+                ->get()->first()->total_tax_value;
+
+        // $total_price_without_tax = OrderItem::query()->selectRaw('SUM(order_items.price_without_tax * 3.675) as total_price_without_tax')
+        //         ->whereIn('order_id', $ids)
+        //         ->get()->first()->total_price_without_tax;
+
+
+        //$calcCount = $countRefunds - $count;
+        $calcCount = $count;
+
+
+        $profit = OrderItem::query()
+            ->where('qty','>',0)
+            ->join('user_products', 'user_product_id', '=', 'user_products.id')
+            ->selectRaw('SUM(total_price) - SUM(user_products.wholesale_price * order_items.qty) as profit')
+            ->whereIn('order_id', $ids)
+            ->get()->first()->profit;
+
+        //dd($profit,$ids);
+
+        if ($profits){
+
+			//dd($profit,$ids,$totalRefunds);
+
+			$totalRefunds = $totalRefunds - $total_of_products_refuds;
+
+            $profit -= $totalRefunds;
+
+            /* OrderItem::query()->whereIn('order_id', $ids)->get()->map(function ($item) use (&$profit){ */
+            /*     $paidPrice = $item->total_price; */
+            /*     $wholesalePrice = $item->product->wholesale_price * $item->qty; */
+
+            /*     $profit += $paidPrice - $wholesalePrice; */
+            /* }); */
+
+            return [
+                'orders' => $pagination ? $orders->paginate(10) : $orders->get(),
+                'profit' => $profit,
+                'count' => $calcCount,
+                'total_tax_value' => $total_tax_value,
+                'total_price_without_tax' => round($totalAmount - $total_tax_value,2),
+                // 'total_price_without_tax' => $total_price_without_tax,
+            ];
+        }else{
+
+            $totalRefunds = doubleval(currencyExchange($totalRefunds, $rate));
+
+            //dd($totalRefunds,$totalRefunds,$totalAmount);
+
+            $totalAmount -= $totalRefunds;
+
+            return [
+                'orders' => $pagination ? $orders->paginate(10) : $orders->get(),
+                'profit' => $profit,
+                'total' => $totalAmount,
+                'count' => $calcCount,
+                'total_tax_value' => $total_tax_value,
+                'total_price_without_tax' => $totalAmount - $total_tax_value,
+                // 'total_price_without_tax' => $total_price_without_tax,
+            ];
+        }
+    }
+
+    public function getOrders_v2(Request $request, $debts = false, $profits = false, $with = null,$pagination = true,$withItems = true)
+    {
+        if (!$with)
+            if($withItems)
+                $with = ['buyer', 'productItems','seller', 'shipper', 'items.product.productColor'];
+            else
+                $with = ['buyer', 'productItems','seller', 'shipper'];
+
+            // $with = ['buyer', 'productItems','seller', 'shipper', 'items.product.productColor'];
+
+        $orders = Order::query()->with($with);
+        $country = auth()->user()->country_id;
+        $orders->whereHas('seller', function ($query) use ($country){
+            $query->where('country_id',$country);
+        });
+        if (auth()->user()->role_id != User::ROLE_ADMIN)
+            $orders->where('seller_id', auth()->id());
+
+        if ($debts)
+            $orders->where('remain_price', '>', 0);
+
+        if ($type = $request->get('type'))
+            $orders->where('type', $type);
+
+        if ($search = $request->get('search'))
+            $orders->where('barcode', 'LIKE', "%$search%");
+
+        if ($buyerSearch = $request->query('buyerName'))
+        {
+            $orders->join('users', 'orders.buyer_id', '=', 'users.id')
+            ->where('users.name', 'LIKE', "%{$buyerSearch}%");
+        }
+
+        if ($buyerId = $request->get('buyer_id'))
+            $orders->where('buyer_id',"$buyerId");
+
+        if ($buyerId = $request->get('buyer'))
+            $orders->where('buyer_id',"$buyerId");
+
+        if ($sellerId = $request->get('seller_id'))
+            $orders->where('seller_id',"$sellerId");
+
+        if ($sellerId = $request->get('shop'))
+            $orders->where('seller_id',"$sellerId");
+
+        if ($shipperId = $request->get('shipper_id'))
+            $orders->where('shipper_id',"$shipperId");
+
+        if ($date = $request->get('date'))
+            $orders->whereDate('orders.created_at', Carbon::parse($date));
+
+        if ($startDate = $request->get('start_date'))
+            $orders->whereDate('orders.created_at', '>=', Carbon::parse($startDate));
+
+        if ($endDate = $request->get('end_date'))
+            $orders->whereDate('orders.created_at', '<=', Carbon::parse($endDate));
+
+        if ($request->has(['field', 'direction'])){
+            $field = $request->get('field');
+            $direction = $request->get('direction');
+
+            $sortableArray = app(Order::class)->getFillable();
+            $sortableArray[] = 'id';
+            if(in_array($field, $sortableArray)){
+                $orders->orderBy($field, $direction);
+            }else{
+                $orders->orderByDesc('orders.id');
+            }
+        }else{
+            $orders->orderByDesc('orders.id');
+        }
+
+        if(auth()->user()->country_id == User::COUNTRY_UAE)
+            $rate = Currency::where('name','aed')->first()->rate;
+        else
+            $rate = 1;
+
+        // Calculate total refunds
+        $ids = $orders->pluck('orders.id');
+
+        $totalAmount  = $orders->sum('orders.total_price');
+
+		//dd($totalAmount);
+
+        //dd($ids);
+        $ids2 = $this->returnRefoundOrdersArr($request, $debts = false, $profits = false, $with = null,$pagination = true,$withItems = true);
+
+
+        $totalRefunds = Refund::query()
+        ->when($request->date,function($q) use($request) {
+            $q->whereDate('refunds.created_at', Carbon::parse($request->date));
+        })->when($request->start_date,function($q) use($request) {
+            $q->whereDate('refunds.created_at', '>=', Carbon::parse($request->start_date));
+        })->when($request->end_date,function($q) use($request) {
+            $q->whereDate('refunds.created_at', '<=', Carbon::parse($request->end_date));
+        })
+        ->join('order_items', 'order_item_id', '=', 'order_items.id')
+        ->join('orders', 'order_items.order_id', '=', 'orders.id')
+        ->selectRaw('SUM(refunds.total_price) as total')
+        ->whereIn('order_items.order_id', $ids2)
+        ->get()->first()->total;
+
+
+        $countRefunds = Refund::query()->when($request->date,function($q) use($request) {
+            $q->whereDate('refunds.created_at', Carbon::parse($request->date));
+        })->when($request->start_date,function($q) use($request) {
+            $q->whereDate('refunds.created_at', '>=', Carbon::parse($request->start_date));
+        })->when($request->end_date,function($q) use($request) {
+            $q->whereDate('refunds.created_at', '<=', Carbon::parse($request->end_date));
+        })
+        ->join('order_items', 'order_item_id', '=', 'order_items.id')
+        ->join('orders', 'order_items.order_id', '=', 'orders.id')
+        ->selectRaw('SUM(refunds.qty) as total')
+        ->whereIn('order_items.order_id', $ids2)
+        ->get()->first()->total;
+
+
+
+		$total_of_products_refuds = Refund::query()->when($request->date,function($q) use($request) {
+            $q->whereDate('refunds.created_at', Carbon::parse($request->date));
+        })->when($request->start_date,function($q) use($request) {
+            $q->whereDate('refunds.created_at', '>=', Carbon::parse($request->start_date));
+        })->when($request->end_date,function($q) use($request) {
+            $q->whereDate('refunds.created_at', '<=', Carbon::parse($request->end_date));
+        })
+        ->join('order_items', 'order_item_id', '=', 'order_items.id')
+		->join('user_products', 'order_items.user_product_id', '=', 'user_products.id')
+        ->join('orders', 'order_items.order_id', '=', 'orders.id')
+		->selectRaw('SUM(user_products.wholesale_price * refunds.qty) as total')
+        ->whereIn('order_items.order_id', $ids2)
+        ->get()->first()->total;
+
+
+
+		//dd($totalRefunds);
+
+
+		//dd($profits);
+
+        $count = OrderItem::query()->selectRaw('SUM(order_items.qty) as total_count')
+                ->whereIn('order_id', $ids)
+                ->get()->first()->total_count;
+
+        $total_tax_value = OrderItem::query()->selectRaw('SUM(order_items.tax_value_paid * order_items.qty) as total_tax_value')
+                ->whereIn('order_id', $ids)
+                ->get()->first()->total_tax_value;
+
+        // $total_price_without_tax = OrderItem::query()->selectRaw('SUM(order_items.price_without_tax * 3.675) as total_price_without_tax')
+        //         ->whereIn('order_id', $ids)
+        //         ->get()->first()->total_price_without_tax;
+
+
+        //$calcCount = $countRefunds - $count;
+        $calcCount = $count;
+
+
+        $profit = OrderItem::query()
+            ->where('qty','>',0)
+            ->join('user_products', 'user_product_id', '=', 'user_products.id')
+            ->selectRaw('SUM(total_price) - SUM(user_products.wholesale_price * order_items.qty) as profit')
+            ->whereIn('order_id', $ids)
+            ->get()->first()->profit;
+
+        //dd($profit,$ids);
+
+        if ($profits){
+
+			//dd($profit,$ids,$totalRefunds);
+
+			$totalRefunds = $totalRefunds - $total_of_products_refuds;
+
+            $profit -= $totalRefunds;
+
+            /* OrderItem::query()->whereIn('order_id', $ids)->get()->map(function ($item) use (&$profit){ */
+            /*     $paidPrice = $item->total_price; */
+            /*     $wholesalePrice = $item->product->wholesale_price * $item->qty; */
+
+            /*     $profit += $paidPrice - $wholesalePrice; */
+            /* }); */
+
+            return [
+                'orders' =>  $orders->get(),
+                'profit' => $profit,
+                'count' => $calcCount,
+                'total_tax_value' => $total_tax_value,
+                'total_price_without_tax' => $totalAmount - $total_tax_value,
+                // 'total_price_without_tax' => $total_price_without_tax,
+            ];
+        }else{
+
+            $totalRefunds = doubleval(currencyExchange($totalRefunds, $rate));
+
+            //dd($totalRefunds,$totalRefunds,$totalAmount);
+
+            $totalAmount -= $totalRefunds;
+
+            return [
+                'orders' => $orders->get(),
+                'profit' => $profit,
+                'total' => $totalAmount,
+                'count' => $calcCount,
+                'total_tax_value' => $total_tax_value,
+                'total_price_without_tax' => $totalAmount - $total_tax_value,
+                // 'total_price_without_tax' => $total_price_without_tax,
+            ];
+        }
+    }
+
+
+    public function getMonthlyOrders(Request $request, $debts = false, $profits = false, $with = null,$pagination = true,$withItems = true)
+    {
+
+        if($request->get('shop')) {
+            $shops = User::query()->whereIn('role_id', [User::ROLE_SHOP, User::ROLE_WAREHOUSE])->where('id',$request->get('shop'))->get();
+        } else {
+            $shops = User::query()->whereIn('role_id', [User::ROLE_SHOP, User::ROLE_WAREHOUSE])->where('country_id',auth()->user()->country_id)->get();
+        }
+
+        if (!$with)
+            if($withItems)
+                $with = ['buyer', 'productItems','seller', 'shipper', 'items.product.productColor'];
+            else
+                $with = ['buyer', 'productItems','seller', 'shipper'];
+
+            // $with = ['buyer', 'productItems','seller', 'shipper', 'items.product.productColor'];
+
+        $country = auth()->user()->country_id;
+
+        if($request->get('start_date') != null) {
+            $start = Carbon::parse($request->get('start_date'));
+        } elseif($request->get('date') != null) {
+            $start = Carbon::parse($request->get('date'));
+        } else {
+            $start = Carbon::now()->startOfMonth();
+        }
+
+        if($request->get('end_date') != null) {
+            $end = Carbon::parse($request->get('end_date'));
+        } elseif($request->get('date') != null) {
+            $end = Carbon::parse($request->get('date'));
+        } else {
+            $end = Carbon::now();
+        }
+
+        // Create a period from start date to end date
+        $period = CarbonPeriod::create($start, $end);
+
+        // Initialize an array to hold the dates
+        $dates = [];
+
+        // Iterate over the period and add each date to the array
+        foreach ($period as $date) {
+            $dates[] = $date->format('Y-m-d');
+        }
+
+       // dd($dates);
+
+       usort($dates, function($a, $b) {
+            return strtotime($b) - strtotime($a);
+        });
+
+
+        $dataArr = [];
+
+
+        foreach($dates as $date) {
+
+            foreach($shops as $shop) {
+
+                $count = OrderItem::query()
+                    ->whereHas('order',function($order) use($with,$country,$request,$shop) {
+                        $order->with($with)->whereHas('seller', function ($query) use ($country,$shop) {
+                            $query->where('seller_id',"$shop->id");
+                        });
+                    })
+                    ->selectRaw('SUM(order_items.qty) as total_count')
+                    ->whereDate('created_at', $date)
+                    ->get()->first()->total_count;
+
+
+                $total_price_without_tax_paid = OrderItem::query()
+                    // ->whereHas('order',function($order) use($with,$country,$request) {
+                    //     $order->with($with)->whereHas('seller', function ($query) use ($country) {
+                    //         $query->where('country_id',$country);
+                    //     })->when(auth()->user()->role_id != User::ROLE_ADMIN,function($q) {
+                    //         $q->where('seller_id', auth()->id());
+                    //     })->when($type = $request->get('type'),function($q) use($type) {
+                    //         $q->where('type', $type);
+                    //     })->when($sellerId = $request->get('shop'),function($q) use($sellerId) {
+                    //         $q->where('seller_id',"$sellerId");
+                    //     })->when($shipperId = $request->get('shipper_id'),function($q) use($shipperId) {
+                    //         $q->where('shipper_id',"$shipperId");
+                    //     });
+                    // })
+                    ->whereHas('order',function($order) use($with,$country,$request,$shop) {
+                        $order->with($with)->whereHas('seller', function ($query) use ($country,$shop) {
+                            $query->where('seller_id',"$shop->id");
+                        });
+                    })
+                    ->selectRaw('SUM(order_items.price_without_tax_paid * order_items.qty) as total_price_without_tax_value')
+                    ->whereDate('created_at', $date)
+                    ->get()->first()->total_price_without_tax_value;
+
+                $total_tax_value = OrderItem::query()
+                    // ->whereHas('order',function($order) use($with,$country,$request) {
+                    //     $order->with($with)->whereHas('seller', function ($query) use ($country) {
+                    //         $query->where('country_id',$country);
+                    //     })->when(auth()->user()->role_id != User::ROLE_ADMIN,function($q) {
+                    //         $q->where('seller_id', auth()->id());
+                    //     })->when($type = $request->get('type'),function($q) use($type) {
+                    //         $q->where('type', $type);
+                    //     })->when($sellerId = $request->get('shop'),function($q) use($sellerId) {
+                    //         $q->where('seller_id',"$sellerId");
+                    //     })->when($shipperId = $request->get('shipper_id'),function($q) use($shipperId) {
+                    //         $q->where('shipper_id',"$shipperId");
+                    //     });
+                    // })
+                    ->whereHas('order',function($order) use($with,$country,$request,$shop) {
+                        $order->with($with)->whereHas('seller', function ($query) use ($country,$shop) {
+                            $query->where('seller_id',"$shop->id");
+                        });
+                    })
+                    ->selectRaw('SUM(order_items.tax_value_paid * order_items.qty) as total_tax_value')
+                    ->whereDate('created_at', $date)
+                    ->get()->first()->total_tax_value;
+
+
+                $total_refund = Refund::query()->whereDate('refunds.created_at', $date)
+                    ->join('order_items', 'order_item_id', '=', 'order_items.id')
+                    ->join('orders', 'order_items.order_id', '=', 'orders.id')
+                    ->selectRaw('SUM(refunds.total_price_paid) as total')
+                    ->whereHas('orderItem', function($orderItem) use($with,$country,$request,$shop) {
+                        $orderItem->whereHas('order',function($order) use($with,$country,$request,$shop) {
+                            $order->with($with)->whereHas('seller', function ($query) use ($country,$shop) {
+                                $query->where('seller_id',"$shop->id");
+                            });
+                        });
+                    })
+                    ->get()->first()->total;
+
+
+                $total_price_with_tax_paid = $total_price_without_tax_paid + $total_tax_value;
+
+                $dataArr[] = [
+                    'shop_name' => $shop->name,
+                    'date' => $date,
+                    'count' => $count,
+                    'price_without_tax' => $total_price_without_tax_paid,
+                    'tax_value' => $total_tax_value,
+                    'total_price' => $total_price_with_tax_paid,
+                    'total_refund' => $total_refund
+                ];
+
+            }
+
+        }
+
+        $main_shops = User::query()->whereIn('role_id', [User::ROLE_SHOP, User::ROLE_WAREHOUSE])->where('country_id',auth()->user()->country_id)->get();
+        $main_shops = transformDataForVue($main_shops);
+
+        $totalRefunds = array_sum(array_column($dataArr,'total_refund'));
+
+        $newArr = [
+            'orders'                  => $dataArr,
+            'total'                   => array_sum(array_column($dataArr,'total_price')) ,
+            'count'                   => array_sum(array_column($dataArr,'count')),
+            'total_price_without_tax' => array_sum(array_column($dataArr,'price_without_tax')),
+            'total_tax_value'         => array_sum(array_column($dataArr,'tax_value')),
+            'totalRefunds'            => $totalRefunds,
+            'shops'                   => $main_shops,
+            'filters'                 => $request->all(['search', 'field', 'direction'])
+        ];
+
+        return $newArr;
+
+    }
+
+    public function getProducts()
+    {
+        return UserProduct::query()
+            ->select([
+                'user_products.stock',
+                'user_products.wholesale_price',
+                'product_colors.barcode',
+                'user_products.id',
+                'products.name',
+                DB::raw("CONCAT(products.name,' (',colors.name, ' )', ' (',product_colors.barcode, ' )') as product_name")
+            ])
+            ->join('product_colors', 'product_color_id', '=', 'product_colors.id')
+            ->join('products', 'product_colors.product_id', '=', 'products.id')
+            ->join('colors', 'product_colors.color_id', '=', 'colors.id')
+            ->where('user_products.user_id', auth()->id())
+            ->where('user_products.stock', '>', 0)
+            ->get();
+
+    }
+
+
+    public function getOrdersForExport(Request $request, $debts = false, $profits = false, $with = null,$pagination = true)
+    {
+        if (!$with)
+            $with = ['seller'];
+            // $with = ['buyer', 'productItems','seller', 'shipper', 'items.product.productColor'];
+
+        $orders = Order::query()->with($with);
+        $country = auth()->user()->country_id;
+        $orders->whereHas('seller', function ($query) use ($country){
+            $query->where('country_id',$country);
+        });
+        if (auth()->user()->role_id != User::ROLE_ADMIN)
+            $orders->where('seller_id', auth()->id());
+
+        if ($debts)
+            $orders->where('remain_price', '>', 0);
+
+        if ($type = $request->get('type'))
+            $orders->where('type', $type);
+
+        if ($search = $request->get('search'))
+            $orders->where('barcode', 'LIKE', "%$search%");
+
+        if ($buyerId = $request->get('buyer_id'))
+            $orders->where('buyer_id',"$buyerId");
+
+        if ($buyerId = $request->get('buyer'))
+            $orders->where('buyer_id',"$buyerId");
+
+        if ($sellerId = $request->get('seller_id'))
+            $orders->where('seller_id',"$sellerId");
+
+        if ($sellerId = $request->get('shop'))
+            $orders->where('seller_id',"$sellerId");
+
+        if ($shipperId = $request->get('shipper_id'))
+            $orders->where('shipper_id',"$shipperId");
+
+        if ($date = $request->get('date'))
+            $orders->whereDate('created_at', Carbon::parse($date));
+
+        if ($startDate = $request->get('start_date'))
+            $orders->whereDate('created_at', '>=', Carbon::parse($startDate));
+
+        if ($endDate = $request->get('end_date'))
+            $orders->whereDate('created_at', '<=', Carbon::parse($endDate));
+
+        if ($request->has(['field', 'direction'])){
+            $field = $request->get('field');
+            $direction = $request->get('direction');
+
+            $sortableArray = app(Order::class)->getFillable();
+            $sortableArray[] = 'id';
+            if(in_array($field, $sortableArray)){
+                $orders->orderBy($field, $direction);
+            }else{
+                $orders->orderByDesc('id');
+            }
+        }else{
+            $orders->orderByDesc('id');
+        }
+        $orders = $orders->selectRaw('Count(*) as count, seller_id, SUM(total_price) as total_price,SUM(paid_price) as paid_price,SUM(remain_price) as remain_price,SUM(price_without_tax) as total_price_without_tax,SUM(tax_value) as total_tax_value')->groupBy('seller_id')->get();
+        return $orders;
+    }
+
+}

@@ -1,0 +1,93 @@
+@import 'tailwindcss/base';
+@import 'tailwindcss/components';
+@import 'tailwindcss/utilities';
+@import "../../node_modules/@suadelabs/vue3-multiselect/dist/vue3-multiselect.css";
+
+:root {
+    --primary-color: #c20000;
+    --primary-hover: #a30000;
+    --primary-light: #fff5f5;
+}
+
+/* Global Link and Button Hover Styles */
+a:hover,
+button:not(.bg-accent):not(.hover\:text-white):hover {
+    color: var(--primary-color);
+    transition: color 0.3s ease;
+}
+
+.transition-all-300 {
+    transition: all 0.3s ease;
+}
+
+/* Hamburger Menu */
+.hamburger {
+    cursor: pointer;
+    width: 24px;
+    height: 24px;
+    margin-right: 32px;
+    transition: all 0.25s;
+    position: relative;
+}
+
+.hamburger-top,
+.hamburger-middle,
+.hamburger-bottom {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 24px;
+    height: 2px;
+    background: #fff;
+    transform: rotate(0);
+    transition: all 0.5s;
+}
+
+.hamburger-middle {
+    transform: translateY(7px);
+}
+
+.hamburger-bottom {
+    transform: translateY(14px);
+}
+
+.open {
+    transform: rotate(90deg);
+    transform: translateY(0px);
+}
+
+.open .hamburger-top {
+    transform: rotate(45deg) translateY(6px) translate(6px);
+}
+
+.open .hamburger-middle {
+    display: none;
+}
+
+.open .hamburger-bottom {
+    transform: rotate(-45deg) translateY(6px) translate(-6px);
+}
+
+.carousel__prev,
+.carousel__next {
+    background-color: #c20000 !important;
+    color: white !important;
+    transform: none !important;
+    border: #c20000 solid !important;
+}
+
+.carousel__prev:hover,
+.carousel__next:hover,
+.carousel-nav-btn:hover {
+    background-color: #fff5f5 !important;
+    color: #c20000 !important;
+    transition: ease-in-out;
+    transform: translateY(1px) !important;
+}
+
+/* Global Mobile Fix: Prevent auto-zoom on input focus */
+@media screen and (max-width: 1024px) {
+    input, select, textarea {
+        font-size: 16px !important;
+    }
+}
