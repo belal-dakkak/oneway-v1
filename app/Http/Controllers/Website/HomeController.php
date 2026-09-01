@@ -13,6 +13,8 @@ use App\Models\User;
 use App\Models\UserProduct;
 use App\Models\ProductColor;
 use App\Models\MerchantCode;
+use App\Models\Currency;
+use App\Support\Country;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Session;
@@ -23,9 +25,9 @@ class HomeController extends Controller
 {
     public function index(): Response
     {
-        $countryCode = Session::get('country');
-        $countryId = $countryCode === 'LB' ? 1 : 2;
-        $country = $countryCode === 'LB' ? User::COUNTRY_LB : User::COUNTRY_UAE;
+        $countryCode = Country::code();
+        $countryId = Country::id($countryCode);
+        $country = $countryId;
         $language = 'ar';
         $isMerchant = Session::get('is_merchant');
 
@@ -122,9 +124,8 @@ class HomeController extends Controller
             }
         }
 
-        $wnumber = $countryCode === 'LB'
-            ? '+96176658734'
-            : '+971545516995';
+        $wnumber = $countryCode === 'LB' ? '+96176658734'
+            : ($countryCode === 'SY' ? '' : '+971545516995');
 
         // Categories Cache
         $categories = Cache::remember('shop_categories', 3600, function () {
@@ -181,8 +182,8 @@ class HomeController extends Controller
 
     public function shop(Request $request)
     {
-        $countryCode = Session::get('country');
-        $countryId = $countryCode === 'LB' ? 1 : 2;
+        $countryCode = Country::code();
+        $countryId = Country::id($countryCode);
         $isMerchant = Session::get('is_merchant');
 
         // Cache categories
@@ -295,7 +296,7 @@ class HomeController extends Controller
         }
 
         // Cache settings
-        $country = $countryCode === 'LB' ? User::COUNTRY_LB : User::COUNTRY_UAE;
+        $country = $countryId;
         $language = 'ar';
 
         $settings = Cache::remember(
@@ -332,7 +333,7 @@ class HomeController extends Controller
             abort(404);
         }
 
-        $countryId = Session::get('country') == 'LB' ? 1 : 2;
+        $countryId = Country::id();
 
         $product->load([
             'category',
@@ -389,7 +390,7 @@ class HomeController extends Controller
         $categories = Category::all();
         $categories = transformDataForVue($categories);
 
-        $country = Session::get('country') == 'LB' ? User::COUNTRY_LB : User::COUNTRY_UAE;
+        $country = Country::id();
         $language = 'ar';
         $settings = Setting::where('country', $country)->where('language', $language)->pluck('value', 'name')->toArray();
 
@@ -417,7 +418,7 @@ class HomeController extends Controller
         $categories = Category::all();
         $categories = transformDataForVue($categories);
 
-        $country = Session::get('country') == 'LB' ? User::COUNTRY_LB : User::COUNTRY_UAE;
+        $country = Country::id();
         $language = 'ar';
         $settings = Setting::where('country', $country)->where('language', $language)->pluck('value', 'name')->toArray();
 
@@ -438,7 +439,7 @@ class HomeController extends Controller
         $categories = Category::limit(6)->get();
         $categories = transformDataForVue($categories);
 
-        $country = Session::get('country') == 'LB' ? User::COUNTRY_LB : User::COUNTRY_UAE;
+        $country = Country::id();
         $language = 'ar';
         $settings = Setting::where('country', $country)->where('language', $language)->pluck('value', 'name')->toArray();
 
@@ -459,7 +460,7 @@ class HomeController extends Controller
         $categories = Category::limit(6)->get();
         $categories = transformDataForVue($categories);
 
-        $country = Session::get('country') == 'LB' ? User::COUNTRY_LB : User::COUNTRY_UAE;
+        $country = Country::id();
         $language = 'ar';
         $settings = Setting::where('country', $country)->where('language', $language)->pluck('value', 'name')->toArray();
 
@@ -503,8 +504,12 @@ class HomeController extends Controller
     public function setCountry(Request $request)
     {
         $request->validate([
-            'country' => 'required|string|in:AE,LB'
+            'country' => 'required|string|in:AE,LB,SY'
         ]);
+
+        if ($request->country === 'SY' && (float) Currency::query()->where('name', 'syp')->value('rate') <= 0) {
+            return redirect()->back()->with('error', 'يجب ضبط سعر صرف الليرة السورية قبل تفعيل متجر سوريا.');
+        }
 
         Session::put('country', $request->country);
 
@@ -516,7 +521,7 @@ class HomeController extends Controller
         $categories = Category::limit(6)->get();
         $categories = transformDataForVue($categories);
 
-        $country = Session::get('country') == 'LB' ? User::COUNTRY_LB : User::COUNTRY_UAE;
+        $country = Country::id();
         $language = 'ar';
         $settings = Setting::where('country', $country)->where('language', $language)->pluck('value', 'name')->toArray();
 
@@ -557,7 +562,7 @@ class HomeController extends Controller
         $categories = Category::limit(6)->get();
         $categories = transformDataForVue($categories);
 
-        $country = Session::get('country') == 'LB' ? User::COUNTRY_LB : User::COUNTRY_UAE;
+        $country = Country::id();
         $language = 'ar';
         $settings = Setting::where('country', $country)->where('language', $language)->pluck('value', 'name')->toArray();
 

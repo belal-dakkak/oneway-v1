@@ -7,6 +7,8 @@ use App\Http\Requests\UserRequest;
 use App\Models\User;
 use App\Models\Wallet;
 use App\Repositories\UserRepository;
+use App\Services\CurrencyService;
+use App\Support\Country;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Redirect;
@@ -40,8 +42,7 @@ class UserController extends Controller
         if ($request->wantsJson()){
             return $users;
         }
-        if(auth()->user()->country_id == 2) $rate = 3.675;
-        else $rate = 1;
+        $rate = app(CurrencyService::class)->rate(Country::defaultCurrency(auth()->user()->country_id));
         return Inertia::render('Admin/Users/Index', [
             'rate' => $rate,
             'users' => $users,

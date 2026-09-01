@@ -6,7 +6,6 @@ use App\Classes\Socket;
 use App\Http\Controllers\Controller;
 use App\Http\Traits\ReceiptTrait;
 use App\Models\City;
-use App\Models\Currency;
 use App\Models\Order;
 use App\Models\WebsiteOrder;
 use App\Models\OrderItem;
@@ -18,6 +17,8 @@ use App\Models\User;
 use App\Models\UserProduct;
 use App\Models\Wallet;
 use App\Repositories\OrderRepository;
+use App\Services\CurrencyService;
+use App\Support\Country;
 use App\Mail\OrderStatusChangeEmail;
 use Carbon\Carbon;
 use PDF;
@@ -28,7 +29,6 @@ use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Mail;
 use Illuminate\Support\Facades\Redirect;
-use Illuminate\Support\Facades\Session;
 use Inertia\Inertia;
 use Inertia\Response;
 use Jenssegers\Date\Date;
@@ -39,10 +39,12 @@ class OrderController extends Controller
     use ReceiptTrait;
 
     private $orderRepository;
+    private $currencyService;
 
-    public function __construct(OrderRepository $orderRepository)
+    public function __construct(OrderRepository $orderRepository, CurrencyService $currencyService)
     {
         $this->orderRepository = $orderRepository;
+        $this->currencyService = $currencyService;
     }
 
     /**
@@ -140,7 +142,7 @@ class OrderController extends Controller
         $endDate = $endDate ? Carbon::parse($endDate): false;
 
         $language  = 'en';
-        $country   = Session::get('country') == 'LB'?User::COUNTRY_LB:User::COUNTRY_UAE;
+        $country = auth()->user()->country_id;
         $settings = Setting::where('country',$country)->where('language',$language)->pluck('value','name')->toArray();
 
         if ($sellerId = $request->get('shop')) {
@@ -180,7 +182,7 @@ class OrderController extends Controller
         $endDate = $endDate ? Carbon::parse($endDate): false;
 
         $language  = 'en';
-        $country   = Session::get('country') == 'LB'?User::COUNTRY_LB:User::COUNTRY_UAE;
+        $country = auth()->user()->country_id;
         $settings = Setting::where('country',$country)->where('language',$language)->pluck('value','name')->toArray();
 
         if ($sellerId = $request->get('shop')) {
@@ -199,12 +201,10 @@ class OrderController extends Controller
 
     public function edit(Order $order)
     {
+        abort_unless((int) optional($order->seller)->country_id === (int) auth()->user()->country_id, 404);
         $items = [];
 
-        if(auth()->user()->country_id == User::COUNTRY_UAE)
-            $rate = Currency::where('name','aed')->first()->rate;
-        else
-            $rate = 1;
+        $rate = (float) ($order->curr_rate ?: 1);
 
         foreach ($order->items as $item){
             $product               = [];
@@ -259,6 +259,25 @@ class OrderController extends Controller
 
     public function update(Order $order, Request $request)
     {
+        abort_unless((int) optional($order->seller)->country_id === (int) auth()->user()->country_id, 404);
+        $request->validate([
+            'selected_products' => 'required|array|min:1',
+            'selected_products.*.product_id' => 'required|integer|exists:user_products,id',
+            'selected_products.*.qty' => 'required|numeric|min:1',
+            'selected_products.*.price' => 'required|numeric|min:0',
+        ]);
+
+        $request->merge([
+            'order_type' => $order->order_type ?: ($order->type === Order::TYPE_CASH ? 'simple' : 'complex'),
+            'currency' => [
+                'name' => strtoupper($order->curr_type ?: 'USD'),
+                'label' => strtoupper($order->curr_type ?: 'USD'),
+                'value' => strtolower($order->curr_type ?: 'USD'),
+                'code' => strtoupper($order->curr_type ?: 'USD'),
+                'rate' => (float) ($order->curr_rate ?: 1),
+            ],
+        ]);
+
         $result = $this->orderRepository->update($request, $order);
 
         if (!$result){
@@ -276,6 +295,7 @@ class OrderController extends Controller
      */
     public function show(Order $order, Request $request)
     {
+        abort_unless((int) optional($order->seller)->country_id === (int) auth()->user()->country_id, 404);
 
         // return redirect('invoice/print-v2/'.$order->id);
 
@@ -284,19 +304,8 @@ class OrderController extends Controller
             'items' => $items
         ] = $this->getExportData($request->id);
 
-        if(auth()->check() ){
-			if(auth()->user()->country_id == 2){
-				$rate = Currency::where('name','aed')->first()->rate;
-				$Currency = 'AED';
-			}else{
-				$rate = 1;
-				$Currency = 'USD';
-			}
-		} else {
-			$rate = Currency::where('name','aed')->first()->rate;
-			$Currency = 'AED';
-			//$rate = 1;
-		}
+        $rate = (float) ($order->curr_rate ?: 1);
+        $Currency = strtoupper($order->curr_type ?: Country::defaultCurrency($order->seller->country_id ?? Country::UAE));
 
         $o = newStd();
         $o->barcode                     = $order->barcode;
@@ -377,21 +386,9 @@ class OrderController extends Controller
     public function simpleCreate(): Response
     {
         $allProducts = UserProduct::query()->where('user_id', auth()->id())->sum('stock');
-        $currencies = array();
         $country = auth()->user()->country_id;
-        // $country   = Session::get('country') == 'LB'?User::COUNTRY_LB:User::COUNTRY_UAE;
-        if($country == 2)
-            $currs = Currency::where('name','aed')->get();
-        else
-            $currs = Currency::where('name','<>','aed')->get();
-        foreach ($currs as $curr) {
-            array_push($currencies,['name' => $curr->label,'value' => $curr->name,'rate' => $curr->rate]);
-        }
-
-        if(auth()->user()->country_id == User::COUNTRY_UAE)
-            $rate = Currency::where('name','aed')->first()->rate;
-        else
-            $rate = 1;
+        $currencies = $this->currencyService->optionsForCountry($country);
+        $rate = $currencies[0]['rate'] ?? 1;
 
         return Inertia::render('Admin/Orders/CreateOrderSimpleForm', [
             'currencies'   => $currencies,
@@ -408,21 +405,9 @@ class OrderController extends Controller
         $users = User::query()->where('role_id', User::ROLE_CLIENT)->where('country_id',auth()->user()->country_id)->get();
         $shippers = User::query()->where('role_id', User::ROLE_SHIPPER)->where('country_id',auth()->user()->country_id)->get();
         $allProducts = UserProduct::query()->where('user_id', auth()->id())->sum('stock');
-        $currencies = array();
-        // $country   = Session::get('country') == 'LB'?User::COUNTRY_LB:User::COUNTRY_UAE;
         $country = auth()->user()->country_id;
-        if($country == 2)
-            $currs = Currency::where('name','aed')->get();
-        else
-            $currs = Currency::where('name','<>','aed')->get();
-        foreach ($currs as $curr) {
-            array_push($currencies,['name' => $curr->label,'value' => $curr->name,'rate' => $curr->rate]);
-        }
-
-        if(auth()->user()->country_id == User::COUNTRY_UAE)
-            $rate = Currency::where('name','aed')->first()->rate;
-        else
-            $rate = 1;
+        $currencies = $this->currencyService->optionsForCountry($country);
+        $rate = $currencies[0]['rate'] ?? 1;
 
         return Inertia::render('Admin/Orders/CreateOrderComplexForm', [
             'users'        => $users,
@@ -441,22 +426,9 @@ class OrderController extends Controller
         $users = User::query()->where('role_id', User::ROLE_CLIENT)->where('country_id',auth()->user()->country_id)->get();
         $shippers = User::query()->where('role_id', User::ROLE_SHIPPER)->where('country_id',auth()->user()->country_id)->get();
         $allProducts = UserProduct::query()->where('user_id', auth()->id())->sum('stock');
-        $currencies = array();
-        // $country   = Session::get('country') == 'LB'?User::COUNTRY_LB:User::COUNTRY_UAE;
         $country = auth()->user()->country_id;
-        if($country == 2)
-            $currs = Currency::where('name','aed')->get();
-        else
-            $currs = Currency::where('name','<>','aed')->get();
-
-        foreach ($currs as $curr) {
-            array_push($currencies,['name' => $curr->label,'value' => $curr->name,'rate' => $curr->rate]);
-        }
-
-        if(auth()->user()->country_id == User::COUNTRY_UAE)
-            $rate = Currency::where('name','aed')->first()->rate;
-        else
-            $rate = 1;
+        $currencies = $this->currencyService->optionsForCountry($country);
+        $rate = $currencies[0]['rate'] ?? 1;
 
         return Inertia::render('Admin/Orders/CreateOrderComplexFormMulti', [
             'users'        => $users,
@@ -472,8 +444,24 @@ class OrderController extends Controller
 
     public function store(Request $request)
     {
+        $request->validate([
+            'order_type' => 'required|in:simple,complex,complex_from_multi',
+            'selected_products' => 'required|array|min:1',
+            'selected_products.*.product_id' => 'required|integer|exists:user_products,id',
+            'selected_products.*.qty' => 'required|numeric|min:1',
+            'selected_products.*.price' => 'required|numeric|min:0',
+            'currency.value' => 'required|string',
+        ]);
 
-        //dd('sayed',$request->all());
+        $currencyCode = strtoupper($request->input('currency.code', $request->input('currency.value')));
+        $currencyCode = $this->currencyService->validateForCountry($currencyCode, auth()->user()->country_id);
+        $request->merge(['currency' => [
+            'name' => $currencyCode,
+            'label' => $currencyCode,
+            'value' => strtolower($currencyCode),
+            'code' => $currencyCode,
+            'rate' => $this->currencyService->rate($currencyCode),
+        ]]);
 
         //DB::beginTransaction();
 
@@ -683,7 +671,7 @@ class OrderController extends Controller
         $data = $this->getExportData($id);
 
         $language  = 'en';
-        $country   = Session::get('country') == 'LB'?User::COUNTRY_LB:User::COUNTRY_UAE;
+        $country = $data['order']->country_id ?? $data['order']->seller->country_id ?? auth()->user()->country_id;
         $settings = Setting::where('country',$country)->where('language',$language)->pluck('value','name')->toArray();
 
         return view('receipts.pdfReceipt', $data)->with('settings',$settings);
@@ -691,9 +679,13 @@ class OrderController extends Controller
 
     public function appInvoice($id)
     {
-        $order = WebsiteOrder::query()->find($id);
+        $order = WebsiteOrder::query()->where('country_id', auth()->user()->country_id)->find($id);
         if (!$order) {
-            $order = Order::query()->find($id);
+            $order = Order::query()
+                ->whereHas('seller', function ($query) {
+                    $query->where('country_id', auth()->user()->country_id);
+                })
+                ->find($id);
         }
 
         $shippingDetails = $order->shippingDetails ?? $order; // WebsiteOrder has shipping fields direct
@@ -758,7 +750,9 @@ class OrderController extends Controller
 
     public function changeWebsiteOrderStatus(Request $request, $id): JsonResponse
     {
-        $order = WebsiteOrder::findOrFail($id);
+        $order = WebsiteOrder::query()->where('country_id', auth()->user()->country_id)->findOrFail($id);
+
+        $request->validate(['status' => 'nullable|integer|in:0,1,2,3,4']);
 
         $oldStatus = $order->status_label;
 
@@ -795,7 +789,7 @@ class OrderController extends Controller
 
     public function markWebsiteOrderPaid(Request $request, $id): JsonResponse
     {
-        $order = WebsiteOrder::findOrFail($id);
+        $order = WebsiteOrder::query()->where('country_id', auth()->user()->country_id)->findOrFail($id);
 
         $order->update([
             'paid_price'   => $order->total_price,
@@ -953,9 +947,7 @@ class OrderController extends Controller
             ->get();
         $buyers = transformDataForVue($buyers);
 
-        $rate = 1;
-        if(auth()->user()->country_id == User::COUNTRY_UAE)
-            $rate = Currency::where('name','aed')->first()->rate;
+        $rate = $this->currencyService->rate(Country::defaultCurrency(auth()->user()->country_id));
 
         return Inertia::render('Admin/Orders/Profits', [
             'orders'  => $orders['orders'],
@@ -1002,9 +994,17 @@ class OrderController extends Controller
 
     public function getItems($id)
     {
-        $order = WebsiteOrder::with('items.product')->find($id);
+        $order = WebsiteOrder::with('items.product')
+            ->where('country_id', auth()->user()->country_id)
+            ->find($id);
         if (!$order) {
-            $order = Order::query()->where('id',$id)->with('items.product.productColor')->first();
+            $order = Order::query()
+                ->whereHas('seller', function ($query) {
+                    $query->where('country_id', auth()->user()->country_id);
+                })
+                ->where('id', $id)
+                ->with('items.product.productColor')
+                ->first();
         }
         return response()->json([$order]);
     }
@@ -1061,19 +1061,8 @@ class OrderController extends Controller
             $user_role = 'shop';
         }
 
-		if(auth()->check() ){
-			if(auth()->user()->country_id == 2){
-				$rate = Currency::where('name','aed')->first()->rate;
-				$Currency = 'AED';
-			}else{
-				$rate = 1;
-				$Currency = 'USD';
-			}
-		} else {
-			$rate = Currency::where('name','aed')->first()->rate;
-			$Currency = 'AED';
-			//$rate = 1;
-		}
+		$rate = $order instanceof WebsiteOrder ? 1.0 : (float) ($order->curr_rate ?: 1);
+		$Currency = strtoupper($order->curr_type ?: Country::defaultCurrency($order->country_id ?? $order->seller->country_id ?? Country::UAE));
 
 
 		//dd($rate);
@@ -1273,7 +1262,7 @@ class OrderController extends Controller
 
         $invoice_date = date('jS F Y', strtotime($order->invoice_date));
         $language  = 'en';
-        $country   = Session::get('country') == 'LB'?User::COUNTRY_LB:User::COUNTRY_UAE;
+        $country = $order->country_id ?? $order->seller->country_id ?? auth()->user()->country_id;
         $settings = Setting::where('country',$country)->where('language',$language)->pluck('value','name')->toArray();
 
         // dd('ok');
@@ -1307,19 +1296,8 @@ class OrderController extends Controller
             $user_role = 'shop';
         }
 
-		if(auth()->check() ){
-			if(auth()->user()->country_id == 2){
-				$rate = Currency::where('name','aed')->first()->rate;
-				$Currency = 'AED';
-			}else{
-				$rate = 1;
-				$Currency = 'USD';
-			}
-		} else {
-			$rate = Currency::where('name','aed')->first()->rate;
-			$Currency = 'AED';
-			//$rate = 1;
-		}
+		$rate = $order instanceof WebsiteOrder ? 1.0 : (float) ($order->curr_rate ?: 1);
+		$Currency = strtoupper($order->curr_type ?: Country::defaultCurrency($order->country_id ?? $order->seller->country_id ?? Country::UAE));
 
 
         if ($order instanceof WebsiteOrder || $order->type == Order::TYPE_APP){
@@ -1404,7 +1382,7 @@ class OrderController extends Controller
 
         $invoice_date = date('jS F Y', strtotime($order->invoice_date));
         $language  = 'en';
-        $country   = Session::get('country') == 'LB'?User::COUNTRY_LB:User::COUNTRY_UAE;
+        $country = $order->country_id ?? $order->seller->country_id ?? auth()->user()->country_id;
         $settings = Setting::where('country',$country)->where('language',$language)->pluck('value','name')->toArray();
 
         return view('includes.printer',array('user_role'=>$user_role,'order'=>$order,'settings'=>$settings, 'items' => $items,'Currency' => $Currency));

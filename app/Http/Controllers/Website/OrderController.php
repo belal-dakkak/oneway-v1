@@ -14,10 +14,14 @@ use App\Services\Payment\TapPaymentService;
 use App\Jobs\NotificationOrderJob;
 use App\Mail\NewOrderAdminEmail;
 use App\Mail\OrderConfirmationEmail;
+use App\Services\CurrencyService;
+use App\Support\Country;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Session;
 use Illuminate\Support\Facades\Mail;
+use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Str;
+use InvalidArgumentException;
 use Inertia\Inertia;
 use Inertia\Response;
 
@@ -25,11 +29,13 @@ class OrderController extends Controller
 {
     private $orderRepository;
     private $tapService;
+    private $currencyService;
 
-    public function __construct(OrderRepository $orderRepository, TapPaymentService $tapService)
+    public function __construct(OrderRepository $orderRepository, TapPaymentService $tapService, CurrencyService $currencyService)
     {
         $this->orderRepository = $orderRepository;
         $this->tapService = $tapService;
+        $this->currencyService = $currencyService;
     }
 
     public function cart(): Response
@@ -37,7 +43,7 @@ class OrderController extends Controller
         $categories = Category::limit(6)->get();
         $categories = transformDataForVue($categories);
 
-        $country = Session::get('country') == 'LB' ? User::COUNTRY_LB : User::COUNTRY_UAE;
+        $country = Country::id();
         $language = 'en';
         $settings = Setting::where('country', $country)->where('language', $language)->pluck('value', 'name')->toArray();
 
@@ -57,7 +63,7 @@ class OrderController extends Controller
         $categories = Category::limit(6)->get();
         $categories = transformDataForVue($categories);
 
-        $country = Session::get('country') == 'LB' ? User::COUNTRY_LB : User::COUNTRY_UAE;
+        $country = Country::id();
         $language = 'en';
         $settings = Setting::where('country', $country)->where('language', $language)->pluck('value', 'name')->toArray();
 
@@ -76,17 +82,31 @@ class OrderController extends Controller
     {
 
         $request->validate([
-            'items' => 'required|array',
+            'items' => 'required|array|min:1',
+            'items.*.color.id' => 'required|integer|exists:product_colors,id',
+            'items.*.quantity' => 'required|integer|min:1',
+            'items.*.size' => 'required',
             'first_name' => 'required|string',
             'last_name' => 'required|string',
-            'phone' => ['required', 'string', new ValidPhone],
+            'phone' => ['required', 'string', new ValidPhone(Country::code())],
             'email' => 'required|email',
             'address' => 'required|string',
             'city' => 'required|string',
             'building_name' => 'required|string',
             'flat_number' => 'required|string',
-            'payment_method' => 'required|string',
+            'payment_method' => 'required|in:cod,card',
+            'currency' => 'required|string',
         ]);
+
+        $countryId = Country::id();
+        try {
+            $currencyCode = $this->currencyService->validateForCountry($request->currency, $countryId, true);
+        } catch (InvalidArgumentException $exception) {
+            return back()->withErrors(['currency' => 'العملة المختارة غير متاحة لهذا البلد.']);
+        }
+        if ($countryId === User::COUNTRY_SYRIA && $request->payment_method !== 'cod') {
+            return back()->withErrors(['payment_method' => 'الدفع الإلكتروني غير متاح لطلبات سوريا.']);
+        }
 
         if (Session::get('is_merchant')) {
             foreach ($request->items as $item) {
@@ -115,6 +135,7 @@ class OrderController extends Controller
             'notes' => "Name: {$request->first_name} {$request->last_name}, Email: {$request->email}, Phone: {$request->phone}, Address: {$request->address}, City: {$request->city}, Building: {$request->building_name}, Flat: {$request->flat_number}",
             'items' => $items,
             'payment' => ['name' => $request->payment_method],
+            'currency' => $currencyCode,
             'shipping_details_id' => null, // We could store address separately if needed
             'first_name' => $request->first_name,
             'last_name' => $request->last_name,
@@ -136,7 +157,7 @@ class OrderController extends Controller
                 'phone' => $request->phone,
                 'password' => Str::random(12),
                 'role_id' => User::ROLE_CLIENT,
-                'country_id' => Session::get('country') == 'LB' ? User::COUNTRY_LB : User::COUNTRY_UAE,
+                'country_id' => $countryId,
             ]);
 
             // Initial wallet for new user
@@ -158,7 +179,7 @@ class OrderController extends Controller
             $cleanPhone = preg_replace('/\D/', '', $cleanPhone); // Remove any remaining non-digits
 
             $amount = round((float)$order->total_price, 2);
-            $currency = Session::get('country') == 'LB' ? 'USD' : 'AED';
+            $currency = $order->curr_type;
 
             if ($amount <= 0) {
                 $order->delete();
@@ -174,7 +195,7 @@ class OrderController extends Controller
                     'last_name' => $request->last_name,
                     'email' => $request->email,
                     'phone' => [
-                        'country_code' => Session::get('country') == 'LB' ? '961' : '971',
+                        'country_code' => Country::definitionFromId($order->country_id)['phone_code'],
                         'number' => $cleanPhone,
                     ],
                 ],
@@ -225,7 +246,7 @@ class OrderController extends Controller
         $categories = Category::limit(6)->get();
         $categories = transformDataForVue($categories);
 
-        $country = Session::get('country') == 'LB' ? User::COUNTRY_LB : User::COUNTRY_UAE;
+        $country = $order->country_id;
         $language = 'en';
         $settings = Setting::where('country', $country)->where('language', $language)->pluck('value', 'name')->toArray();
 
@@ -247,7 +268,7 @@ class OrderController extends Controller
         $categories = Category::limit(6)->get();
         $categories = transformDataForVue($categories);
 
-        $country = Session::get('country') == 'LB' ? User::COUNTRY_LB : User::COUNTRY_UAE;
+        $country = $order->country_id;
         $language = 'en';
         $settings = Setting::where('country', $country)->where('language', $language)->pluck('value', 'name')->toArray();
 

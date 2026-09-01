@@ -18,11 +18,11 @@
                                 </inertia-link>
 
                             </div>
-                            <div class="ml-1">
-                                <inertia-link :href="route('country', [selectable_country])">
-                                    <icon class="w-5 h-5" :name="selectable_country" />
-                                </inertia-link>
-
+                            <div class="ml-1 flex items-center gap-1">
+                                <icon class="w-5 h-5" :name="user.country_id" />
+                                <select v-if="user.role === 1" :value="user.country_id" @change="switchAdminCountry" class="text-xs rounded border-gray-300 py-1">
+                                    <option v-for="country in availableCountries" :key="country.id" :value="country.id">{{ country.name }}</option>
+                                </select>
                             </div>
 
                             <!-- Navigation Links -->
@@ -460,6 +460,9 @@ export default defineComponent({
             this.$page.props.auth.user.notifications.splice(this.$page.props.auth.user.notifications.indexOf(event), 1);
             this.$inertia.get(this.route('notification.order.show'), {'table': table, 'notification': notificationId})
         },
+        switchAdminCountry(event) {
+            this.$inertia.get(this.route('country', event.target.value));
+        },
     },
     setup() {
         const user = computed(() => usePage().props.value.auth.user)
@@ -477,11 +480,12 @@ export default defineComponent({
             }
             return 'ar';
         },
-        selectable_country() {
-            if(this.$page.props.auth.user.role == 1)
-                return Math.abs(3 - this.$page.props.auth.user.country_id);
-            else
-                return this.$page.props.auth.user.country_id;
+        availableCountries() {
+            return [
+                { id: 1, name: 'Lebanon' },
+                { id: 2, name: 'United Arab Emirates' },
+                { id: 4, name: 'Syria' },
+            ];
         },
         websiteOrdersCount() {
             if (!this.$page.props.auth.user.notifications) return 0;

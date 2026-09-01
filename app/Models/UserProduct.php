@@ -57,7 +57,7 @@ class UserProduct extends Model
 
     public function getFinalPriceValueAttribute()
     {
-        $subtotal = $this->retail_price * 3.67;
+        $subtotal = $this->retail_price * app(\App\Services\CurrencyService::class)->rate('AED');
         return ceil($subtotal);
     }
 
@@ -71,8 +71,8 @@ class UserProduct extends Model
     public function getPriceBeforeDiscountValueAttribute()
     {
         if ($this->price_before_discount) {
-            return ceil($this->price_before_discount * 3.67);
+            return ceil($this->price_before_discount * app(\App\Services\CurrencyService::class)->rate('AED'));
         }
-        return ceil(($this->retail_price * 1.3) * 3.67);
+        return ceil(($this->retail_price * 1.3) * app(\App\Services\CurrencyService::class)->rate('AED'));
     }
 }

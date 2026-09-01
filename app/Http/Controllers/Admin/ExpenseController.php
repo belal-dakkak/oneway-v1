@@ -4,11 +4,12 @@ namespace App\Http\Controllers\Admin;
 
 use App\Http\Controllers\Controller;
 use App\Http\Requests\ExpenseRequest;
-use App\Models\Currency;
 use App\Models\Expense;
 use App\Models\User;
 use App\Models\Wallet;
 use App\Repositories\ExpenseRepository;
+use App\Services\CurrencyService;
+use App\Support\Country;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Redirect;
@@ -59,11 +60,7 @@ class ExpenseController extends Controller
     public function store(ExpenseRequest $request): RedirectResponse
     {
         $oldCredit = auth()->user()->wallet->credit;
-        if(auth()->user()->country_id == 2){
-            $rate = Currency::where('name','aed')->first()->rate;
-        }else{
-            $rate = 1;
-        }
+        $rate = app(CurrencyService::class)->rate(Country::defaultCurrency(auth()->user()->country_id));
         $amount = $request->get('amount') / $rate;
         Wallet::query()->updateOrCreate(
             ['user_id' => auth()->id()],

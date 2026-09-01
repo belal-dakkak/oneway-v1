@@ -39,6 +39,6 @@ class Currency
 
     public function getCurrenciesCodes(): array
     {
-        return ['LBP', 'AED'];
+        return ['USD', 'LBP', 'AED', 'SYP'];
     }
 }

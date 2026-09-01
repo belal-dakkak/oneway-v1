@@ -8,7 +8,7 @@
 
         <div>
             <div class="max-w-full mx-auto py-10 sm:px-6 lg:px-8">
-                <edit-setting-information-form :lp="lp" :aed="aed"/>
+                <edit-setting-information-form :lp="lp" :aed="aed" :syp="syp" :commerce-settings="commerceSettings"/>
                 <jet-section-border />
             </div>
         </div>
@@ -37,6 +37,8 @@ export default defineComponent({
     props:{
             lp: String,
             aed: String,
+            syp: [String, Number],
+            commerceSettings: Object,
     },
 })
 </script>

@@ -2,10 +2,11 @@
 
 namespace App\Repositories;
 
-use App\Models\Currency;
 use App\Models\Product;
 use App\Models\ProductColor;
 use App\Models\User;
+use App\Services\CurrencyService;
+use App\Support\Country;
 use Illuminate\Contracts\Pagination\LengthAwarePaginator;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Cache;
@@ -15,12 +16,12 @@ class ProductColorRepository
 {
     private function clearHomeCache()
     {
-        Cache::forget('home_new_products_1');
-        Cache::forget('home_new_products_2');
-        Cache::forget('home_offer_products_1');
-        Cache::forget('home_offer_products_2');
-        Cache::forget('home_random_products_1');
-        Cache::forget('home_random_products_2');
+        foreach (Country::allowedIds() as $countryId) {
+            foreach (['home_new_products_', 'home_offer_products_', 'home_random_products_'] as $prefix) {
+                Cache::forget($prefix.$countryId);
+                Cache::forget($prefix.$countryId.'_m');
+            }
+        }
     }
 
     public function add(Request $request)
@@ -29,13 +30,14 @@ class ProductColorRepository
             if(count($request->get('selected_products')) == 0) return false;
             DB::beginTransaction();
             $product = new Product($request->all());
-            if(auth()->user()->country_id == 2){
-                $aedRate = Currency::where('name','aed')->first()->rate;
-                $product->cost_price = $product->cost_price / $aedRate;
-                $product->retail_price = $product->retail_price / $aedRate;
-                $product->sale_price = $product->sale_price / $aedRate;
+            $currencyCode = Country::defaultCurrency(auth()->user()->country_id);
+            $rate = app(CurrencyService::class)->rate($currencyCode);
+            if ($rate != 1.0) {
+                $product->cost_price = $product->cost_price / $rate;
+                $product->retail_price = $product->retail_price / $rate;
+                $product->sale_price = $product->sale_price / $rate;
                 if ($product->price_before_discount && $product->price_before_discount != 0 && $product->price_before_discount != '0') {
-                    $product->price_before_discount = $product->price_before_discount / $aedRate;
+                    $product->price_before_discount = $product->price_before_discount / $rate;
                 } else {
                     $product->price_before_discount = null;
                 }
@@ -52,7 +54,7 @@ class ProductColorRepository
                 $product->sizes = [];
             $product->category_id = $request->get('selected_category')['id'];
             // $product->country_id = auth()->user()->country_id;
-            $country_id = 1;
+            $country_id = auth()->user()->country_id;
             if($request->get('country'))
                 $country_id = array_key_exists('value',$request->get('country'))? $request->get('country')['value'] : $request->get('country')['id'];
             if(!in_array(auth()->user()->role_id,[User::ROLE_ADMIN,USER::ROLE_WAREHOUSE])  && $country_id != auth()->user()->country_id )
@@ -129,7 +131,7 @@ class ProductColorRepository
         $products = ProductColor::query()->with(['color', 'product', 'product.category'])
         // ->where('country_id',$country)
         ->where('sizes','<>','')
-        ->whereIn('country_id',[auth()->user()->country_id,3])
+        ->whereIn('country_id', [auth()->user()->country_id, Country::globalProductId()])
         ->whereNotNull('sizes');
         if ($category = $request->get('category_id'))
             $products->whereHas('product', function ($query) use ($category){

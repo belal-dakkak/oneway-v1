@@ -148,12 +148,12 @@
                         <td class="text-center p-4">{{ item.barcode || item.id }}</td>
                         <td class="p-4">
                             <div class="flex flex-col gap-1 text-xs">
-                                <span class="bg-purple-100 p-1 rounded text-center">إجمالي المنتجات: {{ (item.total_price - (item.shipping_fee || 0) - (item.cod_fee || 0)).toFixed(2) }}</span>
-                                <span class="bg-fuchsia-100 p-1 rounded text-center">إجمالي: {{ item.total_price }}</span>
-                                <span v-if="item.shipping_fee > 0" class="bg-blue-50 p-1 rounded text-center text-[10px]">توصيل: {{ item.shipping_fee }}</span>
-                                <span v-if="item.cod_fee > 0" class="bg-orange-50 p-1 rounded text-center text-[10px]">رسوم دفع: {{ item.cod_fee }}</span>
-                                <span class="bg-teal-100 p-1 rounded text-center">مدفوع: {{ item.paid_price }}</span>
-                                <span class="bg-rose-100 p-1 rounded text-center">متبقي: {{ item.remain_price }}</span>
+                                <span class="bg-purple-100 p-1 rounded text-center">إجمالي المنتجات: {{ formatMoney(item.total_price - (item.shipping_fee || 0) - (item.cod_fee || 0), item) }}</span>
+                                <span class="bg-fuchsia-100 p-1 rounded text-center">إجمالي: {{ formatMoney(item.total_price, item) }}</span>
+                                <span v-if="item.shipping_fee > 0" class="bg-blue-50 p-1 rounded text-center text-[10px]">توصيل: {{ formatMoney(item.shipping_fee, item) }}</span>
+                                <span v-if="item.cod_fee > 0" class="bg-orange-50 p-1 rounded text-center text-[10px]">رسوم دفع: {{ formatMoney(item.cod_fee, item) }}</span>
+                                <span class="bg-teal-100 p-1 rounded text-center">مدفوع: {{ formatMoney(item.paid_price, item) }}</span>
+                                <span class="bg-rose-100 p-1 rounded text-center">متبقي: {{ formatMoney(item.remain_price, item) }}</span>
                             </div>
                         </td>
                         <td class="text-center p-4">
@@ -256,8 +256,8 @@
                                                 <span>📦 الكمية: <strong>{{ product.qty }}</strong></span>
                                             </div>
                                             <div class="flex flex-wrap gap-x-4 gap-y-1 text-gray-700 text-xs mt-1">
-                                                <span>💰 سعر الوحدة: <strong>{{ product.item_price }}</strong></span>
-                                                <span>🧾 الإجمالي: <strong>{{ product.total_price }}</strong></span>
+                                                <span>💰 سعر الوحدة: <strong>{{ formatMoney(product.item_price, activeOrder) }}</strong></span>
+                                                <span>🧾 الإجمالي: <strong>{{ formatMoney(product.total_price, activeOrder) }}</strong></span>
                                             </div>
                                             <span class="text-gray-400 text-[10px] mt-1">باركود: {{ product.product_color?.barcode }}</span>
                                         </div>
@@ -317,6 +317,7 @@ export default {
             totalCount: this.count,
             showModal: false,
             products: null,
+            activeOrder: null,
             page: 1,
             isLoading: false
         }
@@ -342,6 +343,7 @@ export default {
         },
         async showProducts(item) {
             this.showModal = true;
+            this.activeOrder = item;
             try {
                 const response = await axios.get(this.route('orders.items', { id: item.id }));
                 this.products = response.data[0].items;
@@ -352,6 +354,15 @@ export default {
         closeModal() {
             this.showModal = false;
             this.products = null;
+            this.activeOrder = null;
+        },
+        formatMoney(value, order) {
+            const currency = String(order?.curr_type || 'USD').toUpperCase();
+            const decimals = currency === 'SYP' ? 0 : 2;
+            return Number(value || 0).toLocaleString(undefined, {
+                minimumFractionDigits: decimals,
+                maximumFractionDigits: decimals,
+            }) + ' ' + currency;
         },
         async changeStatus(item) {
             try {

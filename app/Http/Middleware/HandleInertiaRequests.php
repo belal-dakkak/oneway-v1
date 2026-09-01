@@ -2,8 +2,10 @@
 
 namespace App\Http\Middleware;
 
-use App\Models\Currency;
+use App\Models\CountryCommerceSetting;
 use App\Models\User;
+use App\Services\CurrencyService;
+use App\Support\Country;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Session;
 use Inertia\Middleware;
@@ -39,6 +41,12 @@ class HandleInertiaRequests extends Middleware
      */
     public function share(Request $request): array
     {
+        $countryCode = Country::code();
+        $countryId = Country::id($countryCode);
+        $currencyService = app(CurrencyService::class);
+        $currencyOptions = $currencyService->optionsForCountry($countryId, true);
+        $commerce = CountryCommerceSetting::query()->where('country_id', $countryId)->first();
+
         return array_merge(parent::share($request), [
             'auth' => function() use ($request) {
                 $user    = $request->user();
@@ -54,12 +62,13 @@ class HandleInertiaRequests extends Middleware
                 }
                 // $country   = Session::get('country') == 'LB'?User::COUNTRY_LB:User::COUNTRY_UAE;
 
-                if($country == 2){
-                    $currs   = Currency::where('name','aed')->first();
-                    if ($currs) {
-                        $credit *= $currs->rate;
-                        $debit  *= $currs->rate;
-                    }
+                try {
+                    $currencyCode = Country::defaultCurrency($country);
+                    $rate = app(CurrencyService::class)->rate($currencyCode);
+                    $credit *= $rate;
+                    $debit *= $rate;
+                } catch (\InvalidArgumentException $exception) {
+                    // Keep base USD balances when a local rate has not been configured yet.
                 }
 
                 return [
@@ -85,8 +94,23 @@ class HandleInertiaRequests extends Middleware
                 ];
             },
             'popstate' => false,
-            'lb_ip' => (boolean) Session::get('country') == 'LB',
-            'country' => Session::get('country') ?? 'AE',
+            'lb_ip' => $countryCode === 'LB',
+            'country' => $countryCode,
+            'country_id' => $countryId,
+            'countries' => Country::storefront(),
+            'country_availability' => [
+                'LB' => true,
+                'AE' => true,
+                'SY' => collect($currencyService->optionsForCountry(Country::SYRIA, true))->contains('code', 'SYP'),
+                'TR' => false,
+            ],
+            'currency_options' => $currencyOptions,
+            'default_currency' => Country::defaultCurrency($countryId),
+            'commerce' => $commerce ? $commerce->toArray() : [
+                'shipping_fee_usd' => 0,
+                'free_shipping_threshold_usd' => null,
+                'cod_fee_percent' => 0,
+            ],
             'isMerchant' => (boolean) Session::get('is_merchant'),
             'locale' => function () {
                 return app()->getLocale();

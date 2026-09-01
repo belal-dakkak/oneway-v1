@@ -6,24 +6,31 @@ import { Inertia } from '@inertiajs/inertia'
 
 export const useStore = defineStore('main', () => {
   // State
-  const cart = ref(JSON.parse(localStorage.getItem('cart') || '[]'))
+  const initialCountry = localStorage.getItem('country') || 'AE'
+  const cart = ref(JSON.parse(localStorage.getItem(`cart_${initialCountry}`) || '[]'))
   const favorites = ref(JSON.parse(localStorage.getItem('favorites') || '[]'))
   const isRTL = ref(localStorage.getItem('isRTL') === 'true')
   const locale = ref(localStorage.getItem('locale') || 'en')
-  const currency = ref(localStorage.getItem('currency') || 'AED')
-  const exchangeRate = 3.67 // 1 USD = 3.67 AED
+  const currency = ref(localStorage.getItem(`currency_${initialCountry}`) || 'AED')
+  const currencyOptions = ref([])
+  const commerce = ref({ shipping_fee_usd: 0, free_shipping_threshold_usd: null, cod_fee_percent: 0 })
   const selectedProduct = ref(null)
   const isProductModalOpen = ref(false)
   const isMerchant = ref(false)
-  const country = ref(localStorage.getItem('country') || 'AE')
+  const country = ref(initialCountry)
+
+  const exchangeRate = computed(() => {
+    const option = currencyOptions.value.find(item => item.code === currency.value)
+    return Number(option?.rate || 1)
+  })
 
   // Watchers for persistence
   watch(currency, (val) => {
-    localStorage.setItem('currency', val)
+    localStorage.setItem(`currency_${country.value}`, val)
   })
 
   watch(cart, (newCart) => {
-    localStorage.setItem('cart', JSON.stringify(newCart))
+    localStorage.setItem(`cart_${country.value}`, JSON.stringify(newCart))
   }, { deep: true })
 
   watch(favorites, (newFavorites) => {
@@ -44,11 +51,8 @@ export const useStore = defineStore('main', () => {
 
   // Getters
   const getItemPrice = (item) => {
-    if (currency.value === 'USD') {
-      return item.product.price || item.product.retail_price || 0
-    } else {
-      return item.product.final_price_value || (item.product.price || item.product.retail_price || 0) * exchangeRate
-    }
+    const basePrice = Number(item.product.price || item.product.retail_price || 0)
+    return currency.value === 'USD' ? basePrice : basePrice * exchangeRate.value
   }
 
   const getCartTotal = computed(() => {
@@ -144,16 +148,25 @@ export const useStore = defineStore('main', () => {
   }
 
   const toggleCurrency = () => {
-    if (country.value === 'LB' || country.value === 'SY') return
-    currency.value = currency.value === 'AED' ? 'USD' : 'AED'
+    if (currencyOptions.value.length < 2) return
+    const index = currencyOptions.value.findIndex(item => item.code === currency.value)
+    currency.value = currencyOptions.value[(index + 1) % currencyOptions.value.length].code
   }
 
   const formatPrice = (value) => {
+    const decimals = currency.value === 'SYP' ? 0 : 2
     if (value === undefined || value === null || isNaN(Number(value))) {
-      return '0.00' + (currency.value === 'USD' ? ' USD' : ' AED')
+      return Number(0).toLocaleString(undefined, { minimumFractionDigits: decimals, maximumFractionDigits: decimals }) + ` ${currency.value}`
     }
-    return Number(value).toFixed(2) + (currency.value === 'USD' ? ' USD' : ' AED')
+    return Number(value).toLocaleString(undefined, { minimumFractionDigits: decimals, maximumFractionDigits: decimals }) + ` ${currency.value}`
   }
+
+  const convertFromUsd = (value) => {
+    const converted = Number(value || 0) * exchangeRate.value
+    return currency.value === 'SYP' ? Math.round(converted) : Number(converted.toFixed(2))
+  }
+
+  const rateFor = (code) => Number(currencyOptions.value.find(item => item.code === code)?.rate || 1)
 
   const t = (key) => {
     return dictionary[locale.value][key] || key
@@ -243,11 +256,7 @@ export const useStore = defineStore('main', () => {
     Inertia.post(route('country.set'), { country: countryCode }, {
       onSuccess: () => {
         country.value = countryCode
-        if (countryCode === 'LB' || countryCode === 'SY') {
-          currency.value = 'USD'
-          localStorage.setItem('currency', 'USD')
-        }
-        // Reload the page to fetch new data based on the new country
+        localStorage.setItem('country', countryCode)
         window.location.reload()
       },
       onError: (errors) => {
@@ -256,15 +265,25 @@ export const useStore = defineStore('main', () => {
     })
   }
 
+  const syncContext = (countryCode, options = [], defaultCurrency = 'USD', commerceSettings = null) => {
+    const changedCountry = country.value !== countryCode
+    country.value = countryCode
+    currencyOptions.value = Array.isArray(options) ? options : []
+    if (commerceSettings) commerce.value = commerceSettings
+    if (changedCountry) {
+      cart.value = JSON.parse(localStorage.getItem(`cart_${countryCode}`) || '[]')
+    }
+    const savedCurrency = localStorage.getItem(`currency_${countryCode}`)
+    const allowedCodes = currencyOptions.value.map(item => item.code)
+    currency.value = allowedCodes.includes(savedCurrency)
+      ? savedCurrency
+      : (allowedCodes.includes(defaultCurrency) ? defaultCurrency : (allowedCodes[0] || 'USD'))
+  }
+
   // Initialize RTL/Locale on load if necessary
   if (typeof document !== 'undefined') {
     document.documentElement.dir = isRTL.value ? 'rtl' : 'ltr'
     document.documentElement.lang = locale.value
-    // Fix: Force USD if country is LB or SY on load
-    if (country.value === 'LB' || country.value === 'SY') {
-      currency.value = 'USD'
-      localStorage.setItem('currency', 'USD')
-    }
   }
 
   return {
@@ -275,6 +294,8 @@ export const useStore = defineStore('main', () => {
     locale,
     currency,
     exchangeRate,
+    currencyOptions,
+    commerce,
     selectedProduct,
     isProductModalOpen,
     isMerchant,
@@ -292,6 +313,8 @@ export const useStore = defineStore('main', () => {
     toggleRTL,
     toggleCurrency,
     formatPrice,
+    convertFromUsd,
+    rateFor,
     t,
     toggleFavorite,
     isFavorite,
@@ -302,6 +325,7 @@ export const useStore = defineStore('main', () => {
     verifyMerchantCode,
     disableMerchantMode,
     country,
-    switchCountry
+    switchCountry,
+    syncContext
   }
 })

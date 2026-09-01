@@ -37,6 +37,8 @@ class User extends Authenticatable
     const COUNTRY_LB = 1;
     const COUNTRY_UAE = 2;
     const COUNTRY_BOTH = 3;
+    const COUNTRY_ALL = 3;
+    const COUNTRY_SYRIA = 4;
 
     /**
      * The attributes that are mass assignable.

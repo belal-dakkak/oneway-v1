@@ -10,6 +10,7 @@ use App\Models\Setting;
 use App\Models\User;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Session;
+use App\Support\Country;
 use Inertia\Inertia;
 use Inertia\Response;
 
@@ -20,13 +21,13 @@ class FavoriteController extends Controller
         $categories = Category::limit(6)->get();
         $categories = transformDataForVue($categories);
 
-        $country = Session::get('country') == 'LB' ? User::COUNTRY_LB : User::COUNTRY_UAE;
+        $country = Country::id();
         $language = 'en';
         $settings = Setting::where('country', $country)->where('language', $language)->pluck('value', 'name')->toArray();
 
         $favorites = [];
         if (auth()->check()) {
-            $countryId = Session::get('country') == 'LB' ? 1 : 2;
+            $countryId = Country::id();
             $favorites = auth()->user()->wishList()
                 ->whereIn('products.country_id', [$countryId, 3])
                 ->when(Session::get('is_merchant'), fn($q) => $q->where('shown_for_merchant', true))

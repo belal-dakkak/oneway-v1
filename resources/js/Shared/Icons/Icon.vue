@@ -25,12 +25,19 @@
             <rect width="3" height=".5" y="1.5" fill="#ed1c24"/>
             <path fill="#00a651" d="M1.5.6l.2.5h-.1v.3h-.2v-.3h-.1z"/>
         </svg>
+        <!-- Syria -->
+        <svg v-else-if="name == 4" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 3 2" class="w-full h-full">
+            <rect width="3" height="0.666" fill="#ce1126"/>
+            <rect width="3" height="0.668" y="0.666" fill="#fff"/>
+            <rect width="3" height="0.666" y="1.334" fill="#000"/>
+            <text x="1.5" y="1.18" text-anchor="middle" font-size="0.55" fill="#007a3d">★ ★</text>
+        </svg>
     </span>
 </template>
 <script>
 export default {
     props: {
-        name: String,
+        name: [String, Number],
     },
 }
 </script>

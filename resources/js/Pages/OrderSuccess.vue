@@ -64,12 +64,15 @@ export default {
     const store = useStore()
 
     onMounted(() => {
-      store.clearCart()
+      const countryCode = { 1: 'LB', 2: 'AE', 4: 'SY' }[props.order.country_id] || store.country
+      localStorage.setItem(`cart_${countryCode}`, '[]')
+      if (store.country === countryCode) store.clearCart()
     })
 
     const formatPrice = (value) => {
-      const currency = props.order.country_id === 2 ? 'AED' : 'USD'
-      return Math.round(value) + ' ' + currency
+      const currency = props.order.curr_type || (props.order.country_id === 2 ? 'AED' : 'USD')
+      const decimals = currency === 'SYP' ? 0 : 2
+      return Number(value).toLocaleString(undefined, { minimumFractionDigits: decimals, maximumFractionDigits: decimals }) + ' ' + currency
     }
 
     return { store, formatPrice }

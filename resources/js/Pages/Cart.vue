@@ -87,19 +87,14 @@
                 <div class="flex justify-between text-muted-foreground">
                     <span>{{ store.t('shipping') }}</span>
                     <span v-if="shippingFee === 0" class="text-green-600 font-medium">{{ store.t('free') }}</span>
-                    <span v-else class="font-medium">{{ shippingFee.toFixed(2) }} {{ store.currency }}</span>
+                    <span v-else class="font-medium">{{ store.formatPrice(shippingFee) }}</span>
                 </div>
                 <div v-if="shippingFee > 0" class="text-muted-foreground rtl:text-left ltr:text-right mt-[-8px]">
-                    <span v-if="store.currency === 'USD' && store.country === 'AE'">
-                        Shipping fee of ${{ (20 / (store.exchangeRate || 3.67)).toFixed(2) }} applies to orders under ${{ (150 / (store.exchangeRate || 3.67)).toFixed(2) }}. Free shipping over ${{ (150 / (store.exchangeRate || 3.67)).toFixed(2) }}.
-                    </span>
-                    <span v-else>
-                        {{ store.country === 'LB' ? store.t('shippingFeeMessageLebanon') : store.t('shippingFeeMessage') }}
-                    </span>
+                    {{ shippingMessage }}
                 </div>
                 <div class="flex justify-between text-xl font-extrabold pt-4 border-t border-dashed">
                     <span>{{ store.t('total') }}</span>
-                    <span class="text-primary">{{ totalWithShipping.toFixed(2) }} {{ store.currency }}</span>
+                    <span class="text-primary">{{ store.formatPrice(totalWithShipping) }}</span>
                 </div>
             </div>
           <div v-if="store.isMerchant && store.getCartCount < 20" class="mb-6 p-4 bg-amber-500/10 border border-amber-500/20 rounded-xl text-amber-600 text-sm font-bold flex items-center gap-2">
@@ -184,16 +179,16 @@ export default {
               cartTotal = 0
           }
           
-          // Lebanon: $5 for orders < $50, free for orders >= $50
-          // UAE: 20 AED for orders < 150 AED, free for orders >= 150 AED
-          if (store.country === 'LB') {
-              return cartTotal < 50 ? 5 : 0
-          } else {
-              if (store.currency === 'USD') {
-                  return cartTotal < (150 / 3.67) ? (20 / 3.67) : 0
-              }
-              return cartTotal < 150 ? 20 : 0
-          }
+          const threshold = store.commerce.free_shipping_threshold_usd
+          if (threshold !== null && threshold !== '' && cartTotal >= store.convertFromUsd(threshold)) return 0
+          return store.convertFromUsd(store.commerce.shipping_fee_usd || 0)
+      })
+
+      const shippingMessage = computed(() => {
+          const threshold = store.convertFromUsd(store.commerce.free_shipping_threshold_usd || 0)
+          return store.isRTL
+              ? `تُطبّق رسوم الشحن للطلبات الأقل من ${store.formatPrice(threshold)}.`
+              : `Shipping applies to orders below ${store.formatPrice(threshold)}.`
       })
 
       const totalWithShipping = computed(() => {
@@ -230,7 +225,7 @@ export default {
     return {
       store,
       canProceed,
-      proceedToCheckout, shippingFee, totalWithShipping
+      proceedToCheckout, shippingFee, totalWithShipping, shippingMessage
     }
   }
 }

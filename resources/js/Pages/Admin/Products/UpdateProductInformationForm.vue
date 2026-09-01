@@ -76,7 +76,7 @@
             </div>
             <div class="col-span-8 sm:col-span-4" dir="rtl">
                 <jet-label for="categories" :value="__('Country')" />
-                <Multiselect v-model="form.country" :options="[{ name: 'Lebanon', value: '1',id: '1' },{ name: 'United Arab Emirates', value: '2',id: '2' },{ name: 'Both', value: '3',id: '3' }]" :multiple="false" :close-on-select="true" placeholder="اختر البلد" label="name" track-by="id" />
+                <Multiselect v-model="form.country" :options="[{ name: 'Lebanon', value: '1',id: '1' },{ name: 'United Arab Emirates', value: '2',id: '2' },{ name: 'All Countries', value: '3',id: '3' },{ name: 'Syria', value: '4',id: '4' }]" :multiple="false" :close-on-select="true" placeholder="اختر البلد" label="name" track-by="id" />
                 <jet-input-error :message="form.errors.country" class="mt-2" />
             </div>
 

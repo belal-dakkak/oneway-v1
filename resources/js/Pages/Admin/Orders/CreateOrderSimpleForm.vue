@@ -16,6 +16,7 @@
         <div>
             <div class="max-w-full px-20 mx-auto py-5 sm:px-6 lg:px-8">
                 <form class="w-full" @submit.prevent v-on:submit.prevent>
+                    <tax-price-notice order-type="simple" :tax-ratio="tax_ratio" :enabled="enable_tax" :currency="form.currency" />
 
                     <div class="grid grid-cols-3" dir="rtl" v-for="(product, index) in products">
 
@@ -180,6 +181,7 @@ import {computed} from "vue";
 import {usePage} from "@inertiajs/inertia-vue3";
 import Currency from '@/Utils/Currency.js';
 import Receipt from '@/Utils/Receipt.js';
+import TaxPriceNotice from '@/Components/Admin/TaxPriceNotice.vue';
 
 export default defineComponent({
     components: {
@@ -192,6 +194,7 @@ export default defineComponent({
         Multiselect,
         MeeForm,
         JetButton,
+        TaxPriceNotice,
     },
     props: {
         all_products: Number,

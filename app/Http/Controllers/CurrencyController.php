@@ -3,6 +3,8 @@
 namespace App\Http\Controllers;
 
 use App\Models\Currency;
+use App\Models\CountryCommerceSetting;
+use App\Support\Country;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Redirect;
 use Inertia\Inertia;
@@ -18,8 +20,12 @@ class CurrencyController extends Controller
     {
 
         return Inertia::render('Admin/Currencies/Edit',[
-            'lp'=> Currency::where('name','lp')->first()->rate,
-            'aed'=> Currency::where('name','aed')->first()->rate,
+            'lp'=> optional(Currency::where('name','lp')->first())->rate,
+            'aed'=> optional(Currency::where('name','aed')->first())->rate,
+            'syp'=> optional(Currency::where('name','syp')->first())->rate,
+            'commerceSettings' => collect(Country::allowedIds())->mapWithKeys(function ($countryId) {
+                return [$countryId => CountryCommerceSetting::forCountry($countryId)];
+            }),
         ]);
     }
 
@@ -41,9 +47,32 @@ class CurrencyController extends Controller
      */
     public function store(Request $request)
     {
+        $request->validate([
+            'lp' => 'nullable|numeric|min:0.000001',
+            'aed' => 'required|numeric|min:0.000001',
+            'syp' => 'required|numeric|min:0.000001',
+            'commerce' => 'required|array',
+            'commerce.*.shipping_fee_usd' => 'required|numeric|min:0',
+            'commerce.*.free_shipping_threshold_usd' => 'nullable|numeric|min:0',
+            'commerce.*.cod_fee_percent' => 'required|numeric|min:0|max:100',
+        ]);
+
         $data = $request->except('_method');
-        Currency::where('name','lp')->update(['rate'=>$data['lp']]);
-        Currency::where('name','aed')->update(['rate'=>$data['aed']]);
+        if ($data['lp'] !== null) {
+            Currency::query()->updateOrCreate(['name' => 'lp'], ['label' => 'LP', 'rate' => $data['lp']]);
+        }
+        Currency::query()->updateOrCreate(['name' => 'aed'], ['label' => 'AED', 'rate' => $data['aed']]);
+        Currency::query()->updateOrCreate(['name' => 'syp'], ['label' => 'SYP', 'rate' => $data['syp']]);
+        foreach (Country::allowedIds() as $countryId) {
+            $commerce = $data['commerce'][$countryId] ?? $data['commerce'][(string) $countryId] ?? null;
+            if ($commerce) {
+                CountryCommerceSetting::query()->updateOrCreate(['country_id' => $countryId], [
+                    'shipping_fee_usd' => $commerce['shipping_fee_usd'],
+                    'free_shipping_threshold_usd' => $commerce['free_shipping_threshold_usd'],
+                    'cod_fee_percent' => $commerce['cod_fee_percent'],
+                ]);
+            }
+        }
         $request->session()->flash('success', 'تم تعديل سعر الصرف بنجاح');
         return Redirect::route('currencies.index');
     }

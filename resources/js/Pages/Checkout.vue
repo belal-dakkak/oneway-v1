@@ -24,7 +24,7 @@
               <div class="space-y-2">
                 <label class="text-sm font-medium">{{ store.t('phone') }}</label>
                 <div class="flex gap-2" dir="ltr">
-                  <select v-model="form.country_code" class="w-32 border-primary rounded-lg px-2 py-3 focus:ring-2 focus:ring-red-500 bg-white">
+                  <select v-model="form.country_code" disabled class="w-32 border-primary rounded-lg px-2 py-3 focus:ring-2 focus:ring-red-500 bg-gray-100">
                     <option v-for="option in countryOptions" :key="option.code" :value="option.code">
                       {{ option.flag }} {{ option.code }}
                     </option>
@@ -65,7 +65,7 @@
                 </div>
               </label>
 
-              <label class="relative flex items-center p-6 bg-secondary rounded-xl border-2 cursor-pointer transition-all" :class="form.payment_method === 'card' ? 'border-primary ring-2 ring-primary/20' : 'border-transparent'">
+              <label v-if="store.country !== 'SY'" class="relative flex items-center p-6 bg-secondary rounded-xl border-2 cursor-pointer transition-all" :class="form.payment_method === 'card' ? 'border-primary ring-2 ring-primary/20' : 'border-transparent'">
                 <input v-model="form.payment_method" type="radio" value="card" class="sr-only">
                 <div class="w-6 h-6 rounded-full text-white border-2 flex items-center justify-center rtl:ml-4 ltr:mr-4" :class="form.payment_method === 'card' ? 'border-white' : 'border-muted-foreground'">
                   <div v-if="form.payment_method === 'card'" class="w-3 h-3 bg-white rounded-full"></div>
@@ -168,7 +168,7 @@
                 <span class="font-medium">{{ store.formatPrice(codFeeValue) }}</span>
               </div>
               <div v-if="shippingFee > 0 && form.payment_method === 'cod'" class="text-[10px] text-muted-foreground rtl:text-left ltr:text-right mt-[-8px]">
-                {{ store.country === 'LB' ? store.t('shippingFeeMessageLebanon') : store.t('shippingFeeMessage') }}
+                {{ shippingMessage }}
               </div>
               <div class="flex justify-between text-xl font-extrabold pt-4 border-t border-dashed">
                 <span>{{ store.t('total') }}</span>
@@ -241,12 +241,12 @@ export default {
       last_name: '',
       email: '',
       phone: '',
-      country_code: '+971',
+      country_code: store.country === 'SY' ? '+963' : (store.country === 'LB' ? '+961' : '+971'),
       address: '',
       city: '',
       building_name: '',
       flat_number: '',
-      payment_method: 'card',
+      payment_method: store.country === 'SY' ? 'cod' : 'card',
       items: store.cart
     })
 
@@ -266,6 +266,13 @@ export default {
           console.error('Failed to parse shipping_info from localStorage', e)
         }
       }
+      form.country_code = store.country === 'SY' ? '+963' : (store.country === 'LB' ? '+961' : '+971')
+      if (store.country === 'SY') form.payment_method = 'cod'
+    })
+
+    watch(() => store.country, (country) => {
+      form.country_code = country === 'SY' ? '+963' : (country === 'LB' ? '+961' : '+971')
+      if (country === 'SY') form.payment_method = 'cod'
     })
 
     watch(() => {
@@ -282,16 +289,9 @@ export default {
         cartTotal = 0
       }
       
-      // Lebanon: $5 for orders < $50, free for orders >= $50
-      // UAE: 20 AED for orders < 150 AED, free for orders >= 150 AED
-      if (store.country === 'LB') {
-        return cartTotal < 50 ? 5 : 0
-      } else {
-        if (store.currency === 'USD') {
-          return cartTotal < (150 / 3.67) ? (20 / 3.67) : 0
-        }
-        return cartTotal < 150 ? 20 : 0
-      }
+      const threshold = store.commerce.free_shipping_threshold_usd
+      if (threshold !== null && threshold !== '' && cartTotal >= store.convertFromUsd(threshold)) return 0
+      return store.convertFromUsd(store.commerce.shipping_fee_usd || 0)
     })
 
     const codFeeValue = computed(() => {
@@ -300,7 +300,8 @@ export default {
         if (isNaN(cartTotal) || cartTotal === null || cartTotal === undefined) {
           cartTotal = 0
         }
-        return cartTotal * 0.10
+        const percentage = Number(store.commerce.cod_fee_percent || 0)
+        return cartTotal * (percentage / 100)
       }
       return 0
     })
@@ -311,6 +312,13 @@ export default {
         cartTotal = 0
       }
       return cartTotal + shippingFee.value + codFeeValue.value
+    })
+
+    const shippingMessage = computed(() => {
+      const threshold = store.convertFromUsd(store.commerce.free_shipping_threshold_usd || 0)
+      return store.isRTL
+        ? `تُطبّق رسوم الشحن للطلبات الأقل من ${store.formatPrice(threshold)}.`
+        : `Shipping applies to orders below ${store.formatPrice(threshold)}.`
     })
 
     const submitOrder = () => {
@@ -348,7 +356,7 @@ export default {
 
       loading.value = true
       // Send the full phone number to the backend
-      const submissionForm = { ...form, phone: fullPhone }
+      const submissionForm = { ...form, items: store.cart, phone: fullPhone, currency: store.currency }
 
       Inertia.post('/checkout', submissionForm, {
         onSuccess: () => {
@@ -362,7 +370,7 @@ export default {
       })
     }
 
-    return { store, form, loading, submitOrder, shippingFee, codFeeValue, totalWithShipping, countryOptions }
+    return { store, form, loading, submitOrder, shippingFee, codFeeValue, totalWithShipping, shippingMessage, countryOptions }
   }
 }
 </script>

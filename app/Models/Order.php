@@ -90,14 +90,14 @@ class Order extends Model
     public function getDateAttribute()
     {
         Date::setLocale('ar');
-        return Date::parse($this->created_at)->timezone('Asia/Dubai')->format('d-m-Y h:i a');
+        return Date::parse($this->created_at)->timezone(\App\Support\Country::timezone($this->seller->country_id ?? \App\Support\Country::UAE))->format('d-m-Y h:i a');
     }
 
     public function getSentDateAttribute()
     {
         if ($this->sent_at){
             Date::setLocale('ar');
-            return Date::parse($this->sent_at)->timezone('Asia/Dubai')->format('d-m-Y h:i a');
+            return Date::parse($this->sent_at)->timezone(\App\Support\Country::timezone($this->seller->country_id ?? \App\Support\Country::UAE))->format('d-m-Y h:i a');
         }
         return '';
     }

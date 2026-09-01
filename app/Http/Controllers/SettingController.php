@@ -4,14 +4,12 @@ namespace App\Http\Controllers;
 
 use App\Http\Controllers\Controller;
 use App\Models\Setting;
-use App\Models\User;
 use App\Repositories\SettingRepository;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Redirect;
 use Inertia\Inertia;
 use Inertia\Response;
-use Illuminate\Support\Facades\Session;
 class SettingController extends Controller
 {
     private $settingRepository;
@@ -37,7 +35,7 @@ class SettingController extends Controller
 
     public function store(Request $request)
     {
-        $country   = Session::get('country') == 'LB'?User::COUNTRY_LB:User::COUNTRY_UAE;
+        $country = auth()->user()->country_id;
         $res = $this->settingRepository->add($request,$country);
         $request->session()->flash('success', 'تم تعديل الإعدادات بنجاح');
         return Redirect::route('settings.index');
@@ -65,7 +63,7 @@ class SettingController extends Controller
     public function edit($language)
     {
         $language  = $language == 'ar' ? $language : 'en';
-        $country   = Session::get('country') == 'LB'?User::COUNTRY_LB:User::COUNTRY_UAE;
+        $country = auth()->user()->country_id;
         // $settings  = Setting::where('country',$country)->where('language',$language)->pluck('value','name')->toArray();
         $settings  = Setting::where('country',$country)->where('language',$language);
         $title     = Setting::where('country',$country)->where('language',$language)->where('name','title')->first()->value??'';

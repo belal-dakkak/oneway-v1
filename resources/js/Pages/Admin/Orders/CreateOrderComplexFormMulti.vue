@@ -16,6 +16,7 @@
         <div>
             <div class="max-w-full px-10 mx-auto py-5 sm:px-6 lg:px-8">
                 <form class="w-full" @submit.prevent v-on:submit.prevent>
+                    <tax-price-notice order-type="complex_from_multi" :tax-ratio="tax_ratio" :enabled="enable_tax" :currency="form.currency" />
 
                     <div class="grid grid-cols-3" dir="rtl" v-for="(product, index) in products">
 
@@ -209,6 +210,7 @@ import JetInputError from '@/Jetstream/InputError'
 import JetButton from '@/Jetstream/Button.vue'
 import Currency from '@/Utils/Currency.js';
 import Receipt from '@/Utils/Receipt.js';
+import TaxPriceNotice from '@/Components/Admin/TaxPriceNotice.vue';
 
 import {MeeForm} from "@/Shared/Ui";
 import {computed} from "vue";
@@ -223,7 +225,8 @@ export default defineComponent({
         JetInputError,
         Multiselect,
         MeeForm,
-        JetButton
+        JetButton,
+        TaxPriceNotice
     },
     props: {
         users: Object,

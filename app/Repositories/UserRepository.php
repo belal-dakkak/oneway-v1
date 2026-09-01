@@ -20,7 +20,7 @@ class UserRepository
             $user = new User($request->all());
         }
 
-        $country = 1;
+        $country = auth()->check() ? auth()->user()->country_id : User::COUNTRY_LB;
 
         if($request->get('country_id')) {
             if (is_array($request->get('country_id'))) {

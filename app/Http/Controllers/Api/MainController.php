@@ -20,12 +20,20 @@ class MainController extends ApiController
     {
         $currencies = [
             [
+                'code' => 'USD',
+                'symbol' => '$'
+            ],
+            [
                 'code' => 'LBP',
                 'symbol' => 'ل.ل'
             ],
             [
                 'code' => 'AED',
                 'symbol' => 'د.إ'
+            ],
+            [
+                'code' => 'SYP',
+                'symbol' => 'ل.س'
             ]
         ];
 

@@ -40,6 +40,7 @@
                     <option value=""> أختر الدولة </option>
                     <option value="1"> Lebanon </option>
                     <option value="2"> United Arab Emirates </option>
+                    <option value="4"> Syria </option>
                 </select>
 
                 <jet-input-error :message="form.errors.country" class="mt-2" />

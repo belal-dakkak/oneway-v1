@@ -4,7 +4,6 @@ namespace App\Http\Controllers\Admin;
 
 use App\Http\Controllers\Controller;
 use App\Http\Requests\UserProductRequest;
-use App\Models\Currency;
 use App\Models\Product;
 use App\Models\ProductColor;
 use App\Models\User;
@@ -179,11 +178,7 @@ class UserProductController extends Controller
         $merchants = User::query()->where('role_id', User::ROLE_MERCHANT)->get();
 
         if ($request->wantsJson()){
-            if(auth()->user()->country_id == 2){
-                $rate = Currency::where('name','aed')->first()->rate;
-            }else{
-                $rate = 1;
-            }
+            $rate = app(\App\Services\CurrencyService::class)->rate(\App\Support\Country::defaultCurrency(auth()->user()->country_id));
             $paginator = paginate($color_products,10,null,['path' => 'userProducts','stock_products' => $allProductsCount]);
             $paginator->appends([
                 'totals' => [
@@ -217,11 +212,7 @@ class UserProductController extends Controller
         }
         $color_products = paginate($color_products,10,null,['path' => 'userProducts','stock_products' => $allProductsCount]);
 
-        if(auth()->user()->country_id == 2){
-            $rate = Currency::where('name','aed')->first()->rate;
-        }else{
-            $rate = 1;
-        }
+        $rate = app(\App\Services\CurrencyService::class)->rate(\App\Support\Country::defaultCurrency(auth()->user()->country_id));
 
 //        dd($color_products);
 

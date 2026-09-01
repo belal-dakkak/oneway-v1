@@ -6,6 +6,13 @@ use Illuminate\Contracts\Validation\Rule;
 
 class ValidPhone implements Rule
 {
+    private $countryCode;
+
+    public function __construct(?string $countryCode = null)
+    {
+        $this->countryCode = $countryCode ? strtoupper($countryCode) : null;
+    }
+
     /**
      * Determine if the validation rule passes.
      *
@@ -29,8 +36,12 @@ class ValidPhone implements Rule
         // Remove spaces and dashes for checking
         $cleanValue = str_replace([' ', '-', '(', ')'], '', $value);
 
-        return preg_match($uaeRegex, $cleanValue) || 
-               preg_match($lebanonRegex, $cleanValue) || 
+        if ($this->countryCode === 'AE') return (bool) preg_match($uaeRegex, $cleanValue);
+        if ($this->countryCode === 'LB') return (bool) preg_match($lebanonRegex, $cleanValue);
+        if ($this->countryCode === 'SY') return (bool) preg_match($syriaRegex, $cleanValue);
+
+        return preg_match($uaeRegex, $cleanValue) ||
+               preg_match($lebanonRegex, $cleanValue) ||
                preg_match($syriaRegex, $cleanValue);
     }
 

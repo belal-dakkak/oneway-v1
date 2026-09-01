@@ -22,7 +22,7 @@ class WebsiteOrder extends Model
         'barcode', 'buyer_id', 'first_name', 'last_name', 'email', 'phone', 
         'address', 'city', 'building_name', 'flat_number',
         'total_price_before_discount', 'discount', 'total_price', 
-        'shipping_fee', 'cod_fee', 'status', 'payment_type', 'invoice', 
+        'shipping_fee', 'cod_fee', 'status', 'payment_type', 'curr_type', 'invoice', 
         'notes', 'country_id', 'paid_price', 'remain_price', 'curr_rate'
     ];
 
@@ -41,7 +41,7 @@ class WebsiteOrder extends Model
     public function getDateAttribute()
     {
         Date::setLocale('ar');
-        return Date::parse($this->created_at)->timezone('Asia/Dubai')->format('d-m-Y h:i a');
+        return Date::parse($this->created_at)->timezone(\App\Support\Country::timezone($this->country_id))->format('d-m-Y h:i a');
     }
 
     public function getPaymentLabelAttribute()
@@ -91,7 +91,13 @@ class WebsiteOrder extends Model
     public function dispatchNotifications()
     {
         // Get all users with admin dashboard access (Admin, Warehouse, Shop)
-        $adminUsers = User::whereIn('role_id', [User::ROLE_ADMIN, User::ROLE_WAREHOUSE, User::ROLE_SHOP])->get();
+        $adminUsers = User::query()
+            ->whereIn('role_id', [User::ROLE_ADMIN, User::ROLE_WAREHOUSE, User::ROLE_SHOP])
+            ->where(function ($query) {
+                $query->where('role_id', User::ROLE_ADMIN)
+                    ->orWhere('country_id', $this->country_id);
+            })
+            ->get();
 
         $buyer = $this->buyer;
         $note = __('New Order') . " #{$this->barcode}";

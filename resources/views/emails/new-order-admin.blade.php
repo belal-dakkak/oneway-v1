@@ -127,7 +127,7 @@
                     </tr>
                     <tr>
                         <td>Total Amount:</td>
-                        <td>{{ number_format($order->total_price, 2) }} {{ $order->country_id == 2 ? 'AED' : 'USD' }}</td>
+                        <td>{{ number_format($order->total_price, $order->curr_type === 'SYP' ? 0 : 2) }} {{ $order->curr_type ?: ($order->country_id == 2 ? 'AED' : 'USD') }}</td>
                     </tr>
                 </table>
             </div>

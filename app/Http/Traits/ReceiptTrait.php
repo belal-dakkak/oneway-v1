@@ -2,7 +2,6 @@
 
 namespace App\Http\Traits;
 
-use App\Models\Currency;
 use App\Models\Order;
 use App\Models\WebsiteOrder;
 use App\Models\ProductColor;
@@ -39,12 +38,9 @@ trait ReceiptTrait {
 
         $order = WebsiteOrder::find($orderId) ?: Order::find($orderId);
 
-        if(auth()->check() && auth()->user()->country_id == 2){
-            $rate = Currency::where('name','aed')->first()->rate;
-        }else{
-			$rate = Currency::where('name','aed')->first()->rate;
-            //$rate = 1;
-        }
+        $rate = $order instanceof WebsiteOrder ? 1.0 : (float) ($order->curr_rate ?: 1);
+        $currencyCode = strtoupper($order->curr_type ?: 'USD');
+        $decimals = $currencyCode === 'SYP' ? 0 : 2;
 
         if (!$order->sent_at)
             $order->update(['sent_at' => Carbon::now()]);
@@ -70,8 +66,8 @@ trait ReceiptTrait {
                     'tax_value' => $item->tax_value,
                     'tax_value_paid' => $item->tax_value_paid,
                     'price_without_tax_paid' => $item->price_without_tax_paid,
-                    'item_price' =>  number_format((float)round($item->item_price* $rate), 2, '.', ''),
-                    'total_price' => number_format((float)round($item->total_price * $rate), 2, '.', ''),
+                    'item_price' => number_format((float) $item->item_price * $rate, $decimals, '.', ','),
+                    'total_price' => number_format((float) $item->total_price * $rate, $decimals, '.', ','),
                 ];
             }
             $items = collect($data);
@@ -114,8 +110,8 @@ trait ReceiptTrait {
                         'tax_value' => $order_item->tax_value,
                         'tax_value_paid' => $order_item->tax_value_paid,
                         'price_without_tax_paid' => $order_item->price_without_tax_paid,
-						'item_price' => round($order_item->item_price* $rate),
-						'total_price' => round($order_item->total_price* $rate)
+                        'item_price' => number_format((float) $order_item->item_price * $rate, $decimals, '.', ','),
+						'total_price' => number_format((float) $order_item->total_price * $rate, $decimals, '.', ',')
 					];
 
                 else

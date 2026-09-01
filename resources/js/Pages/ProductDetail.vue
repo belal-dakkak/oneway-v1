@@ -64,15 +64,15 @@
               <div class="flex items-center space-x-4 rtl:space-x-reverse">
                 <template v-if="$page.props.isMerchant">
                   <span class="text-2xl font-bold text-primary">
-                    {{ store.formatPrice(store.currency === 'USD' ? product.sale_price : product.wholesale_price_value) }}
+                    {{ store.formatPrice(store.convertFromUsd(product.sale_price)) }}
                   </span>
                 </template>
                 <template v-else>
                   <span class="text-2xl font-bold text-primary">
-                    {{ store.formatPrice(store.currency === 'USD' ? product.retail_price : displayPriceValue) }}
+                    {{ store.formatPrice(store.convertFromUsd(product.retail_price)) }}
                   </span>
                   <span v-if="hasDiscount" class="text-lg text-muted-foreground line-through">
-                    {{ store.formatPrice(store.currency === 'USD' ? product.price_before_discount : displayOldPriceValue) }}
+                    {{ store.formatPrice(store.convertFromUsd(product.price_before_discount)) }}
                   </span>
                 </template>
               </div>
@@ -195,19 +195,19 @@
             <div class="flex items-center space-x-4 rtl:space-x-reverse mb-6">
               <template v-if="$page.props.isMerchant">
                 <span class="text-3xl font-bold text-primary">
-                  {{ store.formatPrice(store.currency === 'USD' ? product.sale_price : product.wholesale_price_value) }}
+                  {{ store.formatPrice(store.convertFromUsd(product.sale_price)) }}
                 </span>
                 <span class="text-sm font-bold text-primary underline decoration-2 underline-offset-4 uppercase tracking-tighter">{{ store.t('wholesalePrice') }}</span>
               </template>
               <template v-else>
                 <span class="text-3xl font-bold text-primary">
-                  {{ store.formatPrice(store.currency === 'USD' ? product.retail_price : displayPriceValue) }}
+                  {{ store.formatPrice(store.convertFromUsd(product.retail_price)) }}
                 </span>
                 <span
                   v-if="hasDiscount"
                   class="text-xl text-muted-foreground line-through"
                 >
-                  {{ store.formatPrice(store.currency === 'USD' ? product.price_before_discount : displayOldPriceValue) }}
+                  {{ store.formatPrice(store.convertFromUsd(product.price_before_discount)) }}
                 </span>
               </template>
             </div>

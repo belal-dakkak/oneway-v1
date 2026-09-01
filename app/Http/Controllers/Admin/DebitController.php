@@ -3,7 +3,6 @@
 namespace App\Http\Controllers\Admin;
 
 use App\Http\Controllers\Controller;
-use App\Models\Currency;
 use App\Models\Debit;
 use App\Models\DebitLog;
 use App\Models\DebitPayment;
@@ -13,6 +12,8 @@ use App\Models\Setting;
 use App\Models\User;
 use App\Models\Wallet;
 use App\Repositories\DebitRepository;
+use App\Services\CurrencyService;
+use App\Support\Country;
 use Carbon\Carbon;
 use PDF;
 use Exception;
@@ -20,7 +21,6 @@ use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Redirect;
-use Illuminate\Support\Facades\Session;
 use Inertia\Inertia;
 use Inertia\Response;
 use Jenssegers\Date\Date;
@@ -92,8 +92,8 @@ class DebitController extends Controller
             $debit = MerchantDebit::query()->findOrFail($request->get('debit'));
             $amount = $request->get('amount');
             $originalAmount = number_format((float)$amount, 2, '.', '');
-            if(auth()->user()->country_id == 2){
-                $rate = Currency::query()->where('name','aed')->first()->rate;
+            $rate = app(CurrencyService::class)->rate(Country::defaultCurrency(auth()->user()->country_id));
+            if ($rate != 1.0) {
                 $amount = $amount / $rate;
             }
 
@@ -165,8 +165,7 @@ class DebitController extends Controller
 
         $belalDebit = $this->debitRepository->getBelalDebit();
         $belalMerchant = transformDataForVue($belalMerchants);
-        if(auth()->user()->country_id == 2) $rate = 3.675;
-        else $rate = 1;
+        $rate = app(CurrencyService::class)->rate(Country::defaultCurrency(auth()->user()->country_id));
         return Inertia::render('Admin/Debits/Merchants', [
             'merchants' => $merchants,
             'belal_debit' => $belalDebit,
@@ -201,11 +200,7 @@ class DebitController extends Controller
 
         $creditor = $debit->creditor;
         $debtor = $debit->debtor;
-        if(auth()->user()->country_id == 2){
-            $rate = Currency::where('name','aed')->first()->rate;
-        }else{
-            $rate = 1;
-        }
+        $rate = app(CurrencyService::class)->rate(Country::defaultCurrency(auth()->user()->country_id));
         return Inertia::render('Admin/Debits/Log', [
             'logs' => $log,
             'debit' => $debit,
@@ -232,16 +227,11 @@ class DebitController extends Controller
 
         $log = $log->get();
         Date::setLocale('ar');
-        $now =  Date::parse(now())->timezone('Asia/Beirut')->format('d-m-Y h:i a');
+        $now = Date::parse(now())->timezone(Country::timezone(auth()->user()->country_id))->format('d-m-Y h:i a');
         $language  = 'en';
-        $country   = Session::get('country') == 'LB'?User::COUNTRY_LB:User::COUNTRY_UAE;
-        if(auth()->check() && auth()->user()->country_id == 2){
-            $rate = Currency::where('name','aed')->first()->rate;
-			$Currency = 'AED';
-        }else{
-            $rate = 1;
-			$Currency = 'USD';
-        }
+        $country = auth()->user()->country_id;
+        $Currency = Country::defaultCurrency($country);
+        $rate = app(CurrencyService::class)->rate($Currency);
 				
         $settings = Setting::where('country',$country)->where('language',$language)->pluck('value','name')->toArray();
         $pdf = PDF::loadView('includes.log_template',array('log'=>$log,'settings'=>$settings, 'creditor' => $creditor, 'debtor' => $debtor, 'debit' => $debit, 'now' => $now, 'totalPaid' => $totalPaid, 'totalAccount' => $totalAccount, 'totalRefund' => $totalRefund,'rate' => $rate,'Currency' => $Currency));

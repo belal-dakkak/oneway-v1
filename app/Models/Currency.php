@@ -14,4 +14,6 @@ class Currency extends Model
      * @var array
      */
     protected $fillable = ['name','label','rate'];
+
+    protected $casts = ['rate' => 'float'];
 }

@@ -74,8 +74,9 @@ export default {
     const store = useStore()
 
     const formatPrice = (value) => {
-      const currency = props.order.country_id === 2 ? 'AED' : 'USD'
-      return Math.round(value) + ' ' + currency
+      const currency = props.order.curr_type || (props.order.country_id === 2 ? 'AED' : 'USD')
+      const decimals = currency === 'SYP' ? 0 : 2
+      return Number(value).toLocaleString(undefined, { minimumFractionDigits: decimals, maximumFractionDigits: decimals }) + ' ' + currency
     }
 
     return { store, formatPrice }

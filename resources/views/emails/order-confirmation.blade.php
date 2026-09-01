@@ -153,25 +153,25 @@
                 <table>
                     <tr>
                         <td>Subtotal:</td>
-                        <td>{{ number_format($order->total_price - $order->shipping_fee - $order->cod_fee, 2) }} {{ $order->country_id == 2 ? 'AED' : 'USD' }}</td>
+                        <td>{{ number_format($order->total_price - $order->shipping_fee - $order->cod_fee, $order->curr_type === 'SYP' ? 0 : 2) }} {{ $order->curr_type ?: ($order->country_id == 2 ? 'AED' : 'USD') }}</td>
                     </tr>
                     <tr>
                         <td>Discount:</td>
-                        <td>-{{ number_format($order->discount, 2) }} {{ $order->country_id == 2 ? 'AED' : 'USD' }}</td>
+                        <td>-{{ number_format($order->discount, $order->curr_type === 'SYP' ? 0 : 2) }} {{ $order->curr_type ?: ($order->country_id == 2 ? 'AED' : 'USD') }}</td>
                     </tr>
                     <tr>
                         <td>Shipping Fee:</td>
-                        <td>{{ number_format($order->shipping_fee, 2) }} {{ $order->country_id == 2 ? 'AED' : 'USD' }}</td>
+                        <td>{{ number_format($order->shipping_fee, $order->curr_type === 'SYP' ? 0 : 2) }} {{ $order->curr_type ?: ($order->country_id == 2 ? 'AED' : 'USD') }}</td>
                     </tr>
                     @if($order->cod_fee > 0)
                     <tr>
                         <td>COD Fee:</td>
-                        <td>{{ number_format($order->cod_fee, 2) }} {{ $order->country_id == 2 ? 'AED' : 'USD' }}</td>
+                        <td>{{ number_format($order->cod_fee, $order->curr_type === 'SYP' ? 0 : 2) }} {{ $order->curr_type ?: ($order->country_id == 2 ? 'AED' : 'USD') }}</td>
                     </tr>
                     @endif
                     <tr>
                         <td><strong>Total:</strong></td>
-                        <td><strong>{{ number_format($order->total_price, 2) }} {{ $order->country_id == 2 ? 'AED' : 'USD' }}</strong></td>
+                        <td><strong>{{ number_format($order->total_price, $order->curr_type === 'SYP' ? 0 : 2) }} {{ $order->curr_type ?: ($order->country_id == 2 ? 'AED' : 'USD') }}</strong></td>
                     </tr>
                 </table>
             </div>

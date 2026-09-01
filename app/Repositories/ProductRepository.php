@@ -2,10 +2,11 @@
 
 namespace App\Repositories;
 
-use App\Models\Currency;
 use App\Models\Product;
 use App\Models\ProductColor;
 use App\Models\User;
+use App\Services\CurrencyService;
+use App\Support\Country;
 use Illuminate\Contracts\Pagination\LengthAwarePaginator;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Cache;
@@ -15,25 +16,26 @@ class ProductRepository
 {
     private function clearHomeCache()
     {
-        Cache::forget('home_new_products_1');
-        Cache::forget('home_new_products_2');
-        Cache::forget('home_offer_products_1');
-        Cache::forget('home_offer_products_2');
-        Cache::forget('home_random_products_1');
-        Cache::forget('home_random_products_2');
+        foreach (Country::allowedIds() as $countryId) {
+            foreach (['home_new_products_', 'home_offer_products_', 'home_random_products_'] as $prefix) {
+                Cache::forget($prefix.$countryId);
+                Cache::forget($prefix.$countryId.'_m');
+            }
+        }
     }
 
     public function update(Request $request, Product $product)
     {
         $data = $request->all(['name', 'name_en', 'details', 'details_en', 'cost_price', 'barcode', 'retail_price','sale_price', 'price_before_discount']);
         $priceBeforeDiscount = $data['price_before_discount'];
-        if(auth()->user()->country_id == 2){
-            $aedRate = Currency::where('name','aed')->first()->rate;
-            $data['cost_price'] = $data['cost_price'] / $aedRate;
-            $data['retail_price'] = $data['retail_price'] / $aedRate;
-            $data['sale_price'] = $data['sale_price'] / $aedRate;
+        $currencyCode = Country::defaultCurrency(auth()->user()->country_id);
+        $rate = app(CurrencyService::class)->rate($currencyCode);
+        if ($rate != 1.0) {
+            $data['cost_price'] = $data['cost_price'] / $rate;
+            $data['retail_price'] = $data['retail_price'] / $rate;
+            $data['sale_price'] = $data['sale_price'] / $rate;
             if ($priceBeforeDiscount && $priceBeforeDiscount != 0 && $priceBeforeDiscount != '0' && $priceBeforeDiscount != 'NaN') {
-                $data['price_before_discount'] = $priceBeforeDiscount / $aedRate;
+                $data['price_before_discount'] = $priceBeforeDiscount / $rate;
             } else {
                 $data['price_before_discount'] = null;
             }
@@ -45,7 +47,7 @@ class ProductRepository
             else
                 $product->sizes = [];
         $product->category_id = $request->get('selected_category')['id'];
-        $country_id = 1;
+        $country_id = auth()->user()->country_id;
         if($request->get('country'))
             $country_id = array_key_exists('value',$request->get('country'))? $request->get('country')['value'] : $request->get('country')['id'];
         if(!in_array(auth()->user()->role_id,[User::ROLE_ADMIN,USER::ROLE_WAREHOUSE])  && $country_id != auth()->user()->country_id )
@@ -143,7 +145,9 @@ class ProductRepository
 
     public function getProducts(Request $request): LengthAwarePaginator
     {
-        $products = Product::query()->with(['category', 'colors']);
+        $products = Product::query()
+            ->with(['category', 'colors'])
+            ->whereIn('country_id', [auth()->user()->country_id, Country::globalProductId()]);
         // $products = Product::query()->with(['category', 'colors'])->where('country_id',auth()->user()->country_id);
         if ($category = $request->get('category_id'))
             $products->where('category_id', $category);

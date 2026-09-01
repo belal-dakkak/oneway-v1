@@ -56,19 +56,19 @@
       <div class="flex items-center flex-wrap gap-1 mb-1 text-[12px] md:text-sm">
         <template v-if="$page.props.isMerchant">
           <span class="font-bold text-[#c20000]">
-            {{ store.formatPrice(store.currency === 'USD' ? product.sale_price : product.wholesale_price_value) }}
+            {{ store.formatPrice(store.convertFromUsd(product.sale_price)) }}
           </span>
           <span class="bg-primary/10 text-primary text-[10px] font-bold px-1 rounded border border-primary/20 uppercase">{{ store.t('wholesalePrice') }}</span>
         </template>
         <template v-else>
           <span class="font-bold text-[#c20000]">
-            {{ store.formatPrice(store.currency === 'USD' ? product.retail_price : product.final_price_value) }}
+            {{ store.formatPrice(store.convertFromUsd(product.retail_price)) }}
           </span>
           <span
             v-if="hasDiscount"
             class="text-muted-foreground line-through scale-90 origin-left"
           >
-            {{ store.formatPrice(store.currency === 'USD' ? product.price_before_discount : product.price_before_discount_value) }}
+            {{ store.formatPrice(store.convertFromUsd(product.price_before_discount)) }}
           </span>
           <span
             v-if="hasDiscount"

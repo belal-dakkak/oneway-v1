@@ -4,7 +4,6 @@ namespace App\Http\Controllers\Admin;
 
 use App\Http\Controllers\Controller;
 use App\Http\Requests\RefundRequest;
-use App\Models\Currency;
 use App\Models\Order;
 use App\Models\OrderItem;
 use App\Models\Refund;
@@ -12,6 +11,8 @@ use App\Models\User;
 use App\Models\UserProduct;
 use App\Models\Wallet;
 use App\Repositories\RefundRepository;
+use App\Services\CurrencyService;
+use App\Support\Country;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Redirect;
@@ -61,10 +62,7 @@ class RefundController extends Controller
 
         $buyers = transformDataForVue($buyers);
 
-        if(auth()->user()->country_id == 2)
-            $rate = Currency::where('name','aed')->first()->rate;
-        else
-            $rate = 1;
+        $rate = app(CurrencyService::class)->rate(Country::defaultCurrency(auth()->user()->country_id));
 
 
         return Inertia::render('Admin/Refunds/Index', [
@@ -102,13 +100,8 @@ class RefundController extends Controller
             ->whereRelation('order', 'buyer_id', null)
         ->orderBy('id','desc')->first();
 
-        if(auth()->user()->country_id == 2){
-            $rate = Currency::query()->where('name','aed')->first()->rate;
-        }else{
-            $rate = 1;
-        }
-
         if ($item){
+            $rate = (float) ($item->order->curr_rate ?? 1);
             $result = $item->product;
             $result->product_color = $item->product->productColor;
             $result->stock = $item->qty;

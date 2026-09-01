@@ -11,6 +11,8 @@ use App\Models\Product;
 use App\Models\ProductColor;
 use App\Models\User;
 use App\Models\Currency;
+use App\Services\CurrencyService;
+use App\Support\Country;
 use App\Repositories\ProductColorRepository;
 use Illuminate\Contracts\Pagination\LengthAwarePaginator;
 use Illuminate\Http\JsonResponse;
@@ -56,9 +58,7 @@ class ProductColorController extends Controller
             // return ['data'=>$nproducts];
         }
 
-        $rate = 1;
-        if(auth()->user()->country_id == User::COUNTRY_UAE)
-            $rate = Currency::where('name','aed')->first()->rate;
+        $rate = app(CurrencyService::class)->rate(Country::defaultCurrency(auth()->user()->country_id));
 
         return Inertia::render('Admin/ProductColors/Index', [
             'products'  => $products,

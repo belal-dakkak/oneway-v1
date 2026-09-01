@@ -59,7 +59,7 @@
             </div>
             <div class="col-span-8 sm:col-span-4" dir="rtl">
                 <jet-label for="country" :value="__('Country')" />
-                <Multiselect v-model="form.country" :options="[{ name: 'Lebanon', value: '1' },{ name: 'United Arab Emirates', value: '2' },{ name: 'Both', value: '3' }]" :multiple="false" :close-on-select="true" placeholder="اختر البلد" label="name" track-by="value" />
+                <Multiselect v-model="form.country" :options="[{ name: 'Lebanon', value: '1' },{ name: 'United Arab Emirates', value: '2' },{ name: 'All Countries', value: '3' },{ name: 'Syria', value: '4' }]" :multiple="false" :close-on-select="true" placeholder="اختر البلد" label="name" track-by="value" />
                 <jet-input-error :message="form.errors.country" class="mt-2" />
             </div>
             <div class="col-span-8 sm:col-span-4" dir="rtl">

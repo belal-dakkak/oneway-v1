@@ -78,7 +78,10 @@ class Product extends Model
                 $country = "United Arab Emirates";
                 break;
             case 3:
-                $country = "Both";
+                $country = "All Countries";
+                break;
+            case 4:
+                $country = "Syria";
                 break;
         }
         return $country;
@@ -169,7 +172,7 @@ class Product extends Model
 
     public function getFinalPriceValueAttribute()
     {
-        $subtotal = $this->retail_price * 3.67;
+        $subtotal = $this->retail_price * app(\App\Services\CurrencyService::class)->rate('AED');
         return ceil($subtotal);
     }
 
@@ -182,7 +185,7 @@ class Product extends Model
 
     public function getPriceBeforeDiscountValueAttribute()
     {
-        return ceil($this->price_before_discount * 3.67);
+        return ceil($this->price_before_discount * app(\App\Services\CurrencyService::class)->rate('AED'));
     }
 
     public function getPriceBeforeDiscountRawAttribute()
@@ -203,7 +206,7 @@ class Product extends Model
         }
 
         // Fake discount logic
-        $aedRetailPrice = $this->retail_price * 3.67;
+        $aedRetailPrice = $this->retail_price * app(\App\Services\CurrencyService::class)->rate('AED');
         if ($aedRetailPrice > 150) {
             return $this->retail_price / 0.4;
         } else {
@@ -213,7 +216,7 @@ class Product extends Model
 
     public function getWholesalePriceValueAttribute()
     {
-        return ceil($this->sale_price * 3.67);
+        return ceil($this->sale_price * app(\App\Services\CurrencyService::class)->rate('AED'));
     }
 
     public function getFormattedWholesalePriceAttribute()

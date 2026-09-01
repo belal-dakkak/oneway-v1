@@ -2,6 +2,8 @@
 
 namespace App\Http\Middleware;
 
+use App\Models\Currency;
+use App\Support\Country as CountrySupport;
 use Closure;
 use Illuminate\Http\Request;
 
@@ -30,6 +32,14 @@ class Country
                 }
                 return null;
             }) ?: 'AE';
+
+            $country = CountrySupport::code($country);
+            if ($country === 'SY') {
+                $sypRate = Currency::query()->where('name', 'syp')->value('rate');
+                if ((float) $sypRate <= 0) {
+                    $country = 'AE';
+                }
+            }
 
             $request->session()->put('country', $country);
         }

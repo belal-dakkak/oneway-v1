@@ -33,7 +33,7 @@
 
             <div class="col-span-8 sm:col-span-4" dir="rtl">
                 <jet-label for="country" :value="__('Country')" />
-                <Multiselect v-model="form.country_id" :options="[{ name: 'Lebanon', value: '1' },{ name: 'United Arab Emirates', value: '2' }]" :multiple="false" :close-on-select="true" placeholder="اختر الدولة" label="name"
+                <Multiselect v-model="form.country_id" :options="[{ name: 'Lebanon', value: '1' },{ name: 'United Arab Emirates', value: '2' },{ name: 'Syria', value: '4' }]" :multiple="false" :close-on-select="true" placeholder="اختر الدولة" label="name"
                              track-by="value" />
                 <jet-input-error :message="form.errors.country" class="mt-2" />
             </div>

@@ -26,14 +26,16 @@ class ProductRequest extends FormRequest
         return [
             'name' => 'required',
             'name_en' => 'required',
-            'retail_price' => 'required',
-            'price_before_discount' => 'nullable',
+            'retail_price' => 'required|numeric|min:0',
+            'price_before_discount' => 'nullable|numeric|min:0',
             'details' => 'required',
             'details_en' => 'required',
             'selected_category' => 'required',
-            'cost_price' => 'required',
+            'cost_price' => 'required|numeric|min:0',
             'sale_price' => 'nullable|numeric|min:0',
             'country' => 'required',
+            'country.value' => 'nullable|integer|in:1,2,3,4',
+            'country.id' => 'nullable|integer|in:1,2,3,4',
         ];
     }
 

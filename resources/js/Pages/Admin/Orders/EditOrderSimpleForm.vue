@@ -11,6 +11,7 @@
         <div>
             <div class="max-w-full px-20 mx-auto py-5 sm:px-6 lg:px-8">
                 <form class="w-full" @submit.prevent v-on:submit.prevent>
+                    <tax-price-notice order-type="simple" :tax-ratio="tax_ratio" :enabled="enable_tax" :currency="(order.curr_type || 'USD').toUpperCase()" />
 
                     <jet-button :type="'button'" class="mb-4" @click="editOrderSimple" v-if="form.total_qty > 0">
                         حفظ
@@ -125,6 +126,7 @@ import {MeeForm} from "@/Shared/Ui";
 import Button from "@/Jetstream/Button";
 import {computed} from "vue";
 import {usePage} from "@inertiajs/inertia-vue3";
+import TaxPriceNotice from '@/Components/Admin/TaxPriceNotice.vue';
 import Currency from '@/Utils/Currency.js';
 
 export default defineComponent({
@@ -137,7 +139,8 @@ export default defineComponent({
         JetInputError,
         Multiselect,
         MeeForm,
-        JetButton
+        JetButton,
+        TaxPriceNotice
     },
     props: {
         order: Object,

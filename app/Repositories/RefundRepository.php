@@ -7,13 +7,20 @@ use App\Models\Refund;
 use App\Models\User;
 use App\Models\UserProduct;
 use App\Models\Wallet;
-use App\Models\Currency;
+use App\Models\Order;
 use Illuminate\Contracts\Pagination\LengthAwarePaginator;
 use Illuminate\Http\Request;
 use Carbon\Carbon;
+use App\Services\TaxCalculator;
 
 class RefundRepository
 {
+    private $taxCalculator;
+
+    public function __construct(TaxCalculator $taxCalculator)
+    {
+        $this->taxCalculator = $taxCalculator;
+    }
 
     public function add(Request $request): Refund
     {
@@ -73,10 +80,7 @@ class RefundRepository
                     'qty' => $new_qty
                 ]);
 
-				if(auth()->user()->country_id == User::COUNTRY_UAE)
-					$rateAux = Currency::where('name','aed')->first()->rate;
-				else
-					$rateAux = 1;
+				$rateAux = (float) $orderItem->order->curr_rate ?: 1;
 
 				$productPrice = $product['price'] / $rateAux; // Price in $
 
@@ -113,17 +117,11 @@ class RefundRepository
                             $tax_ratio             = $userProduct->user->tax_ratio;
                             $order_total_tax_ratio = $tax_ratio;
 
-                            if($order->order_type == 'complex_from_multi') {
-
-                                $price_without_tax = $item_price;
-                                $tax_value         = ($price_without_tax * ($tax_ratio / 100));
-                                $price_with_vat    = $price_without_tax + $tax_value;
-
-                            } else {
-                                $price_without_tax = $item_price / (1 + ($tax_ratio / 100) );
-                                $tax_value         = $item_price - $price_without_tax;
-                                $price_with_vat    = $item_price;
-                            }
+                            $orderType = $order->order_type ?: ($order->type === Order::TYPE_CASH ? 'simple' : 'complex');
+                            $tax = $this->taxCalculator->calculate((float) $item_price, (float) $tax_ratio, $orderType);
+                            $price_without_tax = $tax['price_without_tax'];
+                            $tax_value = $tax['tax_value'];
+                            $price_with_vat = $tax['price_with_tax'];
 
                             $item_price_paid        = $price_with_vat * $order->curr_rate;
                             $total_price_paid       = $new_qty * $price_with_vat * $order->curr_rate;

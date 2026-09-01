@@ -3,7 +3,6 @@
 namespace App\Repositories;
 
 use App\Jobs\NotificationJob;
-use App\Models\Currency;
 use App\Models\Debit;
 use App\Models\DebitLog;
 use App\Models\MerchantDebit;
@@ -12,6 +11,8 @@ use App\Models\User;
 use App\Models\UserProduct;
 use App\Models\UserProductLog;
 use App\Notifications\ShopNotification;
+use App\Services\CurrencyService;
+use App\Support\Country;
 use Carbon\Carbon;
 use Illuminate\Contracts\Pagination\LengthAwarePaginator;
 use Illuminate\Http\Request;
@@ -23,21 +24,18 @@ class UserProductRepository
 {
     private function clearHomeCache()
     {
-        Cache::forget('home_new_products_1');
-        Cache::forget('home_new_products_2');
-        Cache::forget('home_offer_products_1');
-        Cache::forget('home_offer_products_2');
-        Cache::forget('home_random_products_1');
-        Cache::forget('home_random_products_2');
+        foreach (Country::allowedIds() as $countryId) {
+            foreach (['home_new_products_', 'home_offer_products_', 'home_random_products_'] as $prefix) {
+                Cache::forget($prefix.$countryId);
+                Cache::forget($prefix.$countryId.'_m');
+            }
+        }
     }
 
     public function add(Request $request)
     {
-        if(auth()->user()->country_id == 2){
-            $rate = Currency::where('name','aed')->first()->rate;
-        }else{
-            $rate = 1;
-        }
+        $currencyCode = Country::defaultCurrency(auth()->user()->country_id);
+        $rate = app(CurrencyService::class)->rate($currencyCode);
 
         $lsizes = json_decode($request->get('lsizes'),true);
         $length = count($lsizes);

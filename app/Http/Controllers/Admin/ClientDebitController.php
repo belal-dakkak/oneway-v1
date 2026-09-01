@@ -6,17 +6,17 @@ use App\Http\Controllers\Controller;
 use App\Models\ClientDebit;
 use App\Models\ClientDebitLog;
 use App\Models\ClientDebitPayment;
-use App\Models\Currency;
 use App\Models\Order;
 use App\Models\Setting;
 use App\Models\User;
 use App\Repositories\ClientDebitRepository;
+use App\Services\CurrencyService;
+use App\Support\Country;
 use PDF;
 use Exception;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
-use Illuminate\Support\Facades\Session;
 use Inertia\Inertia;
 use Inertia\Response;
 use Jenssegers\Date\Date;
@@ -57,10 +57,8 @@ class ClientDebitController extends Controller
             $debit     = ClientDebit::query()->findOrFail($request->get('debit'));
             $amount    = $request->get('amount');
             $amountLog = number_format($amount, 2);
-            $rate      = 1;
-
-            if(auth()->check() && auth()->user()->country_id == User::COUNTRY_UAE) {
-                $rate = Currency::where('name','aed')->first()->rate;
+            $rate = app(CurrencyService::class)->rate(Country::defaultCurrency(auth()->user()->country_id));
+            if ($rate != 1.0) {
                 $amount = $amount / $rate;
             }
 
@@ -150,10 +148,8 @@ class ClientDebitController extends Controller
 
             $amount    = $request->get('amount');
             $amountLog = number_format($amount, 2);
-            $rate      = 1;
-
-            if(auth()->check() && auth()->user()->country_id == User::COUNTRY_UAE) {
-                $rate = Currency::where('name','aed')->first()->rate;
+            $rate = app(CurrencyService::class)->rate(Country::defaultCurrency(auth()->user()->country_id));
+            if ($rate != 1.0) {
                 $amount = $amount / $rate;
             }
 
@@ -218,9 +214,7 @@ class ClientDebitController extends Controller
 
         $shops = User::query()->whereIn('role_id', [User::ROLE_SHOP, User::ROLE_WAREHOUSE])->where('country_id',auth()->user()->country_id)->get();
         $shops = transformDataForVue($shops);
-        if(auth()->user()->country_id == User::COUNTRY_UAE)
-            $rate = Currency::where('name','aed')->first()->rate;
-        else $rate = 1;
+        $rate = app(CurrencyService::class)->rate(Country::defaultCurrency(auth()->user()->country_id));
 
         return Inertia::render('Admin/ClientDebits/Clients', [
             'clients' => $clients,
@@ -255,11 +249,7 @@ class ClientDebitController extends Controller
 
         $creditor = $debit->creditor;
         $debtor = $debit->debtor;
-        if(auth()->check() && auth()->user()->country_id == 2){
-            $rate = Currency::where('name','aed')->first()->rate;
-        }else{
-            $rate = 1;
-        }
+        $rate = app(CurrencyService::class)->rate(Country::defaultCurrency(auth()->user()->country_id));
 
         //dd($log);
 
@@ -290,18 +280,13 @@ class ClientDebitController extends Controller
         });
 
         $log = $log->get();
-        if($debit->creditor->country_id == 2){
-            $rate = Currency::where('name','aed')->first()->rate;
-			$Currency = 'AED';
-        }else{
-            $rate = 1;
-			$Currency = 'USD';
-        }
+        $country = $debit->creditor->country_id;
+        $Currency = Country::defaultCurrency($country);
+        $rate = app(CurrencyService::class)->rate($Currency);
 
         Date::setLocale('ar');
-        $now =  Date::parse(now())->timezone('Asia/Beirut')->format('d-m-Y h:i a');
+        $now = Date::parse(now())->timezone(Country::timezone($country))->format('d-m-Y h:i a');
         $language  = 'en';
-        $country   = Session::get('country') == 'LB'?User::COUNTRY_LB:User::COUNTRY_UAE;
         $settings = Setting::where('country',$country)->where('language',$language)->pluck('value','name')->toArray();
         $pdf = PDF::loadView('includes.log_template',array('log'=>$log,'settings'=>$settings, 'creditor' => $creditor, 'debtor' => $debtor, 'debit' => $debit, 'now' => $now, 'totalPaid' => $totalPaid, 'totalAccount' => $totalAccount, 'totalRefund' => $totalRefund,'rate' => $rate,'Currency' => $Currency));
         return $pdf->download('Invoice_'.config('app.name').'_Acc_No # '.$id.'.pdf');

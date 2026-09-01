@@ -8,7 +8,6 @@ use App\Http\Traits\ReceiptTrait;
 use App\Jobs\NotificationOrderJob;
 use App\Models\ClientDebit;
 use App\Models\ClientDebitLog;
-use App\Models\Currency;
 use App\Models\Order;
 use App\Models\OrderItem;
 use App\Models\Product;
@@ -19,6 +18,10 @@ use App\Models\UserProduct;
 use App\Models\WebsiteOrder;
 use App\Models\WebsiteOrderItem;
 use App\Models\Wallet;
+use App\Services\TaxCalculator;
+use App\Services\CurrencyService;
+use App\Support\Country;
+use App\Models\CountryCommerceSetting;
 use Carbon\Carbon;
 use Carbon\CarbonPeriod;
 use Exception;
@@ -32,14 +35,24 @@ use Illuminate\Support\Facades\Cache;
 
 class OrderRepository
 {
+    private $taxCalculator;
+    private $currencyService;
+
+    public function __construct(TaxCalculator $taxCalculator, CurrencyService $currencyService)
+    {
+        $this->taxCalculator = $taxCalculator;
+        $this->currencyService = $currencyService;
+    }
+
     private function clearHomeCache()
     {
-        Cache::forget('home_new_products_1');
-        Cache::forget('home_new_products_2');
-        Cache::forget('home_offer_products_1');
-        Cache::forget('home_offer_products_2');
-        Cache::forget('home_random_products_1');
-        Cache::forget('home_random_products_2');
+        foreach (Country::allowedIds() as $countryId) {
+            foreach (['', '_m'] as $suffix) {
+                Cache::forget("home_new_products_{$countryId}{$suffix}");
+                Cache::forget("home_offer_products_{$countryId}{$suffix}");
+                Cache::forget("home_random_products_{$countryId}{$suffix}");
+            }
+        }
     }
     use ReceiptTrait;
 
@@ -109,6 +122,15 @@ class OrderRepository
 
             foreach ($request->get('selected_products') as $product){
 
+                $userProduct = UserProduct::query()
+                    ->where('id', $product['product_id'])
+                    ->where('country_id', auth()->user()->country_id)
+                    ->lockForUpdate()
+                    ->firstOrFail();
+                if ($userProduct->stock < (int) $product['qty']) {
+                    throw new Exception('Requested quantity exceeds the available branch stock.');
+                }
+
                 $itemTotalPrice = (float)number_format((float)$product['price'] * $product['qty'], 2, '.', '');
 
                 $item_price = $product['price']/$request->get('currency')['rate'];
@@ -136,8 +158,6 @@ class OrderRepository
 
                 $totalPrice += $itemTotalPrice;
 
-                $userProduct = UserProduct::query()->find($product['product_id']);
-
                 $oldStock = $userProduct->stock;
                 $newStock = $oldStock - $product['qty'];
                 $userProduct->update(['stock' => $newStock]);
@@ -151,17 +171,10 @@ class OrderRepository
                             $tax_ratio             = $userProduct->user->tax_ratio;
                             $order_total_tax_ratio = $tax_ratio;
 
-                            if($request->order_type == 'complex_from_multi') {
-
-                                $price_without_tax = $item_price;
-                                $tax_value         = ($price_without_tax * ($tax_ratio / 100));
-                                $price_with_vat    = $price_without_tax + $tax_value;
-
-                            } else {
-                                $price_without_tax = $item_price / (1 + ($tax_ratio / 100) );
-                                $tax_value         = $item_price - $price_without_tax;
-                                $price_with_vat       = $item_price;
-                            }
+                            $tax = $this->taxCalculator->calculate((float) $item_price, (float) $tax_ratio, $request->order_type);
+                            $price_without_tax = $tax['price_without_tax'];
+                            $tax_value = $tax['tax_value'];
+                            $price_with_vat = $tax['price_with_tax'];
 
                             $item_price_paid        = $price_with_vat * $order->curr_rate;
                             $total_price_paid       = $order_item->qty * $price_with_vat * $order->curr_rate;
@@ -278,22 +291,10 @@ class OrderRepository
             //    }
             }
 
-            if($request->order_type == 'complex_from_multi') {
-
-                $order_total_price_without_tax = $order->total_price;
-                $order_total_tax_value         = ($order_total_price_without_tax * $order_total_tax_ratio) / 100;
-                $order_total_price             = $order_total_price_without_tax + $order_total_tax_value;
-
-            } else {
-
-                $order_total_price       = $order->total_price;
-                $order_total_price_without_tax = $order_total_price / (1 + ($order_total_tax_ratio / 100) );
-                $order_total_tax_value         = $order_total_price - $order_total_price_without_tax;
-
-                // $order_total_tax_value        = ($order_total_price  * $order_total_tax_ratio) / 100;
-                // $order_total_price_without_tax = $order_total_price - $order_total_tax_value;
-
-            }
+            $orderTax = $this->taxCalculator->calculate((float) $order->total_price, (float) $order_total_tax_ratio, $request->order_type);
+            $order_total_price_without_tax = $orderTax['price_without_tax'];
+            $order_total_tax_value = $orderTax['tax_value'];
+            $order_total_price = $orderTax['price_with_tax'];
 
             $calc_remain_price = $order_total_price - $order->paid_price;
             $calc_total_price  = $order_total_price;
@@ -398,8 +399,18 @@ class OrderRepository
 
 
             $userId = auth()->id();
-            $countryCode = Session::get('country');
-            $countryId = $countryCode === 'LB' ? User::COUNTRY_LB : User::COUNTRY_UAE;
+            $countryCode = Country::code();
+            $countryId = Country::id($countryCode);
+            $paymentType = $request->get('payment')['name'];
+            $currencyCode = $this->currencyService->validateForCountry(
+                strtoupper((string) $request->get('currency', Country::defaultCurrency($countryId))),
+                $countryId,
+                true
+            );
+            if ($countryCode === 'SY' && $paymentType !== 'cod') {
+                throw new Exception('Card payment is not available for Syria.');
+            }
+            $currencyRate = $this->currencyService->rate($currencyCode);
 
             $order = new WebsiteOrder([
                 'notes' => $request->get('notes'),
@@ -417,8 +428,8 @@ class OrderRepository
                 'discount' => 0,
                 'invoice' => $request->get('tap_id'),
                 'payment_type' => $request->get('payment')['name'],
-                // Use proper currency rate: 1 for LBP, 3.67 for AED
-                'curr_rate' => Session::get('country') == 'LB' ? 1 : 3.67,
+                'curr_type' => $currencyCode,
+                'curr_rate' => $currencyRate,
                 'country_id' => $countryId,
                 'status' => $request->get('payment')['name'] === 'card' ? WebsiteOrder::STATUS_UNPAID : WebsiteOrder::STATUS_PENDING,
             ]);
@@ -427,53 +438,64 @@ class OrderRepository
 
             $totalPrice = 0;
             $totalPriceBeforeDiscount = 0;
-            $isLebanon = Session::get('country') === 'LB';
+            $decimals = $currencyCode === 'SYP' ? 0 : 2;
+            $isMerchant = (bool) Session::get('is_merchant');
 
             foreach ($request->get('items') as $product){
-                $productObj = ProductColor::query()->where('id', $product['product_id'])->first();
+                $productObj = ProductColor::query()
+                    ->with('product')
+                    ->where('id', $product['product_id'])
+                    ->whereHas('product', function ($query) use ($countryId) {
+                        $query->whereIn('country_id', [$countryId, Country::globalProductId()]);
+                    })
+                    ->firstOrFail();
 
-                $itemTotalPrice = $isLebanon 
-                    ? round($productObj->product->retail_price * $order->curr_rate * $product['qty'], 2)
-                    : ceil($productObj->product->retail_price * $order->curr_rate * $product['qty']);
+                $stock = UserProduct::query()
+                    ->where('product_color_id', $productObj->id)
+                    ->where('country_id', $countryId)
+                    ->where('size', $product['size'] ?? null)
+                    ->lockForUpdate()
+                    ->first();
+                if (!$stock || $stock->stock < (int) $product['qty']) {
+                    throw new Exception('The requested product quantity is not available in this country.');
+                }
 
-                $itemTotalPriceBeforeDiscount = $isLebanon
-                    ? round($productObj->product->price_before_discount * $order->curr_rate * $product['qty'], 2)
-                    : ceil($productObj->product->price_before_discount * $order->curr_rate * $product['qty']);
+                $basePrice = $isMerchant ? $productObj->product->sale_price : $productObj->product->retail_price;
+                $itemPrice = round($basePrice * $currencyRate, $decimals);
+                $oldPrice = round($productObj->product->price_before_discount * $currencyRate, $decimals);
+                $itemTotalPrice = round($itemPrice * $product['qty'], $decimals);
+                $itemTotalPriceBeforeDiscount = round($oldPrice * $product['qty'], $decimals);
 
                 $order->items()->create([
                     'product_color_id' => $productObj->id,
                     'qty' => $product['qty'],
-                    'item_price' => $isLebanon
-                        ? round($productObj->product->retail_price * $order->curr_rate, 2)
-                        : ceil($productObj->product->retail_price * $order->curr_rate),
-                    'total_price' => $isLebanon ? round($itemTotalPrice, 2) : ceil($itemTotalPrice),
-                    'item_price_before_discount' => $isLebanon
-                        ? round($productObj->product->price_before_discount * $order->curr_rate, 2)
-                        : ceil($productObj->product->price_before_discount * $order->curr_rate),
-                    'total_price_before_discount' => $isLebanon ? round($itemTotalPriceBeforeDiscount, 2) : ceil($itemTotalPriceBeforeDiscount),
+                    'item_price' => $itemPrice,
+                    'total_price' => $itemTotalPrice,
+                    'item_price_before_discount' => $oldPrice,
+                    'total_price_before_discount' => $itemTotalPriceBeforeDiscount,
                     'size' => $product['size']??null
                 ]);
+
+                if ($paymentType === 'cod') {
+                    $stock->decrement('stock', (int) $product['qty']);
+                }
 
                 $totalPrice += $itemTotalPrice;
                 $totalPriceBeforeDiscount += $itemTotalPriceBeforeDiscount;
             }
 
-            $discount = $isLebanon
-                ? round($totalPriceBeforeDiscount - $totalPrice, 2)
-                : ceil($totalPriceBeforeDiscount - $totalPrice);
+            $discount = round($totalPriceBeforeDiscount - $totalPrice, $decimals);
 
-            $paymentType = $request->get('payment')['name'];
-
-            // Calculate shipping fee based on country
-            if (Session::get('country') == 'LB') {
-                // Lebanon: $5 for orders < $50, free for orders >= $50
-                $shippingFee = ($totalPrice < 50) ? 5 : 0;
-                $codFee = ($paymentType === 'cod') ? round($totalPrice * 0.10, 2) : 0;
-            } else {
-                // UAE: 20 AED for orders < 150 AED, free for orders >= 150 AED
-                $shippingFee = ($totalPrice < 150) ? 20 : 0;
-                $codFee = ($paymentType === 'cod') ? ceil($totalPrice * 0.10) : 0;
-            }
+            $commerce = CountryCommerceSetting::forCountry($countryId);
+            $shippingFeeUsd = (float) $commerce->shipping_fee_usd;
+            $thresholdUsd = $commerce->free_shipping_threshold_usd;
+            $totalUsd = $totalPrice / $currencyRate;
+            $shippingFee = $thresholdUsd !== null && $totalUsd >= (float) $thresholdUsd
+                ? 0
+                : round($shippingFeeUsd * $currencyRate, $decimals);
+            $codFee = $paymentType === 'cod'
+                ? round($totalPrice * ((float) $commerce->cod_fee_percent / 100), $decimals)
+                : 0;
 
             $finalTotal = $totalPrice + $shippingFee + $codFee;
 
@@ -529,10 +551,7 @@ class OrderRepository
             /* } */
 
 
-            if(auth()->user()->country_id == User::COUNTRY_UAE)
-                $rate = Currency::where('name','aed')->first()->rate;
-            else
-                $rate = 1;
+            $rate = (float) $request->input('currency.rate', $order->curr_rate ?: 1);
 
             $totalPrice = 0;
             Log::log(LogLevel::INFO, $request->get('selected_products'));
@@ -541,7 +560,11 @@ class OrderRepository
 
                 if (isset($product['product_id'])){
 
-                    $userProduct = UserProduct::query()->find($product['product_id']);
+                    $userProduct = UserProduct::query()
+                        ->where('id', $product['product_id'])
+                        ->where('country_id', auth()->user()->country_id)
+                        ->lockForUpdate()
+                        ->firstOrFail();
 
                     $product['price'] /= $rate;
 
@@ -555,6 +578,14 @@ class OrderRepository
                         ->first();
 
                     $oldStock = $userProduct->stock;
+
+                    if (!$orderItem && $oldStock < (int) $product['qty']) {
+                        throw new Exception('Requested quantity exceeds the available branch stock.');
+                    }
+                    if ($orderItem && $product['qty'] > $orderItem->qty
+                        && $oldStock < ((int) $product['qty'] - (int) $orderItem->qty)) {
+                        throw new Exception('Requested quantity exceeds the available branch stock.');
+                    }
 
                     if (!$orderItem){
 
@@ -634,20 +665,13 @@ class OrderRepository
                                 $tax_ratio             = $userProduct->user->tax_ratio;
                                 $order_total_tax_ratio = $tax_ratio;
 
-                                if($request->order_type == 'complex_from_multi') {
-
-                                    $price_without_tax = $item_price;
-                                    $tax_value         = ($price_without_tax * ($tax_ratio / 100));
-                                    $price_with_vat    = $price_without_tax + $tax_value;
-
-                                } else {
-                                    $price_without_tax = $item_price / (1 + ($tax_ratio / 100) );
-                                    $tax_value         = $item_price - $price_without_tax;
-                                    $price_with_vat       = $item_price;
-                                }
+                                $tax = $this->taxCalculator->calculate((float) $item_price, (float) $tax_ratio, $request->order_type);
+                                $price_without_tax = $tax['price_without_tax'];
+                                $tax_value = $tax['tax_value'];
+                                $price_with_vat = $tax['price_with_tax'];
 
 
-                                $item_price_paid        = $price_without_tax * $order->curr_rate;
+                                $item_price_paid        = $price_with_vat * $order->curr_rate;
                                 $total_price_paid       = $price_with_vat * $order->curr_rate;
                                 $tax_value_paid         = $tax_value * $order->curr_rate;
                                 $price_without_tax_paid = $price_without_tax * $order->curr_rate;
@@ -797,22 +821,10 @@ class OrderRepository
 
             ///////////////////////////////////////////////////////////////
 
-            if($request->order_type == 'complex_from_multi') {
-
-                $order_total_price_without_tax = $order->total_price;
-                $order_total_tax_value         = ($order_total_price_without_tax * $order_total_tax_ratio) / 100;
-                $order_total_price             = $order_total_price_without_tax + $order_total_tax_value;
-
-            } else {
-
-                $order_total_price       = $order->total_price;
-                $order_total_price_without_tax = $order_total_price / (1 + ($order_total_tax_ratio / 100) );
-                $order_total_tax_value         = $order_total_price - $order_total_price_without_tax;
-
-                // $order_total_tax_value        = ($order_total_price  * $order_total_tax_ratio) / 100;
-                // $order_total_price_without_tax = $order_total_price - $order_total_tax_value;
-
-            }
+            $orderTax = $this->taxCalculator->calculate((float) $order->total_price, (float) $order_total_tax_ratio, $request->order_type);
+            $order_total_price_without_tax = $orderTax['price_without_tax'];
+            $order_total_tax_value = $orderTax['tax_value'];
+            $order_total_price = $orderTax['price_with_tax'];
 
             $calc_remain_price = $order_total_price - $order->paid_price;
             $calc_total_price  = $order_total_price;
@@ -1027,10 +1039,7 @@ class OrderRepository
             $orders->orderByDesc('orders.id');
         }
 
-        if(auth()->user()->country_id == User::COUNTRY_UAE)
-            $rate = Currency::where('name','aed')->first()->rate;
-        else
-            $rate = 1;
+        $rate = $this->currencyService->rate(Country::defaultCurrency(auth()->user()->country_id));
 
         // Calculate total refunds
         $ids = $orders->pluck('orders.id');
@@ -1269,10 +1278,7 @@ class OrderRepository
             $orders->orderByDesc('orders.id');
         }
 
-        if(auth()->user()->country_id == User::COUNTRY_UAE)
-            $rate = Currency::where('name','aed')->first()->rate;
-        else
-            $rate = 1;
+        $rate = $this->currencyService->rate(Country::defaultCurrency(auth()->user()->country_id));
 
         // Calculate total refunds
         $ids = $orders->pluck('orders.id');
@@ -1636,10 +1642,7 @@ class OrderRepository
     public function getMonthlyOrders(Request $request, $debts = false, $profits = false, $with = null,$pagination = true,$withItems = true)
     {
 
-        if(auth()->user()->country_id == User::COUNTRY_UAE)
-            $rate = Currency::where('name','aed')->first()->rate;
-        else
-            $rate = 1;
+        $rate = $this->currencyService->rate(Country::defaultCurrency(auth()->user()->country_id));
 
         if($request->get('shop')) {
             $shops = User::query()->whereIn('role_id', [User::ROLE_SHOP, User::ROLE_WAREHOUSE])->where('id',$request->get('shop'))->get();

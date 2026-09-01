@@ -91,7 +91,7 @@ Route::get('testorder/{id}', function ($id) {
     $order        = Order::find($id);
     $invoice_date = date('jS F Y', strtotime($order->invoice_date));
     $language     = 'en';
-    $country      = Session::get('country') == 'LB' ? User::COUNTRY_LB : User::COUNTRY_UAE;
+    $country      = \App\Support\Country::id();
     $settings     = Setting::where('country', $country)->where('language', $language)->pluck('value', 'name')->toArray();
     $items        = $order->items();
 
@@ -366,7 +366,7 @@ Route::get('language/{language}', function ($language) {
 })->name('language');
 
 Route::get('country/{id}', function ($country) {
-    if (!in_array($country, [1, 2]) || auth()->user()->role_id != 1) return redirect()->back();
+    if (!in_array((int) $country, \App\Support\Country::allowedIds(), true) || auth()->user()->role_id != 1) return redirect()->back();
     User::where('id', auth()->user()->id)->update(['country_id' => $country]);
     return redirect()->back();
 })->name('country');

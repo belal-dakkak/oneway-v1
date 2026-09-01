@@ -12,6 +12,8 @@ use App\Models\ProductColor;
 use App\Models\User;
 use App\Models\Currency;
 use App\Repositories\ProductRepository;
+use App\Services\CurrencyService;
+use App\Support\Country;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
@@ -24,10 +26,12 @@ class ProductController extends Controller
 {
 
     private $productRepository;
+    private $currencyService;
 
-    public function __construct(ProductRepository $productRepository)
+    public function __construct(ProductRepository $productRepository, CurrencyService $currencyService)
     {
         $this->productRepository = $productRepository;
+        $this->currencyService = $currencyService;
     }
 
     /**
@@ -46,10 +50,7 @@ class ProductController extends Controller
             return $products;
         }
 
-        if(auth()->user()->country_id == User::COUNTRY_UAE)
-            $rate = Currency::where('name','aed')->first()->rate;
-        else
-            $rate = 1;
+        $rate = $this->currencyService->rate(Country::defaultCurrency(auth()->user()->country_id));
 
         return Inertia::render('Admin/Products/Index', [
             'products' => $products,
@@ -83,10 +84,7 @@ class ProductController extends Controller
         $selectedSizes = getSizes($product->sizes);
         $selectedColors = getColors($product->colors);
 
-        if(auth()->user()->country_id == User::COUNTRY_UAE)
-            $rate = Currency::where('name','aed')->first()->rate;
-        else
-            $rate = 1;
+        $rate = $this->currencyService->rate(Country::defaultCurrency(auth()->user()->country_id));
 
         return Inertia::render('Admin/Products/Edit', [
             'categories' => $categories,

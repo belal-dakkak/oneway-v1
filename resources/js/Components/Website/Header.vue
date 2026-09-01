@@ -177,9 +177,10 @@
                     <button
                       v-for="c in countries"
                       :key="c.code"
+                      :disabled="c.disabled"
                       @click="handleCountryClick(c.code); isCountryMenuOpen = false"
                       class="w-full flex items-center justify-between p-4 bg-muted/50 hover:bg-muted rounded-xl transition-all active:scale-[0.98]"
-                      :class="{ 'ring-2 ring-primary bg-primary/5': store.country === c.code }"
+                      :class="{ 'ring-2 ring-primary bg-primary/5': store.country === c.code, 'opacity-50 cursor-not-allowed': c.disabled }"
                     >
                       <div class="flex items-center space-x-3 rtl:space-x-reverse">
                         <FlagIcon :country="c.code" :size="24" />
@@ -198,7 +199,7 @@
           </div>
 
           <button
-            v-if="store.country !== 'LB' && store.country !== 'SY'"
+            v-if="store.currencyOptions.length > 1"
             @click="store.toggleCurrency"
             class="h-8 px-1 bg-white border border-border text-[12px] font-bold rounded-lg shadow-sm active:scale-95 transition-all whitespace-nowrap"
           >
@@ -304,9 +305,10 @@
               <button
                 v-for="c in countries"
                 :key="c.code"
+                :disabled="c.disabled"
                 @click="handleCountryClick(c.code)"
                 class="w-full text-left ltr:text-left rtl:text-right px-4 py-2 text-sm hover:bg-muted flex items-center space-x-3 transition-colors"
-                :class="{ 'bg-primary/5 text-primary': store.country === c.code }"
+                :class="{ 'bg-primary/5 text-primary': store.country === c.code, 'opacity-50 cursor-not-allowed': c.disabled }"
               >
                 <FlagIcon :country="c.code" :size="20" />
                 <span class="font-medium mx-2" style="margin-right: 4px !important;">{{ store.isRTL ? c.nameAr : c.name }}</span>
@@ -316,7 +318,7 @@
 
           <!-- Desktop Currency Toggle -->
           <button
-            v-if="store.country !== 'LB' && store.country !== 'SY'"
+            v-if="store.currencyOptions.length > 1"
             @click="store.toggleCurrency"
             class="flex items-center space-x-1 hover:text-primary transition-colors p-1 text-xs font-bold border border-border rounded px-2 h-8"
           >
@@ -429,7 +431,7 @@
             <div class="p-6 border-t space-y-4">
               <div class="grid grid-cols-2 gap-2">
                 <button
-                  v-if="store.country !== 'LB' && store.country !== 'SY'"
+                  v-if="store.currencyOptions.length > 1"
                   @click="store.toggleCurrency"
                   class="flex items-center justify-center space-x-2 rtl:space-x-reverse font-bold bg-secondary text-secondary-foreground py-3 rounded-md shadow-md active:scale-95 transition-all"
                 >
@@ -459,9 +461,10 @@
                     <button
                       v-for="c in countries"
                       :key="c.code"
+                      :disabled="c.disabled"
                       @click="handleCountryClick(c.code)"
                       class="w-full text-left ltr:text-left rtl:text-right px-4 py-2 text-sm hover:bg-muted flex items-center space-x-3 transition-colors"
-                      :class="{ 'bg-primary/5 text-primary': store.country === c.code }"
+                      :class="{ 'bg-primary/5 text-primary': store.country === c.code, 'opacity-50 cursor-not-allowed': c.disabled }"
                     >
                       <FlagIcon :country="c.code" :size="20" />
                       <span class="font-medium mx-2">{{ store.isRTL ? c.nameAr : c.name }}</span>
@@ -525,7 +528,7 @@ export default {
       store.isMerchant = props.value.isMerchant
     }
     if (props.value.country) {
-      store.country = props.value.country
+      store.syncContext(props.value.country, props.value.currency_options, props.value.default_currency, props.value.commerce)
     }
 
     const isSearchOpen = ref(false)
@@ -536,16 +539,19 @@ export default {
     const searchQuery = ref('')
     const isMerchantInputFocused = ref(false)
 
+    const availability = props.value.country_availability || {}
     const countries = [
       { code: 'AE', name: 'United Arab Emirates', nameAr: 'الإمارات العربية المتحدة' },
       { code: 'LB', name: 'The Lebanese Republic', nameAr: 'الجمهورية اللبنانية' },
       { code: 'SY', name: 'Syrian Arab Republic', nameAr: 'الجمهورية العربية السورية' },
-      { code: 'TR', name: 'The Republic of Türkiye', nameAr: 'جمهورية تركيا' },
-    ]
+      { code: 'TR', name: 'The Republic of Türkiye', nameAr: 'جمهورية تركيا', comingSoon: true },
+    ].map(country => ({ ...country, disabled: country.code === 'SY' && availability.SY === false }))
 
     const handleCountryClick = (code) => {
       isCountryMenuOpen.value = false
-      if (code === 'SY' || code === 'TR') {
+      const selected = countries.find(country => country.code === code)
+      if (selected?.disabled) return
+      if (code === 'TR') {
         Inertia.visit(route('coming-soon'))
       } else {
         store.switchCountry(code)

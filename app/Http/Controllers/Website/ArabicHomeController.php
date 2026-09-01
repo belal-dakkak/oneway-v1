@@ -13,6 +13,7 @@ use App\Models\UserProduct;
 use App\Models\ProductColor;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Session;
+use App\Support\Country;
 use Inertia\Inertia;
 use Inertia\Response;
 
@@ -20,7 +21,7 @@ class ArabicHomeController extends Controller
 {
     public function index(): Response
     {
-        $countryId = Session::get('country') == 'LB' ? 1 : 2;
+        $countryId = Country::id();
         $featuredProducts = Product::query()
             ->withCount('reviews')
             ->whereIn('country_id', [$countryId, 3])
@@ -87,7 +88,7 @@ class ArabicHomeController extends Controller
         $categories = transformDataForVue($categories);
         $category = null;
 
-        $country_id = Session::get('country') == 'LB' ? 1 : 2;
+        $country_id = Country::id();
 
         $userProducts = Product::query()
             ->with(['category', 'colors' => function($query) use ($country_id) {

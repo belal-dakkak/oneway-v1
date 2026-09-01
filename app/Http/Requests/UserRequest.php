@@ -3,9 +3,22 @@
 namespace App\Http\Requests;
 
 use Illuminate\Foundation\Http\FormRequest;
+use Illuminate\Validation\Rule;
 
 class UserRequest extends FormRequest
 {
+    protected function prepareForValidation(): void
+    {
+        $countryId = $this->input('country_id');
+        if (is_array($countryId)) {
+            $countryId = $countryId['value'] ?? $countryId['id'] ?? null;
+        }
+        if (auth()->check() && auth()->user()->role_id !== \App\Models\User::ROLE_ADMIN) {
+            $countryId = auth()->user()->country_id;
+        }
+        $this->merge(['country_id' => $countryId]);
+    }
+
     /**
      * Determine if the user is authorized to make this request.
      *
@@ -29,7 +42,7 @@ class UserRequest extends FormRequest
                     'name' => 'required|string|min:2|max:100',
                     'password' => 'nullable',
                     'email' => 'email|unique:users,email|nullable',
-                    'country_id' => 'required'
+                    'country_id' => ['required', Rule::in([1, 2, 4])]
                 ];
             case 'PUT':
             case 'PATCH':
@@ -38,7 +51,7 @@ class UserRequest extends FormRequest
                     'name' => 'required|string|min:2|max:100',
                     'password' => 'nullable',
                     'email' => 'email|nullable|unique:users,email,'.$user->id,
-                    'country_id' => 'required'
+                    'country_id' => ['required', Rule::in([1, 2, 4])]
                 ];
             case 'DELETE':
                 return [];
