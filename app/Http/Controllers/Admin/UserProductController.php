@@ -171,11 +171,11 @@ class UserProductController extends Controller
         }
 
         if (auth()->user()->role_id == User::ROLE_WAREHOUSE || auth()->user()->role_id == User::ROLE_ADMIN){
-            $users = User::query()->whereIn('role_id', [User::ROLE_SHOP, User::ROLE_WAREHOUSE])->get();
+            $users = User::query()->whereIn('role_id', [User::ROLE_SHOP, User::ROLE_WAREHOUSE])->where('country_id', auth()->user()->country_id)->get();
         }else{
-            $users = User::query()->where('role_id', User::ROLE_SHOP)->get();
+            $users = User::query()->where('role_id', User::ROLE_SHOP)->where('country_id', auth()->user()->country_id)->get();
         }
-        $merchants = User::query()->where('role_id', User::ROLE_MERCHANT)->get();
+        $merchants = User::query()->where('role_id', User::ROLE_MERCHANT)->where('country_id', auth()->user()->country_id)->get();
 
         if ($request->wantsJson()){
             $rate = app(\App\Services\CurrencyService::class)->rate(\App\Support\Country::defaultCurrency(auth()->user()->country_id));

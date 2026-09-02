@@ -66,8 +66,8 @@ trait ReceiptTrait {
                     'tax_value' => $item->tax_value,
                     'tax_value_paid' => $item->tax_value_paid,
                     'price_without_tax_paid' => $item->price_without_tax_paid,
-                    'item_price' => number_format((float) $item->item_price * $rate, $decimals, '.', ','),
-                    'total_price' => number_format((float) $item->total_price * $rate, $decimals, '.', ','),
+                    'item_price' => round((float) $item->item_price * $rate, $decimals),
+                    'total_price' => round((float) $item->total_price * $rate, $decimals),
                 ];
             }
             $items = collect($data);
@@ -110,8 +110,8 @@ trait ReceiptTrait {
                         'tax_value' => $order_item->tax_value,
                         'tax_value_paid' => $order_item->tax_value_paid,
                         'price_without_tax_paid' => $order_item->price_without_tax_paid,
-                        'item_price' => number_format((float) $order_item->item_price * $rate, $decimals, '.', ','),
-						'total_price' => number_format((float) $order_item->total_price * $rate, $decimals, '.', ',')
+                        'item_price' => round((float) $order_item->item_price * $rate, $decimals),
+						'total_price' => round((float) $order_item->total_price * $rate, $decimals)
 					];
 
                 else

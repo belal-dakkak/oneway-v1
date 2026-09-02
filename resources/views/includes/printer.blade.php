@@ -366,6 +366,7 @@
                 $qty = 0;
                 $k = 0;
                 $len = $items->count() >= 10 ? 0 : 10 - $items->count();
+                $moneyDecimals = strtoupper($Currency) === 'SYP' ? 0 : 2;
             @endphp
 
             <tbody>
@@ -375,14 +376,14 @@
                     <tr>
                         <td> {{$order_item->name}} </td>
                         <td> {{$order_item->qty}} </td>
-                        <td class="price"> {{ round(number_format($order_item->item_price,2)) }} {{ $Currency }} </td>
+                        <td class="price"> {{ number_format($order_item->item_price, $moneyDecimals) }} {{ $Currency }} </td>
 
                         @if($order->seller && $order->seller->enable_tax == 'yes')
-                        <td class="price"> {{ number_format($order_item->price_without_tax * $order_item->qty,2)  }} {{ $Currency }} </td>
-                        <td class="price"> {{ number_format($order_item->tax_value * $order_item->qty,2) }} {{ $Currency }} </td>
-                        <td class="price"> {{ round(number_format(($order_item->price_without_tax + $order_item->tax_value)) * $order_item->qty,2) }} {{ $Currency }} </td>
+                        <td class="price"> {{ number_format($order_item->price_without_tax * $order_item->qty, $moneyDecimals)  }} {{ $Currency }} </td>
+                        <td class="price"> {{ number_format($order_item->tax_value * $order_item->qty, $moneyDecimals) }} {{ $Currency }} </td>
+                        <td class="price"> {{ number_format(($order_item->price_without_tax + $order_item->tax_value) * $order_item->qty, $moneyDecimals) }} {{ $Currency }} </td>
                         @else
-                        <td class="price"> {{ round(number_format($order_item->item_price * $order_item->qty,2)) }} {{ $Currency }} </td>
+                        <td class="price"> {{ number_format($order_item->item_price * $order_item->qty, $moneyDecimals) }} {{ $Currency }} </td>
                         @endif
                     </tr>
 
@@ -466,7 +467,7 @@
                          الإجمالي شامل الضريبة / Total bill Incl VAT
                     </td>
                     <td style="text-align: center !important;direction: rtl;" colspan="3" class="line price">
-                        {{ number_format($order->price_without_tax + $order->tax_value,2) }}
+                        {{ number_format($order->price_without_tax + $order->tax_value, $moneyDecimals) }} {{ $Currency }}
                     </td>
                 </tr>
                 @endif

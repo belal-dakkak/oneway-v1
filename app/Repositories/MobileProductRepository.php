@@ -20,7 +20,7 @@ class MobileProductRepository
             $products->has('colors');
 
         if ($api && $country = $request->get('country_id'))
-            $products->whereIn('country_id', [$country,3]);
+            $products->whereIn('country_id', [$country, \App\Support\Country::globalProductId()]);
 
         if ($category = $request->get('category_id'))
             $products->where('category_id', $category);

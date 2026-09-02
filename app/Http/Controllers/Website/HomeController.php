@@ -45,7 +45,7 @@ class HomeController extends Controller
                 ->join('product_colors', 'products.id', '=', 'product_colors.product_id')
                 ->join('user_products', 'product_colors.id', '=', 'user_products.product_color_id')
                 ->where('user_products.country_id', $countryId)
-                ->whereIn('products.country_id', [$countryId, 3])
+                ->whereIn('products.country_id', [$countryId, Country::globalProductId()])
                 ->when(Session::get('is_merchant'), function ($q) {
                     return $q->where('shown_for_merchant', true);
                 })
@@ -205,7 +205,7 @@ class HomeController extends Controller
             ])
             ->join('product_colors', 'product_colors.product_id', '=', 'products.id')
             ->join('user_products', 'user_products.product_color_id', '=', 'product_colors.id')
-            ->whereIn('products.country_id', [$countryId, 3])
+            ->whereIn('products.country_id', [$countryId, Country::globalProductId()])
             ->when(Session::get('is_merchant'), function ($q) {
                 return $q->where('shown_for_merchant', true);
             })
@@ -362,7 +362,7 @@ class HomeController extends Controller
             ->withCount('reviews')
             ->where('category_id', $product->category_id)
             ->where('products.id', '!=', $product->id)
-            ->whereIn('products.country_id', [$countryId, 3])
+            ->whereIn('products.country_id', [$countryId, Country::globalProductId()])
             ->when(Session::get('is_merchant'), function ($q) {
                 return $q->where('shown_for_merchant', true);
             })

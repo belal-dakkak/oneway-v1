@@ -68,13 +68,28 @@ class CurrencyService
 
     public function fromUsd($amount, string $code): float
     {
-        $value = (float) $amount * $this->rate($code);
-        return $this->round($value, $code);
+        return $this->fromUsdAtRate($amount, $this->rate($code), $code);
     }
 
     public function toUsd($amount, string $code): float
     {
-        return round((float) $amount / $this->rate($code), 4);
+        return $this->toUsdAtRate($amount, $this->rate($code));
+    }
+
+    public function fromUsdAtRate($amount, $rate, string $code): float
+    {
+        if ((float) $rate <= 0) {
+            throw new InvalidArgumentException('Exchange rate must be greater than zero.');
+        }
+        return $this->round((float) $amount * (float) $rate, $code);
+    }
+
+    public function toUsdAtRate($amount, $rate): float
+    {
+        if ((float) $rate <= 0) {
+            throw new InvalidArgumentException('Exchange rate must be greater than zero.');
+        }
+        return round((float) $amount / (float) $rate, 4);
     }
 
     public function round($amount, string $code): float

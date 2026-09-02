@@ -111,6 +111,13 @@
 </head>
 
 <body>
+@php
+    $currency = strtoupper($order->curr_type ?: 'USD');
+    $moneyDecimals = $currency === 'SYP' ? 0 : 2;
+    $formatMoney = static function ($value) use ($moneyDecimals, $currency) {
+        return number_format((float) $value, $moneyDecimals, '.', ',').' '.$currency;
+    };
+@endphp
 <div class="invoice-box rtl">
     <table cellpadding="0" cellspacing="0" style="margin-bottom: 20px">
         <tr class="top">
@@ -192,9 +199,9 @@
         <tr class="item">
             <td>{{$item->name}}</td>
 
-            <td align="center">{{$item->item_price}} &nbsp;&nbsp;&nbsp;</td>
+            <td align="center">{{$formatMoney($item->item_price)}} &nbsp;&nbsp;&nbsp;</td>
             <td align="center">({{$item->qty}}x) &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;</td>
-            <td align="center">{{$item->qty * $item->item_price}}</td>
+            <td align="center">{{$formatMoney($item->qty * $item->item_price)}}</td>
         </tr>
         @endforeach
     </table>
@@ -206,28 +213,28 @@
             <tr class="total">
                 <td style="font-weight: bold">إجمالي الفاتورة قبل الخصم <br> Total bill before discount</td>
                 <td></td>
-                <td>{{$order->total_price_before_discount}}</td>
+                <td>{{$formatMoney($order->total_price_before_discount)}}</td>
             </tr>
             <tr class="total">
                 <td style="font-weight: bold">الخصم <br> Discount</td>
                 <td></td>
-                <td>{{$order->discount}}</td>
+                <td>{{$formatMoney($order->discount)}}</td>
             </tr>
         @endif
         <tr class="total">
             <td style="font-weight: bold">إجمالي الفاتورة <br> Total bill</td>
             <td></td>
-            <td style="font-weight: bolder; color: darkslateblue">{{$order->total_price}}</td>
+            <td style="font-weight: bolder; color: darkslateblue">{{$formatMoney($order->total_price)}}</td>
         </tr>
         <tr class="total">
             <td style="font-weight: bold">إجمالي المدفوعات <br> Total payments</td>
             <td></td>
-            <td style="font-weight: bolder; color: darkslateblue">{{$order->paid_price}}</td>
+            <td style="font-weight: bolder; color: darkslateblue">{{$formatMoney($order->paid_price)}}</td>
         </tr>
         <tr class="total">
             <td style="font-weight: bold;">الباقي <br> rem of amount</td>
             <td></td>
-            <td style="font-weight: bolder; color: darkred">{{$order->remain_price}}</td>
+            <td style="font-weight: bolder; color: darkred">{{$formatMoney($order->remain_price)}}</td>
         </tr>
     </table>
 

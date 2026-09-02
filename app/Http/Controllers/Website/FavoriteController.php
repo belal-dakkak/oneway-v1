@@ -29,7 +29,7 @@ class FavoriteController extends Controller
         if (auth()->check()) {
             $countryId = Country::id();
             $favorites = auth()->user()->wishList()
-                ->whereIn('products.country_id', [$countryId, 3])
+                ->whereIn('products.country_id', [$countryId, \App\Support\Country::globalProductId()])
                 ->when(Session::get('is_merchant'), fn($q) => $q->where('shown_for_merchant', true))
                 ->whereHas('colors.userProducts', function($q) use ($countryId) {
                     $q->where('country_id', $countryId)->where('stock', '>', 0);

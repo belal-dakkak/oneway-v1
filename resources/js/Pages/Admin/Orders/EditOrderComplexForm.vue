@@ -372,9 +372,21 @@ export default defineComponent({
 
                 if(enable_tax == 'yes') {
 
-                    var order_total_price       = totalPrice;
-                    var order_total_price_without_tax = totalPrice / (1 + (tax_ratio / 100) );
-                    var order_total_tax_value         = order_total_price - order_total_price_without_tax;
+                    var order_total_price;
+                    var order_total_price_without_tax;
+                    var order_total_tax_value;
+                    if (this.form.order_type === 'complex_from_multi') {
+                        order_total_price_without_tax = totalPrice;
+                        order_total_tax_value = totalPrice * (tax_ratio / 100);
+                        order_total_price = totalPrice + order_total_tax_value;
+                        this.form.total_price_before_discount = order_total_price;
+                        this.form.total_price = order_total_price - Number(this.form.discount);
+                        this.form.paid_price = order_total_price;
+                    } else {
+                        order_total_price = totalPrice;
+                        order_total_price_without_tax = totalPrice / (1 + (tax_ratio / 100));
+                        order_total_tax_value = order_total_price - order_total_price_without_tax;
+                    }
 
                     // var order_total_tax_value         = order_total_price * (tax_ratio / 100);
                     // var order_total_price_without_tax = order_total_price - order_total_tax_value;

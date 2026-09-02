@@ -27,4 +27,10 @@ class CountryConfigurationTest extends TestCase
         $this->assertArrayNotHasKey('TR', Country::storefront());
         $this->assertSame([1, 2, 4], Country::allowedIds());
     }
+
+    public function test_api_currency_and_country_headers_can_select_syria(): void
+    {
+        $this->assertSame(Country::SYRIA, Country::idForCurrency('SYP'));
+        $this->assertSame(Country::SYRIA, Country::idForCurrency('USD', 'SY'));
+    }
 }

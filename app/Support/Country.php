@@ -84,6 +84,21 @@ class Country
         return self::definitionFromId($countryId)['timezone'] ?? config('app.timezone');
     }
 
+    public static function idForCurrency(string $currencyCode, ?string $countryCode = null): int
+    {
+        if ($countryCode && isset(self::storefront()[strtoupper($countryCode)])) {
+            return self::id(strtoupper($countryCode));
+        }
+
+        switch (strtoupper($currencyCode)) {
+            case 'SYP': return self::SYRIA;
+            case 'LBP':
+            case 'LP': return self::LEBANON;
+            case 'AED':
+            default: return self::UAE;
+        }
+    }
+
     public static function legacyUserConstants(): array
     {
         return [User::COUNTRY_LB, User::COUNTRY_UAE, User::COUNTRY_SYRIA];

@@ -8,6 +8,7 @@ use Illuminate\Contracts\Pagination\LengthAwarePaginator;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Session;
+use Illuminate\Support\Facades\Cache;
 class SettingRepository
 {
     public function add(Request $request,$country)
@@ -23,6 +24,7 @@ class SettingRepository
                 'country' => (int)$country
             ]);
         }
+        Cache::forget("shop_settings_{$country}_{$language}");
 
         // $setting = Setting::create([
         //     'instagram' => $request->get('instagram'),

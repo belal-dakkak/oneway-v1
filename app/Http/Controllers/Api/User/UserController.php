@@ -32,10 +32,7 @@ class UserController extends ApiController
 
         $request->request->add(['role_id' => User::ROLE_CLIENT]);
         $currency = $request->header('Accept-Currency', 'LBP');
-        if ($currency == 'LBP')
-            $request->request->add(['country_id' => User::COUNTRY_LB]);
-        else
-            $request->request->add(['country_id' => User::COUNTRY_UAE]);
+        $request->request->add(['country_id' => \App\Support\Country::idForCurrency($currency, $request->header('Accept-Country'))]);
         
         $user = $this->userRepository->add($request);
         $user = $user->generateActivationCode();
@@ -259,10 +256,7 @@ class UserController extends ApiController
 
         $currency = $request->header('Accept-Currency', 'LBP');
 
-        if ($currency == 'LBP')
-            $request->request->add(['country_id' => User::COUNTRY_LB]);
-        else
-            $request->request->add(['country_id' => User::COUNTRY_UAE]);
+        $request->request->add(['country_id' => \App\Support\Country::idForCurrency($currency, $request->header('Accept-Country'))]);
 
 
         $user = $this->userRepository->update($request, $user);

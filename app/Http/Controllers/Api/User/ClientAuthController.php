@@ -6,6 +6,7 @@ use App\Http\Controllers\ApiController;
 use App\Http\Requests\Api\UserRequest;
 use App\Models\User;
 use App\Repositories\UserRepository;
+use App\Support\Country;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
@@ -32,11 +33,9 @@ class ClientAuthController extends ApiController
 
         // Determine country based on currency or default
         $currency = $request->header('Accept-Currency', 'LBP');
-        if ($currency == 'LBP') {
-            $request->merge(['country_id' => User::COUNTRY_LB]);
-        } else {
-            $request->merge(['country_id' => User::COUNTRY_UAE]);
-        }
+        $request->merge([
+            'country_id' => Country::idForCurrency($currency, $request->header('Accept-Country')),
+        ]);
 
         $user = $this->userRepository->add($request);
         $user->role_id = User::ROLE_CLIENT;

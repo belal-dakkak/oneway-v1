@@ -34,8 +34,6 @@
                     <jet-input-error :message="form.errors[`commerce.${country.id}.cod_fee_percent`]" class="mt-2" />
                 </div>
             </template>
-            </div>
-
         </template>
         <template #actions>
             <jet-action-message :on="form.recentlySuccessful" class="mr-3">

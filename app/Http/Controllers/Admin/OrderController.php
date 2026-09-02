@@ -211,7 +211,10 @@ class OrderController extends Controller
             $product['barcode']    = $item->product->productColor->barcode;
             $product['qty']        = $item->qty;
             $product['qty_limit']  = $item->product->stock;
-            $product['price']      = currencyExchange($item->item_price, $rate);
+            $enteredPrice = $order->order_type === 'complex_from_multi'
+                ? $item->price_without_tax
+                : $item->item_price;
+            $product['price'] = currencyExchange($enteredPrice, $rate);
             $product['product_id'] = $item->user_product_id;
             $product['name']       = $item->product->productColor->product_name." - ".$item->product->size;
             $product['image']      = $item->product->productColor->photo_url;

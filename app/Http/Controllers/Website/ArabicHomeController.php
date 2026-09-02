@@ -24,7 +24,7 @@ class ArabicHomeController extends Controller
         $countryId = Country::id();
         $featuredProducts = Product::query()
             ->withCount('reviews')
-            ->whereIn('country_id', [$countryId, 3])
+            ->whereIn('country_id', [$countryId, \App\Support\Country::globalProductId()])
             ->when(Session::get('is_merchant'), fn($q) => $q->where('shown_for_merchant', true))
             ->whereHas('colors.userProducts', function($query) use ($countryId) {
                 $query->where('country_id', $countryId)->where('stock', '>', 0);
@@ -97,7 +97,7 @@ class ArabicHomeController extends Controller
                         $q->where('country_id', $country_id);
                     }]);
             }])
-            ->whereIn('country_id', [$country_id, 3])
+            ->whereIn('country_id', [$country_id, \App\Support\Country::globalProductId()])
             ->when(Session::get('is_merchant'), fn($q) => $q->where('shown_for_merchant', true))
             ->whereHas('colors', function ($query) {
                 $query->where('stock', '>', 0);

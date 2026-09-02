@@ -281,6 +281,7 @@
                         $qty = 0;
                         $k = 0;
                         $len = $items->count() >= 10 ? 0 : 10 - $items->count();
+                        $moneyDecimals = strtoupper($Currency) === 'SYP' ? 0 : 2;
                     @endphp
 
                     @foreach($items as $k => $order_item)
@@ -289,19 +290,19 @@
                             <td class="td-med" style=""> {{$order_item->name}} </td>
                             <td class="td-med">{{$order_item->qty}}</td>
                             @if($order->seller && $order->seller->enable_tax == 'yes')
-                            <td class="td-med">{{ number_format($order_item->price_without_tax/$order_item->qty,2) }} {{ $Currency }} </td>
+                            <td class="td-med">{{ number_format($order_item->price_without_tax/$order_item->qty, $moneyDecimals) }} {{ $Currency }} </td>
                             @else
-                                <td class="td-med">{{ number_format($order_item->item_price,2) }} {{ $Currency }} </td>
+                                <td class="td-med">{{ number_format($order_item->item_price, $moneyDecimals) }} {{ $Currency }} </td>
                             @endif
 
                             @if($order->seller && $order->seller->enable_tax == 'yes')
-                            <td align="center" class="td-med"> {{ number_format($order_item->price_without_tax,2) }} {{ $Currency }}</td>
-                            <td align="center" class="td-med"> {{ number_format($order_item->tax_value,2) }} {{ $Currency }}</td>
-                            <td align="center" class="td-med"> {{ number_format((float)(number_format(($order_item->price_without_tax + $order_item->tax_value), 2)),2) }} {{ $Currency }}</td>
+                            <td align="center" class="td-med"> {{ number_format($order_item->price_without_tax, $moneyDecimals) }} {{ $Currency }}</td>
+                            <td align="center" class="td-med"> {{ number_format($order_item->tax_value, $moneyDecimals) }} {{ $Currency }}</td>
+                            <td align="center" class="td-med"> {{ number_format($order_item->price_without_tax + $order_item->tax_value, $moneyDecimals) }} {{ $Currency }}</td>
                             @else
                             <!--<td align="center" class="td-med"> {{ round((float)(number_format($order_item->item_price,2))) }} {{ $Currency }}</td>-->
 
-							<td align="center" class="td-med"> {{ (number_format($order_item->item_price, 2) * $order_item->qty) }} {{ $Currency }}</td>
+							<td align="center" class="td-med"> {{ number_format($order_item->item_price * $order_item->qty, $moneyDecimals) }} {{ $Currency }}</td>
                             @endif
                         </tr>
                         @php
@@ -389,7 +390,7 @@
 
                             <tr class="total" style="width: 100% !important">
                                 <td width="50%" class="td-med1 bg_color1" style="color: black;">إجمالي الفاتورة شامل الضريبة <br> Total bill Incl VAT</td>
-                                <td width="50%" class="td-med1">{{ number_format($order->price_without_tax + $order->tax_value,2) }}</td>
+                                    <td width="50%" class="td-med1">{{ number_format($order->price_without_tax + $order->tax_value, $moneyDecimals) }} {{ $Currency }}</td>
                             </tr>
 
                             @else

@@ -5,6 +5,7 @@ namespace App\Http\Controllers\Api;
 use App\Http\Controllers\ApiController;
 use App\Models\User;
 use App\Repositories\MobileProductRepository;
+use App\Support\Country;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 
@@ -25,10 +26,9 @@ class ProductController extends ApiController
             $request->request->add(['colors' => $colors]);
 
         $currency = $request->header('Accept-Currency', 'LBP');
-        if ($currency == 'LBP')
-            $request->request->add(['country_id' => User::COUNTRY_LB]);
-        else
-            $request->request->add(['country_id' => User::COUNTRY_UAE]);
+        $request->request->add([
+            'country_id' => Country::idForCurrency($currency, $request->header('Accept-Country')),
+        ]);
 
         $products = $this->productRepository->getProducts($request, true);
 
