@@ -33,6 +33,8 @@ return [
     'tap' => [
         'secret_key' => env('TAP_PAYMENT_SECRET_KEY'),
         'publishable_key' => env('TAP_PAYMENT_PUBLISHABLE_KEY'),
+        'callback_url' => env('TAP_PAYMENT_CALLBACK_URL', rtrim(env('APP_URL', ''), '/') . '/payment/callback'),
+        'webhook_url' => env('TAP_PAYMENT_WEBHOOK_URL', rtrim(env('APP_URL', ''), '/') . '/payment/webhook'),
     ],
 
 ];

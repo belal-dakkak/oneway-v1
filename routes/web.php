@@ -63,9 +63,7 @@ Route::post('/country', [HomeController::class, 'setCountry'])->name('country.se
     Route::post('/checkout', [WebsiteOrderController::class, 'placeOrder'])->name('order.place');
     Route::get('/order-success/{id}', [WebsiteOrderController::class, 'success'])->name('order.success');
     Route::get('/payment-failed/{id}', [WebsiteOrderController::class, 'paymentFailed'])->name('payment.failed');
-
-    Route::get('/payment/callback', [PaymentController::class, 'callback'])->name('payment.callback');
-    Route::post('/payment/webhook', [PaymentController::class, 'webhook'])->name('payment.webhook');
+    Route::get('/payment-pending/{id}', [WebsiteOrderController::class, 'paymentPending'])->name('payment.pending');
 
     Route::get('/favorites', [FavoriteController::class, 'index'])->name('favorites.index');
     Route::post('/favorites/toggle', [FavoriteController::class, 'toggle'])->name('favorites.toggle');
@@ -83,6 +81,11 @@ Route::post('/country', [HomeController::class, 'setCountry'])->name('country.se
         Route::post('/profile/update', [\App\Http\Controllers\Website\ProfileController::class, 'update'])->name('website.profile.update');
     });
 });
+
+// Tap does not carry the storefront country session. Keep gateway endpoints
+// independent from country detection and verify every charge server-to-server.
+Route::get('/payment/callback', [PaymentController::class, 'callback'])->name('payment.callback');
+Route::post('/payment/webhook', [PaymentController::class, 'webhook'])->name('payment.webhook');
 
 Route::get('testorder/{id}', function ($id) {
     $user = User::where('email', 'mouhabshalabi@gmail.com')->where('deleted', 0)->first();
@@ -342,6 +345,13 @@ Route::get('/test-mail', function () {
     //        'email' => 'theoneway.fashion@gmail.com'
     //    ])->send(new VerifyYourAccount($data));
 });
+Route::get('/invoice/download/{source}/{id}', [OrderController::class, 'typedDownloadInvoice'])
+    ->where('source', 'order|website')->name('download.invoice.typed');
+Route::get('/invoice/print-v2/{source}/{id}', [OrderController::class, 'typedPrintInvoice'])
+    ->where('source', 'order|website')->name('invoice.typed.printv2');
+Route::get('/invoice/view/{source}/{id}', [OrderController::class, 'typedInvoice'])
+    ->where('source', 'order|website')->name('invoice.typed.show');
+
 Route::get('/invoice/download/{id}', [OrderController::class, 'download_invoice'])->name('download.invoice.show');
 
 Route::get('/invoice/print-v2/{id}', [OrderController::class, 'print_invoice_v2'])->name('invoice.printv2');

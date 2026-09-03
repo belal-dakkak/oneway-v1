@@ -201,7 +201,7 @@
 
             <td align="center">{{$formatMoney($item->item_price)}} &nbsp;&nbsp;&nbsp;</td>
             <td align="center">({{$item->qty}}x) &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;</td>
-            <td align="center">{{$formatMoney($item->qty * $item->item_price)}}</td>
+            <td align="center">{{$formatMoney($item->total_price)}}</td>
         </tr>
         @endforeach
     </table>

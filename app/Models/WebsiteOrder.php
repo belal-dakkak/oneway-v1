@@ -23,7 +23,15 @@ class WebsiteOrder extends Model
         'address', 'city', 'building_name', 'flat_number',
         'total_price_before_discount', 'discount', 'total_price', 
         'shipping_fee', 'cod_fee', 'status', 'payment_type', 'curr_type', 'invoice', 
-        'notes', 'country_id', 'paid_price', 'remain_price', 'curr_rate'
+        'notes', 'country_id', 'paid_price', 'remain_price', 'curr_rate',
+        'stock_reserved_at', 'stock_released_at', 'payment_captured_at', 'notifications_sent_at'
+    ];
+
+    protected $casts = [
+        'stock_reserved_at' => 'datetime',
+        'stock_released_at' => 'datetime',
+        'payment_captured_at' => 'datetime',
+        'notifications_sent_at' => 'datetime',
     ];
 
     protected $appends = ['date', 'payment_label', 'status_label', 'is_paid'];

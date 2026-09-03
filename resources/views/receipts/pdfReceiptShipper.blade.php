@@ -111,6 +111,13 @@
 </head>
 
 <body>
+@php
+    $currency = strtoupper($order->curr_type ?: 'USD');
+    $moneyDecimals = $currency === 'SYP' ? 0 : 2;
+    $formatMoney = static function ($value) use ($moneyDecimals, $currency) {
+        return number_format((float) $value, $moneyDecimals, '.', ',').' '.$currency;
+    };
+@endphp
 <div class="invoice-box rtl">
     <table cellpadding="0" cellspacing="0" style="margin-bottom: 20px">
         <tr class="top">
@@ -194,9 +201,9 @@
             <tr class="item">
                 <td>{{$item->name}}</td>
 
-                <td>{{$item->item_price}} &nbsp&nbsp&nbsp</td>
+                <td>{{$formatMoney($item->item_price)}} &nbsp&nbsp&nbsp</td>
                 <td>({{$item->qty}}x) &nbsp&nbsp&nbsp&nbsp&nbsp&nbsp&nbsp&nbsp&nbsp&nbsp&nbsp&nbsp&nbsp</td>
-                <td>{{$item->total_price}}</td>
+                <td>{{$formatMoney($item->total_price)}}</td>
             </tr>
             @endforeach
         @endif
@@ -211,14 +218,14 @@
                 <td style="font-weight: bold">إجمالي الفاتورة قبل الخصم</td>
                 <td></td>
 
-                <td>{{$order->total_price_before_discount}}</td>
+                <td>{{$formatMoney($order->total_price_before_discount)}}</td>
 
             </tr>
             <tr class="total">
                 <td style="font-weight: bold">الخصم</td>
                 <td></td>
 
-                <td>{{$order->discount}}</td>
+                <td>{{$formatMoney($order->discount)}}</td>
 
             </tr>
         @endif
@@ -226,7 +233,7 @@
             <td style="font-weight: bold">إجمالي الفاتورة</td>
             <td></td>
 
-            <td style="font-weight: bolder; color: darkslateblue">{{$order->total_price}}</td>
+            <td style="font-weight: bolder; color: darkslateblue">{{$formatMoney($order->total_price)}}</td>
 
         </tr>
         <tr class="total">
@@ -234,7 +241,7 @@
             <td style="font-weight: bold">إجمالي المدفوعات</td>
             <td></td>
 
-            <td style="font-weight: bolder; color: darkslateblue">{{$order->paid_price}}</td>
+            <td style="font-weight: bolder; color: darkslateblue">{{$formatMoney($order->paid_price)}}</td>
 
         </tr>
         <tr class="total">
@@ -242,7 +249,7 @@
             <td style="font-weight: bold;">الباقي</td>
             <td></td>
 
-            <td style="font-weight: bolder; color: darkred">{{$order->remain_price}}</td>
+            <td style="font-weight: bolder; color: darkred">{{$formatMoney($order->remain_price)}}</td>
 
         </tr>
     </table>

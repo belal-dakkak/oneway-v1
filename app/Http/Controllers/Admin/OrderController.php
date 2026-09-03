@@ -18,6 +18,7 @@ use App\Models\UserProduct;
 use App\Models\Wallet;
 use App\Repositories\OrderRepository;
 use App\Services\CurrencyService;
+use App\Services\InvoiceDataService;
 use App\Support\Country;
 use App\Mail\OrderStatusChangeEmail;
 use Carbon\Carbon;
@@ -40,11 +41,17 @@ class OrderController extends Controller
 
     private $orderRepository;
     private $currencyService;
+    private $invoiceDataService;
 
-    public function __construct(OrderRepository $orderRepository, CurrencyService $currencyService)
+    public function __construct(
+        OrderRepository $orderRepository,
+        CurrencyService $currencyService,
+        InvoiceDataService $invoiceDataService
+    )
     {
         $this->orderRepository = $orderRepository;
         $this->currencyService = $currencyService;
+        $this->invoiceDataService = $invoiceDataService;
     }
 
     /**
@@ -1048,6 +1055,8 @@ class OrderController extends Controller
 
     function download_invoice($oid) {
 
+        return $this->downloadInvoiceFor(InvoiceDataService::SOURCE_ORDER, (int) $oid);
+
         //dd($oid);
 
         $order = WebsiteOrder::find($oid) ?: Order::findOrFail($oid);
@@ -1284,6 +1293,8 @@ class OrderController extends Controller
 
     function print_invoice_v2($oid) {
 
+        return $this->printInvoiceFor(InvoiceDataService::SOURCE_ORDER, (int) $oid);
+
 
         $order = WebsiteOrder::find($oid) ?: Order::findOrFail($oid);
 
@@ -1390,5 +1401,54 @@ class OrderController extends Controller
 
         return view('includes.printer',array('user_role'=>$user_role,'order'=>$order,'settings'=>$settings, 'items' => $items,'Currency' => $Currency));
 
+    }
+
+    public function typedInvoice(string $source, int $id)
+    {
+        $data = $this->invoicePayload($source, $id);
+
+        return view('receipts.pdfReceipt', $data);
+    }
+
+    public function typedDownloadInvoice(string $source, int $id)
+    {
+        return $this->downloadInvoiceFor($source, $id);
+    }
+
+    public function typedPrintInvoice(string $source, int $id)
+    {
+        return $this->printInvoiceFor($source, $id);
+    }
+
+    private function downloadInvoiceFor(string $source, int $id)
+    {
+        $data = $this->invoicePayload($source, $id);
+        $date = $data['order']->invoice_date ?: $data['order']->created_at;
+        $fileDate = date('jS F Y', strtotime((string) $date));
+        $pdf = PDF::loadView('includes.invoice_template', $data);
+
+        return $pdf->download('Invoice_' . config('app.name') . '_Order_No # ' . $id . ' Date_' . $fileDate . '.pdf');
+    }
+
+    private function printInvoiceFor(string $source, int $id)
+    {
+        return view('includes.printer', $this->invoicePayload($source, $id));
+    }
+
+    private function invoicePayload(string $source, int $id): array
+    {
+        $order = $this->invoiceDataService->resolve($source, $id);
+        $data = $this->invoiceDataService->forOrder($order);
+        $country = $order->country_id ?? optional($order->seller)->country_id ?? Country::UAE;
+        $data['settings'] = Setting::where('country', $country)
+            ->where('language', 'en')
+            ->pluck('value', 'name')
+            ->toArray();
+        $data['Currency'] = $data['currency'];
+        $data['user_role'] = $order instanceof Order && $order->seller && (int) $order->seller->role_id !== User::ROLE_SHOP
+            ? 'stock'
+            : 'shop';
+
+        return $data;
     }
 }

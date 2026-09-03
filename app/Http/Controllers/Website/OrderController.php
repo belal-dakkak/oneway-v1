@@ -11,6 +11,7 @@ use App\Models\User;
 use App\Rules\ValidPhone;
 use App\Repositories\OrderRepository;
 use App\Services\Payment\TapPaymentService;
+use App\Services\Payment\WebsiteOrderStockService;
 use App\Jobs\NotificationOrderJob;
 use App\Mail\NewOrderAdminEmail;
 use App\Mail\OrderConfirmationEmail;
@@ -30,12 +31,18 @@ class OrderController extends Controller
     private $orderRepository;
     private $tapService;
     private $currencyService;
+    private $stockService;
 
-    public function __construct(OrderRepository $orderRepository, TapPaymentService $tapService, CurrencyService $currencyService)
-    {
+    public function __construct(
+        OrderRepository $orderRepository,
+        TapPaymentService $tapService,
+        CurrencyService $currencyService,
+        WebsiteOrderStockService $stockService
+    ) {
         $this->orderRepository = $orderRepository;
         $this->tapService = $tapService;
         $this->currencyService = $currencyService;
+        $this->stockService = $stockService;
     }
 
     public function cart(): Response
@@ -182,6 +189,7 @@ class OrderController extends Controller
             $currency = $order->curr_type;
 
             if ($amount <= 0) {
+                $this->stockService->release($order);
                 $order->delete();
                 Log::error("Tap Payment Error: Invalid order amount ($amount $currency) for order #{$order->id}");
                 return back()->withErrors(['error' => "Invalid order amount. Please try again or contact support."]);
@@ -210,8 +218,8 @@ class OrderController extends Controller
                     'email' => true,
                     'sms' => true,
                 ],
-                'redirect' => ['url' => route('payment.callback')],
-                'post' => ['url' => route('payment.webhook')],
+                'redirect' => ['url' => $this->tapEndpointUrl('callback_url', 'payment/callback')],
+                'post' => ['url' => $this->tapEndpointUrl('webhook_url', 'payment/webhook')],
                 'metadata' => [
                     'order_id' => $order->id,
                 ],
@@ -230,12 +238,14 @@ class OrderController extends Controller
             }
 
             // Cleanup order if payment initiation fails
+            $this->stockService->release($order);
             $order->delete();
             $errorMessage = $charge['errors'][0]['description'] ?? 'Payment gateway error. Please try again.';
             return back()->withErrors(['payment' => $errorMessage]);
         }
 
         // For COD payments, dispatch notifications immediately
+        $order->update(['notifications_sent_at' => now()]);
         $order->dispatchNotifications();
         return redirect()->route('order.success', ['id' => $order->id]);
     }
@@ -282,5 +292,32 @@ class OrderController extends Controller
             'tiktok' => $settings['tiktok'] ?? '',
             'address' => $settings['address'] ?? '',
         ]);
+    }
+
+    public function paymentPending($id): Response
+    {
+        $order = WebsiteOrder::findOrFail($id);
+        $categories = transformDataForVue(Category::limit(6)->get());
+        $settings = Setting::where('country', $order->country_id)
+            ->where('language', 'en')
+            ->pluck('value', 'name')
+            ->toArray();
+
+        return Inertia::render('PaymentPending', [
+            'order' => $order,
+            'categories' => $categories,
+            'phone' => $settings['phone'] ?? '',
+            'email' => $settings['email'] ?? '',
+            'facebook' => $settings['facebook'] ?? '',
+            'instagram' => $settings['instagram'] ?? '',
+            'tiktok' => $settings['tiktok'] ?? '',
+            'address' => $settings['address'] ?? '',
+        ]);
+    }
+
+    private function tapEndpointUrl(string $configKey, string $path): string
+    {
+        return (string) (config('services.tap.' . $configKey)
+            ?: rtrim((string) config('app.url'), '/') . '/' . ltrim($path, '/'));
     }
 }

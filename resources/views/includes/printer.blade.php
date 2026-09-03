@@ -379,11 +379,11 @@
                         <td class="price"> {{ number_format($order_item->item_price, $moneyDecimals) }} {{ $Currency }} </td>
 
                         @if($order->seller && $order->seller->enable_tax == 'yes')
-                        <td class="price"> {{ number_format($order_item->price_without_tax * $order_item->qty, $moneyDecimals)  }} {{ $Currency }} </td>
-                        <td class="price"> {{ number_format($order_item->tax_value * $order_item->qty, $moneyDecimals) }} {{ $Currency }} </td>
-                        <td class="price"> {{ number_format(($order_item->price_without_tax + $order_item->tax_value) * $order_item->qty, $moneyDecimals) }} {{ $Currency }} </td>
+                        <td class="price"> {{ number_format($order_item->line_price_without_tax, $moneyDecimals)  }} {{ $Currency }} </td>
+                        <td class="price"> {{ number_format($order_item->line_tax_value, $moneyDecimals) }} {{ $Currency }} </td>
+                        <td class="price"> {{ number_format($order_item->total_price, $moneyDecimals) }} {{ $Currency }} </td>
                         @else
-                        <td class="price"> {{ number_format($order_item->item_price * $order_item->qty, $moneyDecimals) }} {{ $Currency }} </td>
+                        <td class="price"> {{ number_format($order_item->total_price, $moneyDecimals) }} {{ $Currency }} </td>
                         @endif
                     </tr>
 
@@ -404,7 +404,7 @@
                           الإجمالي بدون الضريبة / Total bill EXel.Vat
                     </td>
                     <td style="text-align: center !important;direction: rtl;" colspan="3" class="line price">
-                        {{$order->price_without_tax}}
+                        {{ number_format($order->price_without_tax, $moneyDecimals) }} {{ $Currency }}
                     </td>
                 </tr>
                 @else
@@ -413,7 +413,7 @@
                          الإجمالي / Total
                     </td>
                     <td style="text-align: center !important;direction: rtl;" colspan="1" class="line price">
-                        {{$order->total_price}}
+                        {{ number_format($order->total_price, $moneyDecimals) }} {{ $Currency }}
                     </td>
                 </tr>
                 @endif
@@ -425,7 +425,7 @@
                         الخصم / Discount
                     </td>
                     <td style="text-align: center !important;direction: rtl;" colspan="3" class="line price">
-                        {{$order->discount}}
+                        {{ number_format($order->discount, $moneyDecimals) }} {{ $Currency }}
                     </td>
                 </tr>
                 @endif
@@ -436,7 +436,7 @@
                         رسوم الشحن / Shipping Fee
                     </td>
                     <td style="text-align: center !important;direction: rtl;" colspan="3" class="line price">
-                        {{$order->shipping_fee}} {{ $Currency }}
+                        {{ number_format($order->shipping_fee, $moneyDecimals) }} {{ $Currency }}
                     </td>
                 </tr>
                 @endif
@@ -447,7 +447,7 @@
                         رسوم الدفع عند الاستلام / COD Fee
                     </td>
                     <td style="text-align: center !important;direction: rtl;" colspan="3" class="line price">
-                        {{$order->cod_fee}} {{ $Currency }}
+                        {{ number_format($order->cod_fee, $moneyDecimals) }} {{ $Currency }}
                     </td>
                 </tr>
                 @endif
@@ -457,7 +457,7 @@
                         إجمالي الضريبة  / Total VAT
                     </td>
                     <td style="text-align: center !important;direction: rtl;" colspan="3" class="line price">
-                        {{$order->tax_value}}
+                        {{ number_format($order->tax_value, $moneyDecimals) }} {{ $Currency }}
                     </td>
                 </tr>
 
@@ -477,7 +477,7 @@
                         المدفوع / Paid
                     </td>
                     <td style="text-align: center !important;direction: rtl;" @if($order->seller && $order->seller->enable_tax == 'yes') colspan="3" @else colspan="1" @endif class="line price">
-                        {{$order->paid_price}}
+                        {{ number_format($order->paid_price, $moneyDecimals) }} {{ $Currency }}
                     </td>
                 </tr>
                 <tr>
@@ -485,7 +485,7 @@
                         المتبقي / Remaining
                     </td>
                     <td style="text-align: center !important;direction: rtl;" @if($order->seller && $order->seller->enable_tax == 'yes') colspan="3" @else colspan="1" @endif class="line price">
-                        {{$order->remain_price}}
+                        {{ number_format($order->remain_price, $moneyDecimals) }} {{ $Currency }}
                     </td>
                 </tr>
 

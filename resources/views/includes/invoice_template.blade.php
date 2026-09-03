@@ -290,19 +290,19 @@
                             <td class="td-med" style=""> {{$order_item->name}} </td>
                             <td class="td-med">{{$order_item->qty}}</td>
                             @if($order->seller && $order->seller->enable_tax == 'yes')
-                            <td class="td-med">{{ number_format($order_item->price_without_tax/$order_item->qty, $moneyDecimals) }} {{ $Currency }} </td>
+                            <td class="td-med">{{ number_format($order_item->price_without_tax, $moneyDecimals) }} {{ $Currency }} </td>
                             @else
                                 <td class="td-med">{{ number_format($order_item->item_price, $moneyDecimals) }} {{ $Currency }} </td>
                             @endif
 
                             @if($order->seller && $order->seller->enable_tax == 'yes')
-                            <td align="center" class="td-med"> {{ number_format($order_item->price_without_tax, $moneyDecimals) }} {{ $Currency }}</td>
-                            <td align="center" class="td-med"> {{ number_format($order_item->tax_value, $moneyDecimals) }} {{ $Currency }}</td>
-                            <td align="center" class="td-med"> {{ number_format($order_item->price_without_tax + $order_item->tax_value, $moneyDecimals) }} {{ $Currency }}</td>
+                            <td align="center" class="td-med"> {{ number_format($order_item->line_price_without_tax, $moneyDecimals) }} {{ $Currency }}</td>
+                            <td align="center" class="td-med"> {{ number_format($order_item->line_tax_value, $moneyDecimals) }} {{ $Currency }}</td>
+                            <td align="center" class="td-med"> {{ number_format($order_item->total_price, $moneyDecimals) }} {{ $Currency }}</td>
                             @else
                             <!--<td align="center" class="td-med"> {{ round((float)(number_format($order_item->item_price,2))) }} {{ $Currency }}</td>-->
 
-							<td align="center" class="td-med"> {{ number_format($order_item->item_price * $order_item->qty, $moneyDecimals) }} {{ $Currency }}</td>
+							<td align="center" class="td-med"> {{ number_format($order_item->total_price, $moneyDecimals) }} {{ $Currency }}</td>
                             @endif
                         </tr>
                         @php
@@ -367,12 +367,12 @@
                             @if($order->discount > 0)
                                 <tr class="total" style="width: 100% !important">
                                     <td width="50%" class="td-med1 bg_color1" style="color: black;">إجمالي الفاتورة قبل الخصم <br> Total bill before discount</td>
-                                    <td width="50%" class="td-med1">{{$order->total_price_before_discount}}</td>
+                                    <td width="50%" class="td-med1">{{ number_format($order->total_price_before_discount, $moneyDecimals) }} {{ $Currency }}</td>
                                     <td width="60%" style="border: 0;" class="td-med"></td>
                                 </tr>
                                 <tr class="total" style="width: 100% !important">
                                     <td width="50%" class="td-med1 bg_color1" style="color: black;">الخصم <br> Discount</td>
-                                    <td width="50%" class="td-med">{{$order->discount}}</td>
+                                    <td width="50%" class="td-med">{{ number_format($order->discount, $moneyDecimals) }} {{ $Currency }}</td>
                                 </tr>
                             @endif
 
@@ -380,12 +380,12 @@
 
                             <tr class="total" style="width: 100% !important">
                                 <td width="50%" class="td-med1 bg_color1" style="color: black;">إجمالي  الفاتورة بدون الضريبة <br> Total bill EXel.Vat</td>
-                                <td width="50%" class="td-med1">{{$order->price_without_tax}}</td>
+                                <td width="50%" class="td-med1">{{ number_format($order->price_without_tax, $moneyDecimals) }} {{ $Currency }}</td>
                             </tr>
 
                             <tr class="total" style="width: 100% !important">
                                 <td width="50%" class="td-med1 bg_color1" style="color: black;">إجمالي الضريبة  <br> Total VAT</td>
-                                <td width="50%" class="td-med1">{{$order->tax_value}}</td>
+                                <td width="50%" class="td-med1">{{ number_format($order->tax_value, $moneyDecimals) }} {{ $Currency }}</td>
                             </tr>
 
                             <tr class="total" style="width: 100% !important">
@@ -396,17 +396,17 @@
                             @else
                             <tr class="total" style="width: 100% !important">
                                 <td width="50%" class="td-med1 bg_color1" style="color: black;">إجمالي الفاتورة <br> Total bill</td>
-                                <td width="50%" class="td-med1">{{$order->total_price}}</td>
+                                <td width="50%" class="td-med1">{{ number_format($order->total_price, $moneyDecimals) }} {{ $Currency }}</td>
                             </tr>
                             @endif
 
                             <tr class="total" style="width: 100% !important">
                                 <td width="50%" class="td-med bg_color1" style="color: black;">إجمالي المدفوعات <br> Total payments</td>
-                                <td width="50%" class="td-med">{{$order->paid_price}}</td>
+                                <td width="50%" class="td-med">{{ number_format($order->paid_price, $moneyDecimals) }} {{ $Currency }}</td>
                             </tr>
                             <tr class="total" style="width: 100% !important">
                                 <td width="50%" class="td-med bg_color1" style="color: black;">الباقي <br> rem of amount</td>
-                                <td width="50%" style="color: darkred" class="td-med">{{$order->remain_price}}</td>
+                                <td width="50%" style="color: darkred" class="td-med">{{ number_format($order->remain_price, $moneyDecimals) }} {{ $Currency }}</td>
                             </tr>
                         </table>
                     </div>

@@ -16,10 +16,6 @@ class TapPaymentService
 
         if (empty($this->secretKey)) {
             Log::error('Tap Payment Error: Secret Key is missing in configuration.');
-        } else {
-            // Log masked key for diagnostic purposes (first 7 and last 4)
-            $masked = substr($this->secretKey, 0, 7) . '...' . substr($this->secretKey, -4);
-            Log::info('Tap Payment Service initialized with key: ' . $masked);
         }
     }
 
@@ -31,9 +27,23 @@ class TapPaymentService
      */
     public function createCharge(array $data)
     {
+        if (empty($this->secretKey)) {
+            return ['errors' => [['description' => 'Payment gateway is not configured.']]];
+        }
+
+        if ($this->hasUnsafeProductionUrl($data['redirect']['url'] ?? null)
+            || $this->hasUnsafeProductionUrl($data['post']['url'] ?? null)) {
+            Log::error('Tap Payment Error: callback and webhook URLs must use HTTPS in production.');
+            return ['errors' => [['description' => 'Payment callback URL is not configured securely.']]];
+        }
+
         try {
-            Log::info('Tap Payment Request Data: ' . json_encode($data));
-            $response = Http::withHeaders([
+            Log::info('Creating Tap charge.', [
+                'order_id' => $data['metadata']['order_id'] ?? null,
+                'amount' => $data['amount'] ?? null,
+                'currency' => $data['currency'] ?? null,
+            ]);
+            $response = Http::connectTimeout(5)->timeout(15)->withHeaders([
                 'Authorization' => 'Bearer ' . $this->secretKey,
                 'accept' => 'application/json',
                 'content-type' => 'application/json',
@@ -59,11 +69,15 @@ class TapPaymentService
      */
     public function getCharge(string $chargeId)
     {
+        if (empty($this->secretKey)) {
+            return null;
+        }
+
         try {
-            $response = Http::withHeaders([
+            $response = Http::connectTimeout(5)->timeout(15)->retry(2, 200)->withHeaders([
                 'Authorization' => 'Bearer ' . $this->secretKey,
                 'accept' => 'application/json',
-            ])->get($this->baseUrl . '/charges/' . $chargeId);
+            ])->get($this->baseUrl . '/charges/' . rawurlencode($chargeId));
 
             if ($response->successful()) {
                 return $response->json();
@@ -75,5 +89,14 @@ class TapPaymentService
             Log::error('Tap Retrieve Charge Exception: ' . $e->getMessage());
             return null;
         }
+    }
+
+    private function hasUnsafeProductionUrl(?string $url): bool
+    {
+        if (!app()->environment(['production', 'live'])) {
+            return false;
+        }
+
+        return !$url || stripos($url, 'https://') !== 0;
     }
 }

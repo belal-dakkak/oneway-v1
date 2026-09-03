@@ -20,6 +20,7 @@ use App\Models\WebsiteOrderItem;
 use App\Models\Wallet;
 use App\Services\TaxCalculator;
 use App\Services\CurrencyService;
+use App\Services\Payment\WebsiteOrderStockService;
 use App\Support\Country;
 use App\Models\CountryCommerceSetting;
 use Carbon\Carbon;
@@ -37,11 +38,17 @@ class OrderRepository
 {
     private $taxCalculator;
     private $currencyService;
+    private $websiteOrderStockService;
 
-    public function __construct(TaxCalculator $taxCalculator, CurrencyService $currencyService)
+    public function __construct(
+        TaxCalculator $taxCalculator,
+        CurrencyService $currencyService,
+        WebsiteOrderStockService $websiteOrderStockService
+    )
     {
         $this->taxCalculator = $taxCalculator;
         $this->currencyService = $currencyService;
+        $this->websiteOrderStockService = $websiteOrderStockService;
     }
 
     private function clearHomeCache()
@@ -476,10 +483,6 @@ class OrderRepository
                     'size' => $product['size']??null
                 ]);
 
-                if ($paymentType === 'cod') {
-                    $stock->decrement('stock', (int) $product['qty']);
-                }
-
                 $totalPrice += $itemTotalPrice;
                 $totalPriceBeforeDiscount += $itemTotalPriceBeforeDiscount;
             }
@@ -508,6 +511,8 @@ class OrderRepository
                 'shipping_fee' => $shippingFee,
                 'cod_fee' => $codFee,
             ]);
+
+            $this->websiteOrderStockService->reserveLocked($order);
 
 
 
