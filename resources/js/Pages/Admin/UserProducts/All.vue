@@ -82,12 +82,12 @@
                   </td>
                   <td class="mx-auto max-w-sm p-6 text-sm leading-6 sm:text-base sm:leading-7">
                       <div class="ml-4">
-                            <div class="text-sm font-medium">{{ displayPrice(item.retail_price) }} {{ currency.code }}</div>
+                            <div class="text-sm font-medium">{{ formattedPrice(item.retail_price) }} {{ currency.code }}</div>
                       </div>
                   </td>
                   <td class="mx-auto max-w-sm p-6 text-sm leading-6 sm:text-base sm:leading-7">
                       <div class="ml-4">
-                            <div class="text-sm font-medium">{{ displayPrice(item.price_before_discount) }} {{ currency.code }}</div>
+                            <div class="text-sm font-medium">{{ formattedPrice(item.price_before_discount) }} {{ currency.code }}</div>
                       </div>
                   </td>
                   <td class="mx-auto max-w-sm p-6 text-sm leading-6 sm:text-base sm:leading-7">
@@ -135,17 +135,17 @@
                                     </div>
                                     <div class="px-1">
                                         <jet-label for="wholesale_price" :value="__('Wholesale Price') + ' (' + currency.code + ')'" dir="rtl" />
-                                        <jet-input id="wholesale_price" type="number" class="mt-1 block w-full" v-model="wholesale_price" autocomplete="wholesale_price" />
+                                        <jet-input id="wholesale_price" type="number" min="0" :step="priceStep()" class="mt-1 block w-full" v-model="wholesale_price" autocomplete="wholesale_price" @blur="normalizePrice('wholesale_price')" />
                                     </div>
 
                                     <div class="px-1">
                                         <jet-label for="retail_price" :value="__('Retail Price') + ' (' + currency.code + ')'" dir="rtl" />
-                                        <jet-input id="retail_price" type="number" class="mt-1 block w-full" v-model="retail_price" autocomplete="retail_price" />
+                                        <jet-input id="retail_price" type="number" min="0" :step="priceStep()" class="mt-1 block w-full" v-model="retail_price" autocomplete="retail_price" @blur="normalizePrice('retail_price')" />
                                     </div>
 
                                     <div class="px-1">
-                                        <jet-label for="price_before_discount" :value="__('Price Before Discount')" dir="rtl" />
-                                        <jet-input id="price_before_discount" type="number" class="mt-1 block w-full" v-model="price_before_discount" autocomplete="price_before_discount" />
+                                        <jet-label for="price_before_discount" :value="__('Price Before Discount') + ' (' + currency.code + ')'" dir="rtl" />
+                                        <jet-input id="price_before_discount" type="number" min="0" :step="priceStep()" class="mt-1 block w-full" v-model="price_before_discount" autocomplete="price_before_discount" @blur="normalizePrice('price_before_discount')" />
                                     </div>
 
                                     <div class="px-1">
@@ -251,6 +251,9 @@
       },
       methods: {
           confirmResult(){
+              this.normalizePrice('retail_price')
+              this.normalizePrice('wholesale_price')
+              this.normalizePrice('price_before_discount')
               if (!this.user || !this.stock  || !this.retail_price  || !this.wholesale_price ){
                   this.resultError = true;
               }else{
@@ -360,6 +363,16 @@
           },
           displayPrice(value) {
               return Currency.fromUsd(value, this.currency.rate, this.currency.decimals)
+          },
+          formattedPrice(value) {
+              return Currency.formatFromUsd(value, this.currency.rate, this.currency.code)
+          },
+          priceStep() {
+              return Currency.inputStep(this.currency.code)
+          },
+          normalizePrice(field) {
+              if (this[field] === '' || this[field] === null || this[field] === undefined) return
+              this[field] = Currency.normalizeInput(this[field], this.currency.code)
           },
           searchForModel(){
               this.page = 1;

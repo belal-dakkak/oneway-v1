@@ -177,6 +177,113 @@ class InventoryTransferTest extends TestCase
         $this->assertEquals(50, $destination->fresh()->wholesale_price);
     }
 
+    public function test_warehouse_destinations_exclude_itself_and_keep_other_local_warehouses(): void
+    {
+        $warehouse = $this->user(User::ROLE_WAREHOUSE, 4, 'source-warehouse@example.test');
+        $otherWarehouse = $this->user(User::ROLE_WAREHOUSE, 4, 'destination-warehouse@example.test');
+        $shop = $this->user(User::ROLE_SHOP, 4, 'local-shop@example.test');
+        $this->user(User::ROLE_MERCHANT, 4, 'merchant@example.test');
+        $this->user(User::ROLE_SHOP, 2, 'foreign-shop@example.test');
+
+        $destinations = app(InventoryTransferService::class)->destinationsFor($warehouse);
+
+        $this->assertEqualsCanonicalizing(
+            [$otherWarehouse->id, $shop->id],
+            $destinations->pluck('id')->all()
+        );
+        $this->assertFalse($destinations->contains('id', $warehouse->id));
+    }
+
+    public function test_product_color_transfer_availability_uses_warehouse_stock_not_central_stock(): void
+    {
+        $warehouse = $this->user(User::ROLE_WAREHOUSE, 4, 'availability-warehouse@example.test');
+        $productColor = $this->productColor(4, [
+            ['size' => 'M', 'barcode' => 'AVAILABLE-M', 'stock' => 10],
+            ['size' => 'L', 'barcode' => 'AVAILABLE-L', 'stock' => 8],
+        ]);
+        $this->stock($warehouse, $productColor, 'M', 'AVAILABLE-M', 3, 20, 10);
+
+        $availability = app(InventoryTransferService::class)
+            ->availabilityFor($warehouse, collect([$productColor]));
+
+        $this->assertSame([
+            ['size' => 'M', 'barcode' => 'AVAILABLE-M', 'stock' => 3],
+        ], $availability[$productColor->id]);
+    }
+
+    public function test_product_color_transfer_availability_keeps_central_stock_for_admin(): void
+    {
+        $admin = $this->user(User::ROLE_ADMIN, 4, 'availability-admin@example.test');
+        $productColor = $this->productColor(4, [
+            ['size' => 'M', 'barcode' => 'CENTRAL-M', 'stock' => 10],
+            ['size' => 'L', 'barcode' => 'CENTRAL-L', 'stock' => 0],
+        ]);
+
+        $availability = app(InventoryTransferService::class)
+            ->availabilityFor($admin, collect([$productColor]));
+
+        $this->assertSame([
+            ['size' => 'M', 'barcode' => 'CENTRAL-M', 'stock' => 10],
+        ], $availability[$productColor->id]);
+    }
+
+    public function test_warehouse_can_transfer_to_another_warehouse_in_the_same_country(): void
+    {
+        $warehouse = $this->user(User::ROLE_WAREHOUSE, 4, 'transfer-source@example.test');
+        $destination = $this->user(User::ROLE_WAREHOUSE, 4, 'transfer-destination@example.test');
+        $productColor = $this->productColor(4, [
+            ['size' => 'M', 'barcode' => 'WAREHOUSE-M', 'stock' => 20],
+        ]);
+        $source = $this->stock($warehouse, $productColor, 'M', 'WAREHOUSE-M', 4, 20, 10);
+
+        $this->actingAs($warehouse)->postJson(route('userProducts.store'), [
+            'destination_user_id' => $destination->id,
+            'product_color_id' => $productColor->id,
+            'currency_code' => 'SYP',
+            'retail_price' => 260000,
+            'wholesale_price' => 130000,
+            'items' => [
+                ['size' => 'M', 'barcode' => 'WAREHOUSE-M', 'quantity' => 2],
+            ],
+        ])->assertOk()->assertJson([
+            'success' => true,
+            'destination_user_id' => $destination->id,
+        ]);
+
+        $this->assertSame(2, $source->fresh()->stock);
+        $this->assertDatabaseHas('user_products', [
+            'user_id' => $destination->id,
+            'barcode' => 'WAREHOUSE-M',
+            'stock' => 2,
+        ]);
+    }
+
+    public function test_warehouse_cannot_transfer_to_itself_even_with_a_manual_request(): void
+    {
+        $warehouse = $this->user(User::ROLE_WAREHOUSE, 4, 'self-transfer@example.test');
+        $productColor = $this->productColor(4, [
+            ['size' => 'M', 'barcode' => 'SELF-M', 'stock' => 20],
+        ]);
+        $source = $this->stock($warehouse, $productColor, 'M', 'SELF-M', 4, 20, 10);
+
+        $this->actingAs($warehouse)->postJson(route('userProducts.store'), [
+            'destination_user_id' => $warehouse->id,
+            'product_color_id' => $productColor->id,
+            'currency_code' => 'SYP',
+            'retail_price' => 260000,
+            'wholesale_price' => 130000,
+            'items' => [
+                ['size' => 'M', 'barcode' => 'SELF-M', 'quantity' => 2],
+            ],
+        ])->assertStatus(422)
+            ->assertJsonValidationErrors('destination_user_id')
+            ->assertJsonFragment([
+                'يجب أن تكون جهة الاستلام مختلفة عن المستودع المرسل.',
+            ]);
+
+        $this->assertSame(4, $source->fresh()->stock);
+    }
+
     public function test_failed_multi_size_transfer_rolls_back_all_stock_and_prices(): void
     {
         $warehouse = $this->user(User::ROLE_WAREHOUSE, 2, 'rollback-warehouse@example.test');

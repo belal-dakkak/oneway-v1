@@ -29,28 +29,70 @@ class Currency
         return isInt ? result : result.toFixed(decimals);
     }
 
+    static decimalsFor(code)
+    {
+        return String(code || '').toUpperCase() === 'SYP' ? 0 : 2;
+    }
+
+    static inputStep(code)
+    {
+        return Currency.decimalsFor(code) === 0 ? '1' : '0.01';
+    }
+
+    static normalizeInput(value, code)
+    {
+        return Currency.normalize(value, Currency.decimalsFor(code));
+    }
+
+    static formatAmount(value, code)
+    {
+        const decimals = Currency.decimalsFor(code);
+        const amount = Currency.number(value);
+
+        return amount.toLocaleString('en-US', {
+            minimumFractionDigits: decimals,
+            maximumFractionDigits: decimals,
+        });
+    }
+
+    static formatFromUsd(value, rate, code)
+    {
+        const converted = Currency.number(value) * Currency.validRate(rate);
+        return Currency.formatAmount(converted, code);
+    }
+
     static fromUsd(value, rate, decimals = 2)
     {
-        const amount = Number(value || 0);
-        const exchangeRate = Number(rate);
-        const precision = Number(decimals);
-
-        if (!Number.isFinite(amount) || !Number.isFinite(exchangeRate) || exchangeRate <= 0)
-            return (0).toFixed(precision);
-
-        return (amount * exchangeRate).toFixed(precision);
+        return Currency.normalize(
+            Currency.number(value) * Currency.validRate(rate),
+            decimals
+        );
     }
 
     static toUsd(value, rate, decimals = 2)
     {
-        const amount = Number(value || 0);
+        return Currency.normalize(
+            Currency.number(value) / Currency.validRate(rate),
+            decimals
+        );
+    }
+
+    static normalize(value, decimals = 2)
+    {
+        const precision = Number.isInteger(Number(decimals)) ? Number(decimals) : 2;
+        return Currency.number(value).toFixed(precision);
+    }
+
+    static number(value)
+    {
+        const amount = Number(String(value ?? 0).replace(/,/g, ''));
+        return Number.isFinite(amount) ? amount : 0;
+    }
+
+    static validRate(rate)
+    {
         const exchangeRate = Number(rate);
-        const precision = Number(decimals);
-
-        if (!Number.isFinite(amount) || !Number.isFinite(exchangeRate) || exchangeRate <= 0)
-            return (0).toFixed(precision);
-
-        return (amount / exchangeRate).toFixed(precision);
+        return Number.isFinite(exchangeRate) && exchangeRate > 0 ? exchangeRate : 0;
     }
 
     static format(value, label)

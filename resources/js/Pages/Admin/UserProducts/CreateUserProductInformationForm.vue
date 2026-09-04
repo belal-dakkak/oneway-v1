@@ -31,17 +31,17 @@
 
             <div class="px-4">
                 <jet-label for="wholesale_price" :value="__('Wholesale Price') + ' (' + currency.code + ')'" />
-                <jet-input id="wholesale_price" type="number" min="0" class="mt-1 block w-full" v-model="form.wholesale_price" />
+                <jet-input id="wholesale_price" type="number" min="0" :step="priceStep()" class="mt-1 block w-full" v-model="form.wholesale_price" @blur="normalizeFormPrice('wholesale_price')" />
             </div>
 
             <div class="px-4">
                 <jet-label for="retail_price" :value="__('Retail Price') + ' (' + currency.code + ')'" />
-                <jet-input id="retail_price" type="number" min="0" class="mt-1 block w-full" v-model="form.retail_price" />
+                <jet-input id="retail_price" type="number" min="0" :step="priceStep()" class="mt-1 block w-full" v-model="form.retail_price" @blur="normalizeFormPrice('retail_price')" />
             </div>
 
             <div class="px-4">
                 <jet-label for="price_before_discount" :value="__('Price Before Discount') + ' (' + currency.code + ')'" />
-                <jet-input id="price_before_discount" type="number" min="0" class="mt-1 block w-full" v-model="form.price_before_discount" />
+                <jet-input id="price_before_discount" type="number" min="0" :step="priceStep()" class="mt-1 block w-full" v-model="form.price_before_discount" @blur="normalizeFormPrice('price_before_discount')" />
             </div>
         </div>
 
@@ -176,6 +176,10 @@ export default defineComponent({
         createUserProductInformation() {
             if (this.loading) return
 
+            this.normalizeFormPrice('retail_price')
+            this.normalizeFormPrice('wholesale_price')
+            this.normalizeFormPrice('price_before_discount')
+
             const items = this.transferItems
                 .filter(item => Number(item.quantity) > 0)
                 .map(item => ({
@@ -216,6 +220,16 @@ export default defineComponent({
         toDisplay(value) {
             if (value === null || value === undefined || value === '') return ''
             return Currency.fromUsd(value, this.currency.rate, this.currency.decimals)
+        },
+
+        priceStep() {
+            return Currency.inputStep(this.currency.code)
+        },
+
+        normalizeFormPrice(field) {
+            const value = this.form[field]
+            if (value === '' || value === null || value === undefined) return
+            this.form[field] = Currency.normalizeInput(value, this.currency.code)
         },
 
         showSuccessMessage(msg) {

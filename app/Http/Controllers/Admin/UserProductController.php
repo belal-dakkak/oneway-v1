@@ -46,12 +46,7 @@ class UserProductController extends Controller
 
         $products = $this->productRepository->getUserProductsAll($request, true);
 
-        if (auth()->user()->role_id == User::ROLE_WAREHOUSE || auth()->user()->role_id == User::ROLE_ADMIN){
-            $users = User::query()->whereIn('role_id', [User::ROLE_SHOP, User::ROLE_WAREHOUSE])->where('country_id',auth()->user()->country_id)->get();
-
-        }else{
-            $users = User::query()->where('role_id', User::ROLE_SHOP)->where('country_id',auth()->user()->country_id)->get();
-        }
+        $users = $this->inventoryTransfer->destinationsFor(auth()->user());
         $merchants = User::query()->where('role_id', User::ROLE_MERCHANT)->where('country_id',auth()->user()->country_id)->get();
 
         if ($request->wantsJson()){
@@ -187,11 +182,7 @@ class UserProductController extends Controller
             array_push($color_products,['product' => $product_color, 'colors' => $color, 'qty' => $total_qty, 'available_sizes' => implode(' || ', $sub_sizes)]);
         }
 
-        if (auth()->user()->role_id == User::ROLE_WAREHOUSE || auth()->user()->role_id == User::ROLE_ADMIN){
-            $users = User::query()->whereIn('role_id', [User::ROLE_SHOP, User::ROLE_WAREHOUSE])->where('country_id', auth()->user()->country_id)->get();
-        }else{
-            $users = User::query()->where('role_id', User::ROLE_SHOP)->where('country_id', auth()->user()->country_id)->get();
-        }
+        $users = $this->inventoryTransfer->destinationsFor(auth()->user());
         $merchants = User::query()->where('role_id', User::ROLE_MERCHANT)->where('country_id', auth()->user()->country_id)->get();
 
         if ($request->wantsJson()){
@@ -250,11 +241,10 @@ class UserProductController extends Controller
 
     public function create(): Response
     {
+        $users = $this->inventoryTransfer->destinationsFor(auth()->user());
         if (auth()->user()->role_id === User::ROLE_ADMIN){
-            $users = User::query()->whereIn('role_id', [User::ROLE_SHOP, User::ROLE_WAREHOUSE])->where('country_id',auth()->user()->country_id)->get();
             $products = ProductColor::query()->where('country_id',auth()->user()->country_id)->get();
         } else{
-            $users = User::query()->where('role_id', User::ROLE_SHOP)->where('country_id',auth()->user()->country_id)->get();
             $products = UserProduct::query()
                 ->select([
                     'user_products.stock',

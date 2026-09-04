@@ -127,19 +127,19 @@ class UserProductRequest extends FormRequest
             $destination = User::query()->find($this->input('destination_user_id'));
             if (!$destination || (int) $destination->country_id !== $countryId ||
                 !in_array((int) $destination->role_id, [User::ROLE_SHOP, User::ROLE_WAREHOUSE], true)) {
-                $validator->errors()->add('destination_user_id', 'The selected shop is not available in this country.');
+                $validator->errors()->add('destination_user_id', 'الوجهة المختارة غير متاحة في هذا البلد.');
             }
 
             if ((int) $this->user()->role_id === User::ROLE_WAREHOUSE &&
                 (int) $this->input('destination_user_id') === (int) $this->user()->id) {
-                $validator->errors()->add('destination_user_id', 'The destination must be different from the source warehouse.');
+                $validator->errors()->add('destination_user_id', 'يجب أن تكون جهة الاستلام مختلفة عن المستودع المرسل.');
             }
 
             if ($this->filled('merchant_id')) {
                 $merchant = User::query()->find($this->input('merchant_id'));
                 if (!$merchant || (int) $merchant->country_id !== $countryId ||
                     (int) $merchant->role_id !== User::ROLE_MERCHANT) {
-                    $validator->errors()->add('merchant_id', 'The selected merchant is not available in this country.');
+                    $validator->errors()->add('merchant_id', 'التاجر المختار غير متاح في هذا البلد.');
                 }
             }
         });

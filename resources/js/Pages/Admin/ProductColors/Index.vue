@@ -73,7 +73,10 @@
                     <div class="ml-4">
                         <div class="text-sm text-center font-medium bg-fuchsia-200 p-1 rounded-lg">Barcode: {{ item.barcode }}</div>
 
-                        <div class="text-sm text-center font-medium bg-teal-200 p-1 rounded-lg">Stock: {{ item.stock }}</div>
+                        <div class="text-sm text-center font-medium bg-teal-200 p-1 rounded-lg">Stock: {{ item.transfer_stock }}</div>
+                        <div v-if="admin.role === 2 && Number(item.transfer_stock) <= 0" class="mt-1 rounded-lg bg-rose-100 p-1 text-center text-xs font-medium text-rose-600">
+                            لا يوجد مخزون متاح للإرسال من هذا المستودع
+                        </div>
                         <!-- <div class="text-sm text-center font-medium bg-teal-200 p-1 rounded-lg">Sizes: {{ item.size }}</div> -->
 
                         <div class="text-sm text-center font-medium bg-rose-200 p-1 rounded-lg">Color: {{ item.color.name }} {{ item.color.code }}</div>
@@ -82,7 +85,7 @@
                     </div>
                 </td>
 
-                <td class="mx-auto max-w-sm p-6 text-sm leading-6 sm:text-base sm:leading-7">{{ displayPrice(item.product.cost_price) }} {{ currency.code }}</td>
+                <td class="mx-auto max-w-sm p-6 text-sm leading-6 sm:text-base sm:leading-7">{{ formattedPrice(item.product.cost_price) }} {{ currency.code }}</td>
                 <!-- <td class="mx-auto max-w-sm p-6 text-sm leading-6 sm:text-base sm:leading-7">{{ item.product.raw_sizes }}</td> -->
                 <td class="flex flex-wrap space-x-3 mt-2" v-if="admin.role === 1 || admin.role === 2">
                      <!--<p @click="printItems(item.id,item.stock,item.barcode)" class="p-2 pb-1 rounded-md text-white btn-ghost bg-teal-400 hover:bg-teal-600 hover:text-white">
@@ -93,7 +96,13 @@
                         <vue-feather :type="'credit-card'" stroke-width="2"></vue-feather>
                     </a> -->
 
-                    <button class="p-2 pb-1 rounded-md text-white btn-ghost bg-blue-400 hover:bg-blue-600 hover:text-white" @click="sendToShop(item)" v-if="admin.role === 1 || admin.role === 2">
+                    <button
+                        class="p-2 pb-1 rounded-md text-white btn-ghost bg-blue-400 hover:bg-blue-600 hover:text-white disabled:cursor-not-allowed disabled:opacity-40"
+                        @click="sendToShop(item)"
+                        v-if="admin.role === 1 || admin.role === 2"
+                        :disabled="Number(item.transfer_stock) <= 0"
+                        :title="Number(item.transfer_stock) > 0 ? __('Send') : 'لا يوجد مخزون متاح للإرسال'"
+                    >
                         <vue-feather :type="'shopping-cart'" stroke-width="2"></vue-feather>
                     </button>
                 </td>
@@ -103,7 +112,7 @@
     </MeeTable>
 
       <transition name="modal">
-          <modal v-if="showModal" @close="showModal = false">
+          <modal v-if="showModal" @close="closeModal">
               <div class="modal-mask rounded-2xl">
                   <div class="modal-wrapper m-24 ">
                       <div class="modal-container relative">
@@ -117,17 +126,17 @@
                               <div class="flex justify-around items-stretch py-6">
                                   <div class="px-1" dir="rtl">
                                       <jet-label for="user" :value="__('Shop')" />
-                                      <Multiselect v-model="user" :options="users" :multiple="false" :close-on-select="true" placeholder="اختر محل من قائمة المحلات" label="name"
+                                      <Multiselect v-model="user" :options="destinationUsers" :multiple="false" :close-on-select="true" placeholder="اختر محل أو مستودع من القائمة" label="name"
                                                    track-by="id" />
                                   </div>
                                   <div class="px-1">
                                       <jet-label for="wholesale_price" :value="__('Wholesale Price') + ' (' + currency.code + ')'" dir="rtl" />
-                                      <jet-input id="wholesale_price" type="number" class="mt-1 block w-full" v-model="wholesale_price" autocomplete="wholesale_price" />
+                                      <jet-input id="wholesale_price" type="number" min="0" :step="priceStep()" class="mt-1 block w-full" v-model="wholesale_price" autocomplete="wholesale_price" @blur="normalizePrice('wholesale_price')" />
                                   </div>
 
                                   <div class="px-1">
                                       <jet-label for="retail_price" :value="__('Retail Price') + ' (' + currency.code + ')'" dir="rtl" />
-                                      <jet-input id="retail_price" type="number" class="mt-1 block w-full" v-model="retail_price" autocomplete="retail_price" />
+                                      <jet-input id="retail_price" type="number" min="0" :step="priceStep()" class="mt-1 block w-full" v-model="retail_price" autocomplete="retail_price" @blur="normalizePrice('retail_price')" />
                                   </div>
 
                                   <!-- <div class="px-1">
@@ -231,7 +240,7 @@ export default {
         products: Object,
         nproducts: Object,
         filters: Object,
-        users: Object,
+        users: [Array, Object],
         merchants: Object,
         sizes: Object,
         rate: Number,
@@ -266,6 +275,8 @@ export default {
     },
     methods: {
         confirmResult(){
+            this.normalizePrice('retail_price')
+            this.normalizePrice('wholesale_price')
             const destinationId = this.user?.id
             const items = (this.clsizes || []).filter(size => Number(size.quantity) > 0)
             if (!destinationId || !this.retail_price || !this.wholesale_price || !items.length){
@@ -307,7 +318,7 @@ export default {
                     this.wholesale_price = null;
                 }).catch((error) => {
                     this.resultLoading = false;
-                    this.showErrorMessage(error.response?.data?.message || 'حدث خطأ أثناء إرسال البضاعة')
+                    this.showErrorMessage(this.transferErrorMessage(error))
                 });
             }
         },
@@ -318,8 +329,11 @@ export default {
           }
         },
         closeModal(){
-            this.resultLoading = false;
             this.showModal = false;
+            this.resetTransferState();
+        },
+        resetTransferState(){
+            this.resultLoading = false;
             this.itemId = null;
             this.size = null;
             this.item = null;
@@ -330,15 +344,24 @@ export default {
             this.merchant = null;
             this.retail_price = null;
             this.wholesale_price = null;
+            this.lsizes = null;
+            this.clsizes = null;
         },
         async sendToShop(item) {
+            this.resetTransferState();
+            const transferSizes = Array.isArray(item.transfer_sizes) ? item.transfer_sizes : [];
+            if (!transferSizes.some(size => Number(size.stock) > 0)) {
+                this.showErrorMessage('لا يوجد مخزون متاح للإرسال من هذا المستودع');
+                return;
+            }
+
             this.showModal = true;
             this.itemId = item.id;
             this.size = item.size;
             this.item = item;
             this.barcode = item.barcode;
-            this.lsizes = item.list_sizes
-            this.clsizes = (item.clone_list_sizes || []).map(size => ({
+            this.lsizes = transferSizes
+            this.clsizes = transferSizes.map(size => ({
                 ...size,
                 available_stock: Number(size.stock),
                 quantity: 0,
@@ -347,8 +370,30 @@ export default {
             this.wholesale_price = this.displayPrice(item.product.cost_price);
             this.retail_price    = this.displayPrice(item.product.retail_price);
         },
+        transferErrorMessage(error) {
+            const errors = error.response?.data?.errors || {};
+            const fields = ['destination_user_id', 'items', 'merchant_id', 'retail_price', 'wholesale_price'];
+
+            for (const field of fields) {
+                const messages = errors[field];
+                if (Array.isArray(messages) && messages.length) return messages[0];
+                if (typeof messages === 'string' && messages) return messages;
+            }
+
+            return error.response?.data?.message || 'حدث خطأ أثناء إرسال البضاعة';
+        },
         displayPrice(value) {
             return Currency.fromUsd(value, this.currency.rate, this.currency.decimals)
+        },
+        formattedPrice(value) {
+            return Currency.formatFromUsd(value, this.currency.rate, this.currency.code)
+        },
+        priceStep() {
+            return Currency.inputStep(this.currency.code)
+        },
+        normalizePrice(field) {
+            if (this[field] === '' || this[field] === null || this[field] === undefined) return
+            this[field] = Currency.normalizeInput(this[field], this.currency.code)
         },
         async printItems(item, barcode){
             this.isLoading = true;
@@ -574,9 +619,13 @@ export default {
         //     }
         // }, 300))
     },
-    setup() {
+    setup(props) {
         const admin = computed(() => usePage().props.value.auth.user)
-        return { admin }
+        const destinationUsers = computed(() => {
+            const users = Array.isArray(props.users) ? props.users : Object.values(props.users || {});
+            return users.filter(user => Number(user.id) !== Number(admin.value?.id));
+        })
+        return { admin, destinationUsers }
     },
 }
 </script>

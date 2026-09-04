@@ -15,6 +15,7 @@ use App\Support\Country;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
+use Illuminate\Support\Collection;
 use Illuminate\Validation\ValidationException;
 
 class InventoryTransferService
@@ -24,6 +25,70 @@ class InventoryTransferService
     public function __construct(CurrencyService $currency)
     {
         $this->currency = $currency;
+    }
+
+    public function destinationsFor(User $sender): Collection
+    {
+        return User::query()
+            ->whereIn('role_id', [User::ROLE_SHOP, User::ROLE_WAREHOUSE])
+            ->where('country_id', $sender->country_id)
+            ->when((int) $sender->role_id === User::ROLE_WAREHOUSE, function ($query) use ($sender) {
+                $query->whereKeyNot($sender->id);
+            })
+            ->orderBy('name')
+            ->get();
+    }
+
+    public function availabilityFor(User $sender, Collection $productColors): array
+    {
+        $availability = $productColors->mapWithKeys(function (ProductColor $productColor) {
+            return [(int) $productColor->id => []];
+        })->all();
+
+        if ((int) $sender->role_id === User::ROLE_WAREHOUSE) {
+            $inventory = UserProduct::query()
+                ->where('user_id', $sender->id)
+                ->whereIn('product_color_id', $productColors->pluck('id'))
+                ->where('stock', '>', 0)
+                ->get(['product_color_id', 'size', 'barcode', 'stock'])
+                ->groupBy('product_color_id');
+
+            foreach ($inventory as $productColorId => $rows) {
+                $availability[(int) $productColorId] = $rows
+                    ->groupBy(function (UserProduct $row) {
+                        return $row->size."\0".$row->barcode;
+                    })
+                    ->map(function (Collection $sameSizeRows) {
+                        $first = $sameSizeRows->first();
+
+                        return [
+                            'size' => (string) $first->size,
+                            'barcode' => (string) $first->barcode,
+                            'stock' => (int) $sameSizeRows->sum('stock'),
+                        ];
+                    })
+                    ->values()
+                    ->all();
+            }
+
+            return $availability;
+        }
+
+        foreach ($productColors as $productColor) {
+            $availability[(int) $productColor->id] = collect(
+                $this->decodeSizes($productColor->getRawOriginal('sizes'))
+            )->map(function (array $size) {
+                return [
+                    'size' => (string) ($size['size'] ?? ''),
+                    'barcode' => (string) ($size['barcode'] ?? ''),
+                    'stock' => (int) ($size['stock'] ?? 0),
+                ];
+            })->filter(function (array $size) {
+                return $size['size'] !== '' && $size['barcode'] !== '' && $size['stock'] > 0;
+            })->values()->all();
+        }
+
+        return $availability;
     }
 
     public function transfer(User $sender, array $data): array
@@ -203,14 +268,20 @@ class InventoryTransferService
 
         if ((int) $destination->country_id !== (int) $sender->country_id) {
             throw ValidationException::withMessages([
-                'destination_user_id' => 'The selected shop is not available in this country.',
+                'destination_user_id' => 'الوجهة المختارة غير متاحة في هذا البلد.',
             ]);
         }
 
-        if (!in_array((int) $destination->role_id, [User::ROLE_SHOP, User::ROLE_WAREHOUSE], true) ||
-            ((int) $sender->role_id === User::ROLE_WAREHOUSE && (int) $destination->id === (int) $sender->id)) {
+        if ((int) $sender->role_id === User::ROLE_WAREHOUSE &&
+            (int) $destination->id === (int) $sender->id) {
             throw ValidationException::withMessages([
-                'destination_user_id' => 'The selected destination is not valid.',
+                'destination_user_id' => 'يجب أن تكون جهة الاستلام مختلفة عن المستودع المرسل.',
+            ]);
+        }
+
+        if (!in_array((int) $destination->role_id, [User::ROLE_SHOP, User::ROLE_WAREHOUSE], true)) {
+            throw ValidationException::withMessages([
+                'destination_user_id' => 'جهة الاستلام المختارة غير صالحة.',
             ]);
         }
 
@@ -231,21 +302,30 @@ class InventoryTransferService
         string $barcode,
         int $quantity
     ): void {
-        $source = UserProduct::query()
+        $sources = UserProduct::query()
             ->where('user_id', $sender->id)
             ->where('product_color_id', $productColor->id)
             ->where('size', $size)
             ->where('barcode', $barcode)
             ->lockForUpdate()
-            ->first();
+            ->get();
 
-        if (!$source || (int) $source->stock < $quantity) {
+        if ($sources->isEmpty() || (int) $sources->sum('stock') < $quantity) {
             throw ValidationException::withMessages([
-                'items' => "The available stock for size {$size} is not sufficient.",
+                'items' => "الكمية المتاحة للمقاس {$size} غير كافية.",
             ]);
         }
 
-        $source->decrement('stock', $quantity);
+        $remaining = $quantity;
+        foreach ($sources as $source) {
+            if ($remaining <= 0) {
+                break;
+            }
+
+            $deduction = min((int) $source->stock, $remaining);
+            $source->decrement('stock', $deduction);
+            $remaining -= $deduction;
+        }
     }
 
     private function deductCentralStock(array $sizes, string $size, string $barcode, int $quantity): array
