@@ -50,23 +50,16 @@ class ProductColorController extends Controller
 
         $products = $this->productRepository->getProducts($request);
         $sender = auth()->user();
-        $availability = $this->inventoryTransfer->availabilityFor($sender, $products->getCollection());
         $nproducts = array();
         foreach ($products as $product) {
             foreach ($product->list_sizes as $subproduct) {
                 array_push($nproducts,$subproduct);
             }
         }
-        $products->setCollection($products->getCollection()->map(function (ProductColor $productColor) use ($availability) {
-            $sizes = $availability[(int) $productColor->id] ?? [];
-            $product = $productColor->toArray();
-            $product['transfer_sizes'] = $sizes;
-            $product['transfer_stock'] = array_sum(array_column($sizes, 'stock'));
-
-            return $product;
-        }));
-
-        $users = $this->inventoryTransfer->destinationsFor($sender);
+        $users = $this->inventoryTransfer->destinationsFor(
+            $sender,
+            InventoryTransferService::SOURCE_CATALOG
+        );
         $merchants = User::query()->where('role_id', User::ROLE_MERCHANT)
             ->where('country_id', auth()->user()->country_id)->get();
         $new_sizes = getNewSizesVariables();

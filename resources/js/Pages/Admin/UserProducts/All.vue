@@ -264,6 +264,7 @@
                   formData.append('retail_price', this.retail_price)
                   formData.append('wholesale_price', this.wholesale_price)
                   formData.append('currency_code', this.currency.code)
+                  formData.append('source_type', 'inventory')
                   if (this.merchant)
                       formData.append('merchant_id', this.merchant.id)
                   formData.append('items', JSON.stringify([{

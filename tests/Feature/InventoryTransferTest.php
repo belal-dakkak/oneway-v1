@@ -191,65 +191,125 @@ class InventoryTransferTest extends TestCase
         $this->user(User::ROLE_MERCHANT, 4, 'merchant@example.test');
         $this->user(User::ROLE_SHOP, 2, 'foreign-shop@example.test');
 
-        $destinations = app(InventoryTransferService::class)->destinationsFor($warehouse);
+        $service = app(InventoryTransferService::class);
+        $inventoryDestinations = $service->destinationsFor($warehouse);
+        $catalogDestinations = $service->destinationsFor(
+            $warehouse,
+            InventoryTransferService::SOURCE_CATALOG
+        );
 
         $this->assertEqualsCanonicalizing(
             [$otherWarehouse->id, $shop->id],
-            $destinations->pluck('id')->all()
+            $inventoryDestinations->pluck('id')->all()
         );
-        $this->assertFalse($destinations->contains('id', $warehouse->id));
+        $this->assertFalse($inventoryDestinations->contains('id', $warehouse->id));
+        $this->assertEqualsCanonicalizing(
+            [$warehouse->id, $otherWarehouse->id, $shop->id],
+            $catalogDestinations->pluck('id')->all()
+        );
     }
 
-    public function test_product_color_transfer_availability_uses_warehouse_stock_not_central_stock(): void
+    public function test_warehouse_catalog_transfer_accepts_any_quantity_without_source_stock(): void
     {
-        $warehouse = $this->user(User::ROLE_WAREHOUSE, 4, 'availability-warehouse@example.test');
+        $warehouse = $this->user(User::ROLE_WAREHOUSE, 4, 'catalog-warehouse@example.test');
+        $shop = $this->user(User::ROLE_SHOP, 4, 'catalog-shop@example.test');
         $productColor = $this->productColor(4, [
-            ['size' => 'M', 'barcode' => 'AVAILABLE-M', 'stock' => 10],
-            ['size' => 'L', 'barcode' => 'AVAILABLE-L', 'stock' => 8],
+            ['size' => 'M', 'barcode' => 'CATALOG-M', 'stock' => 0],
         ]);
-        $this->stock($warehouse, $productColor, 'M', 'AVAILABLE-M', 3, 20, 10);
 
-        $availability = app(InventoryTransferService::class)
-            ->availabilityFor($warehouse, collect([$productColor]));
+        $this->actingAs($warehouse)->postJson(route('userProducts.store'), [
+            'source_type' => InventoryTransferService::SOURCE_CATALOG,
+            'destination_user_id' => $shop->id,
+            'product_color_id' => $productColor->id,
+            'currency_code' => 'SYP',
+            'retail_price' => 260000,
+            'wholesale_price' => 130000,
+            'items' => [
+                ['size' => 'M', 'barcode' => 'CATALOG-M', 'quantity' => 1000],
+            ],
+        ])->assertOk()->assertJson([
+            'success' => true,
+            'source_type' => InventoryTransferService::SOURCE_CATALOG,
+        ]);
 
-        $this->assertSame([
-            ['size' => 'M', 'barcode' => 'AVAILABLE-M', 'stock' => 3],
-        ], $availability[$productColor->id]);
+        $this->assertSame(0, $productColor->fresh()->stock);
+        $this->assertDatabaseHas('user_products', [
+            'user_id' => $shop->id,
+            'barcode' => 'CATALOG-M',
+            'stock' => 1000,
+        ]);
     }
 
-    public function test_product_color_transfer_availability_keeps_central_stock_for_admin(): void
+    public function test_warehouse_catalog_transfer_can_add_stock_to_itself(): void
     {
-        $admin = $this->user(User::ROLE_ADMIN, 4, 'availability-admin@example.test');
+        $warehouse = $this->user(User::ROLE_WAREHOUSE, 4, 'catalog-self@example.test');
         $productColor = $this->productColor(4, [
-            ['size' => 'M', 'barcode' => 'CENTRAL-M', 'stock' => 10],
-            ['size' => 'L', 'barcode' => 'CENTRAL-L', 'stock' => 0],
+            ['size' => 'M', 'barcode' => 'CATALOG-SELF-M', 'stock' => 0],
         ]);
+        $stock = $this->stock($warehouse, $productColor, 'M', 'CATALOG-SELF-M', 4, 20, 10);
 
-        $availability = app(InventoryTransferService::class)
-            ->availabilityFor($admin, collect([$productColor]));
+        $this->actingAs($warehouse)->postJson(route('userProducts.store'), [
+            'source_type' => InventoryTransferService::SOURCE_CATALOG,
+            'destination_user_id' => $warehouse->id,
+            'product_color_id' => $productColor->id,
+            'currency_code' => 'SYP',
+            'retail_price' => 260000,
+            'wholesale_price' => 130000,
+            'items' => [
+                ['size' => 'M', 'barcode' => 'CATALOG-SELF-M', 'quantity' => 100],
+            ],
+        ])->assertOk();
 
-        $this->assertSame([
-            ['size' => 'M', 'barcode' => 'CENTRAL-M', 'stock' => 10],
-        ], $availability[$productColor->id]);
+        $this->assertSame(104, $stock->fresh()->stock);
     }
 
-    public function test_product_colors_json_exposes_virtual_transfer_stock_without_database_columns(): void
+    public function test_admin_catalog_transfer_does_not_decrease_central_stock(): void
     {
-        $warehouse = $this->user(User::ROLE_WAREHOUSE, 4, 'product-colors-page@example.test');
+        $admin = $this->user(User::ROLE_ADMIN, 4, 'catalog-admin@example.test');
+        $shop = $this->user(User::ROLE_SHOP, 4, 'catalog-admin-shop@example.test');
         $productColor = $this->productColor(4, [
-            ['size' => 'M', 'barcode' => 'PAGE-M', 'stock' => 10],
+            ['size' => 'M', 'barcode' => 'ADMIN-CATALOG-M', 'stock' => 2],
         ]);
-        $this->stock($warehouse, $productColor, 'M', 'PAGE-M', 3, 20, 10);
 
-        $this->actingAs($warehouse)
-            ->getJson(route('productColors.index'))
-            ->assertOk()
-            ->assertJsonPath('data.0.transfer_stock', 3)
-            ->assertJsonPath('data.0.transfer_sizes.0.stock', 3)
-            ->assertJsonPath('data.0.transfer_sizes.0.barcode', 'PAGE-M');
+        $this->actingAs($admin)->postJson(route('userProducts.store'), [
+            'source_type' => InventoryTransferService::SOURCE_CATALOG,
+            'destination_user_id' => $shop->id,
+            'product_color_id' => $productColor->id,
+            'currency_code' => 'SYP',
+            'retail_price' => 260000,
+            'wholesale_price' => 130000,
+            'items' => [
+                ['size' => 'M', 'barcode' => 'ADMIN-CATALOG-M', 'quantity' => 50],
+            ],
+        ])->assertOk();
 
-        $this->assertFalse(Schema::hasColumn('product_colors', 'transfer_sizes'));
-        $this->assertFalse(Schema::hasColumn('product_colors', 'transfer_stock'));
+        $this->assertSame(2, $productColor->fresh()->stock);
+    }
+
+    public function test_catalog_transfer_rejects_a_size_or_barcode_outside_the_model(): void
+    {
+        $warehouse = $this->user(User::ROLE_WAREHOUSE, 4, 'invalid-catalog@example.test');
+        $shop = $this->user(User::ROLE_SHOP, 4, 'invalid-catalog-shop@example.test');
+        $productColor = $this->productColor(4, [
+            ['size' => 'M', 'barcode' => 'VALID-CATALOG-M', 'stock' => 0],
+        ]);
+
+        $this->actingAs($warehouse)->postJson(route('userProducts.store'), [
+            'source_type' => InventoryTransferService::SOURCE_CATALOG,
+            'destination_user_id' => $shop->id,
+            'product_color_id' => $productColor->id,
+            'currency_code' => 'SYP',
+            'retail_price' => 260000,
+            'wholesale_price' => 130000,
+            'items' => [
+                ['size' => 'XL', 'barcode' => 'FAKE-CATALOG-XL', 'quantity' => 50],
+            ],
+        ])->assertStatus(422)->assertJsonValidationErrors('items');
+
+        $this->assertDatabaseMissing('user_products', [
+            'user_id' => $shop->id,
+            'product_color_id' => $productColor->id,
+        ]);
     }
 
     public function test_warehouse_can_transfer_to_another_warehouse_in_the_same_country(): void
@@ -407,6 +467,7 @@ class InventoryTransferTest extends TestCase
             'name' => 'Test product',
             'name_en' => 'Test product',
             'barcode' => uniqid('P'),
+            'sizes' => [],
             'cost_price' => 10,
             'retail_price' => 20,
             'country_id' => $country,

@@ -73,10 +73,6 @@
                     <div class="ml-4">
                         <div class="text-sm text-center font-medium bg-fuchsia-200 p-1 rounded-lg">Barcode: {{ item.barcode }}</div>
 
-                        <div class="text-sm text-center font-medium bg-teal-200 p-1 rounded-lg">Stock: {{ item.transfer_stock }}</div>
-                        <div v-if="admin.role === 2 && Number(item.transfer_stock) <= 0" class="mt-1 rounded-lg bg-rose-100 p-1 text-center text-xs font-medium text-rose-600">
-                            لا يوجد مخزون متاح للإرسال من هذا المستودع
-                        </div>
                         <!-- <div class="text-sm text-center font-medium bg-teal-200 p-1 rounded-lg">Sizes: {{ item.size }}</div> -->
 
                         <div class="text-sm text-center font-medium bg-rose-200 p-1 rounded-lg">Color: {{ item.color.name }} {{ item.color.code }}</div>
@@ -96,13 +92,7 @@
                         <vue-feather :type="'credit-card'" stroke-width="2"></vue-feather>
                     </a> -->
 
-                    <button
-                        class="p-2 pb-1 rounded-md text-white btn-ghost bg-blue-400 hover:bg-blue-600 hover:text-white disabled:cursor-not-allowed disabled:opacity-40"
-                        @click="sendToShop(item)"
-                        v-if="admin.role === 1 || admin.role === 2"
-                        :disabled="Number(item.transfer_stock) <= 0"
-                        :title="Number(item.transfer_stock) > 0 ? __('Send') : 'لا يوجد مخزون متاح للإرسال'"
-                    >
+                    <button class="p-2 pb-1 rounded-md text-white btn-ghost bg-blue-400 hover:bg-blue-600 hover:text-white" @click="sendToShop(item)" v-if="admin.role === 1 || admin.role === 2">
                         <vue-feather :type="'shopping-cart'" stroke-width="2"></vue-feather>
                     </button>
                 </td>
@@ -126,7 +116,7 @@
                               <div class="flex justify-around items-stretch py-6">
                                   <div class="px-1" dir="rtl">
                                       <jet-label for="user" :value="__('Shop')" />
-                                      <Multiselect v-model="user" :options="destinationUsers" :multiple="false" :close-on-select="true" placeholder="اختر محل أو مستودع من القائمة" label="name"
+                                      <Multiselect v-model="user" :options="users" :multiple="false" :close-on-select="true" placeholder="اختر محل أو مستودع من القائمة" label="name"
                                                    track-by="id" />
                                   </div>
                                   <div class="px-1">
@@ -156,7 +146,7 @@
                               <div class="bg-gray-100 w-100" v-for="(size,index) in clsizes">
                                     <div class="flex justify-around px-4" style="align-items: end;border: 1px solid;padding: 15px;border-radius: 15px;">
                                         <div class="flex flex-wrap space-x-3 mt-2" v-if="admin.role === 1 || admin.role === 2" style="margin: auto 0;">
-                                            <p @click="printItemsMulti(itemId, size.barcode, lsizes[index].stock)" class="p-2 pb-1 rounded-md text-white btn-ghost bg-teal-400 hover:bg-teal-600 hover:text-white" style="max-height: 50px;">
+                                            <p @click="printItemsMulti(itemId, size.barcode, Number(size.quantity) || 1)" class="p-2 pb-1 rounded-md text-white btn-ghost bg-teal-400 hover:bg-teal-600 hover:text-white" style="max-height: 50px;">
                                                 <vue-feather :type="'printer'" stroke-width="2"></vue-feather>
                                             </p>
 
@@ -174,8 +164,8 @@
                                         </div>
                                         <div class="inline-block align-middle mt-2">
                                             <jet-label :for="'sizestock'+size.size" :value="__('Stock (الكمية)')" style="font-size: 1rem;" dir="rtl" />
-                                            <jet-label :for="'sizestock'+size.size" :value="'الحد الأعظمي للكمية المراد إرسالها  '+size.stock" style="font-size: 14px;color: red;text-align: center;padding: 10px;" dir="rtl" />
-                                            <jet-input :id="'sizestock'+size.size" dir="ltr" type="number" min="0" :max="size.available_stock" class="mt-1 block w-full" v-model="size.quantity" />
+                                            <jet-label :for="'sizestock'+size.size" value="أدخل الكمية المراد إرسالها" style="font-size: 14px;color: red;text-align: center;padding: 10px;" dir="rtl" />
+                                            <jet-input :id="'sizestock'+size.size" dir="ltr" type="number" min="1" class="mt-1 block w-full" v-model="size.quantity" />
                                         </div>
                                     </div>
                                 </div>
@@ -290,6 +280,7 @@ export default {
                 formData.append('retail_price', this.retail_price)
                 formData.append('wholesale_price', this.wholesale_price)
                 formData.append('currency_code', this.currency.code)
+                formData.append('source_type', 'catalog')
                 formData.append('product_color_id', this.itemId)
                 formData.append('items', JSON.stringify(items))
 
@@ -349,9 +340,11 @@ export default {
         },
         async sendToShop(item) {
             this.resetTransferState();
-            const transferSizes = Array.isArray(item.transfer_sizes) ? item.transfer_sizes : [];
-            if (!transferSizes.some(size => Number(size.stock) > 0)) {
-                this.showErrorMessage('لا يوجد مخزون متاح للإرسال من هذا المستودع');
+            const catalogSizes = Array.isArray(item.clone_list_sizes)
+                ? item.clone_list_sizes.filter(size => size.size && size.barcode)
+                : [];
+            if (!catalogSizes.length) {
+                this.showErrorMessage('لا توجد مقاسات صالحة للإرسال لهذا الموديل');
                 return;
             }
 
@@ -360,10 +353,9 @@ export default {
             this.size = item.size;
             this.item = item;
             this.barcode = item.barcode;
-            this.lsizes = transferSizes
-            this.clsizes = transferSizes.map(size => ({
+            this.lsizes = catalogSizes
+            this.clsizes = catalogSizes.map(size => ({
                 ...size,
-                available_stock: Number(size.stock),
                 quantity: 0,
             }))
             this.stock = item.stock;
@@ -619,13 +611,9 @@ export default {
         //     }
         // }, 300))
     },
-    setup(props) {
+    setup() {
         const admin = computed(() => usePage().props.value.auth.user)
-        const destinationUsers = computed(() => {
-            const users = Array.isArray(props.users) ? props.users : Object.values(props.users || {});
-            return users.filter(user => Number(user.id) !== Number(admin.value?.id));
-        })
-        return { admin, destinationUsers }
+        return { admin }
     },
 }
 </script>

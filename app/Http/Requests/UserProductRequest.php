@@ -4,6 +4,7 @@ namespace App\Http\Requests;
 
 use App\Models\User;
 use App\Services\CurrencyService;
+use App\Services\InventoryTransferService;
 use App\Support\Country;
 use Illuminate\Foundation\Http\FormRequest;
 use Illuminate\Validation\Rule;
@@ -69,6 +70,10 @@ class UserProductRequest extends FormRequest
             'product_color_id' => $product,
             'merchant_id' => $merchant ?: null,
             'currency_code' => strtoupper((string) $this->input('currency_code', 'USD')),
+            'source_type' => strtolower((string) $this->input(
+                'source_type',
+                InventoryTransferService::SOURCE_INVENTORY
+            )),
             'items' => $items,
         ]);
     }
@@ -93,6 +98,10 @@ class UserProductRequest extends FormRequest
             'wholesale_price' => ['required', 'numeric', 'gt:0'],
             'price_before_discount' => ['nullable', 'numeric', 'min:0'],
             'currency_code' => ['required', Rule::in($currencyCodes)],
+            'source_type' => ['required', Rule::in([
+                InventoryTransferService::SOURCE_CATALOG,
+                InventoryTransferService::SOURCE_INVENTORY,
+            ])],
             'items' => ['required', 'array', 'min:1'],
             'items.*.size' => ['required', 'string', 'max:255'],
             'items.*.barcode' => ['required', 'string', 'max:255', 'distinct'],
@@ -130,7 +139,8 @@ class UserProductRequest extends FormRequest
                 $validator->errors()->add('destination_user_id', 'الوجهة المختارة غير متاحة في هذا البلد.');
             }
 
-            if ((int) $this->user()->role_id === User::ROLE_WAREHOUSE &&
+            if ($this->input('source_type') === InventoryTransferService::SOURCE_INVENTORY &&
+                (int) $this->user()->role_id === User::ROLE_WAREHOUSE &&
                 (int) $this->input('destination_user_id') === (int) $this->user()->id) {
                 $validator->errors()->add('destination_user_id', 'يجب أن تكون جهة الاستلام مختلفة عن المستودع المرسل.');
             }

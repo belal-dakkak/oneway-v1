@@ -20,6 +20,9 @@ use Illuminate\Validation\ValidationException;
 
 class InventoryTransferService
 {
+    public const SOURCE_CATALOG = 'catalog';
+    public const SOURCE_INVENTORY = 'inventory';
+
     private $currency;
 
     public function __construct(CurrencyService $currency)
@@ -27,72 +30,25 @@ class InventoryTransferService
         $this->currency = $currency;
     }
 
-    public function destinationsFor(User $sender): Collection
+    public function destinationsFor(User $sender, string $sourceType = self::SOURCE_INVENTORY): Collection
     {
         return User::query()
             ->whereIn('role_id', [User::ROLE_SHOP, User::ROLE_WAREHOUSE])
             ->where('country_id', $sender->country_id)
-            ->when((int) $sender->role_id === User::ROLE_WAREHOUSE, function ($query) use ($sender) {
+            ->when(
+                $sourceType === self::SOURCE_INVENTORY &&
+                (int) $sender->role_id === User::ROLE_WAREHOUSE,
+                function ($query) use ($sender) {
                 $query->whereKeyNot($sender->id);
-            })
+                }
+            )
             ->orderBy('name')
             ->get();
     }
 
-    public function availabilityFor(User $sender, Collection $productColors): array
-    {
-        $availability = $productColors->mapWithKeys(function (ProductColor $productColor) {
-            return [(int) $productColor->id => []];
-        })->all();
-
-        if ((int) $sender->role_id === User::ROLE_WAREHOUSE) {
-            $inventory = UserProduct::query()
-                ->where('user_id', $sender->id)
-                ->whereIn('product_color_id', $productColors->pluck('id'))
-                ->where('stock', '>', 0)
-                ->get(['product_color_id', 'size', 'barcode', 'stock'])
-                ->groupBy('product_color_id');
-
-            foreach ($inventory as $productColorId => $rows) {
-                $availability[(int) $productColorId] = $rows
-                    ->groupBy(function (UserProduct $row) {
-                        return $row->size."\0".$row->barcode;
-                    })
-                    ->map(function (Collection $sameSizeRows) {
-                        $first = $sameSizeRows->first();
-
-                        return [
-                            'size' => (string) $first->size,
-                            'barcode' => (string) $first->barcode,
-                            'stock' => (int) $sameSizeRows->sum('stock'),
-                        ];
-                    })
-                    ->values()
-                    ->all();
-            }
-
-            return $availability;
-        }
-
-        foreach ($productColors as $productColor) {
-            $availability[(int) $productColor->id] = collect(
-                $this->decodeSizes($productColor->getRawOriginal('sizes'))
-            )->map(function (array $size) {
-                return [
-                    'size' => (string) ($size['size'] ?? ''),
-                    'barcode' => (string) ($size['barcode'] ?? ''),
-                    'stock' => (int) ($size['stock'] ?? 0),
-                ];
-            })->filter(function (array $size) {
-                return $size['size'] !== '' && $size['barcode'] !== '' && $size['stock'] > 0;
-            })->values()->all();
-        }
-
-        return $availability;
-    }
-
     public function transfer(User $sender, array $data): array
     {
+        $sourceType = $data['source_type'] ?? self::SOURCE_INVENTORY;
         $rate = $this->currency->rate($data['currency_code']);
         $retailPrice = round($this->currency->toUsdAtRate($data['retail_price'], $rate), 2);
         $wholesalePrice = round($this->currency->toUsdAtRate($data['wholesale_price'], $rate), 2);
@@ -103,6 +59,7 @@ class InventoryTransferService
         $result = DB::transaction(function () use (
             $sender,
             $data,
+            $sourceType,
             $retailPrice,
             $wholesalePrice,
             $priceBeforeDiscount
@@ -112,7 +69,7 @@ class InventoryTransferService
                 ->lockForUpdate()
                 ->findOrFail($data['product_color_id']);
 
-            $this->assertCountryAccess($sender, $destination, $productColor);
+            $this->assertCountryAccess($sender, $destination, $productColor, $sourceType);
 
             $merchant = null;
             if (!empty($data['merchant_id'])) {
@@ -136,7 +93,9 @@ class InventoryTransferService
                 $size = (string) $item['size'];
                 $barcode = (string) $item['barcode'];
 
-                if ((int) $sender->role_id === User::ROLE_WAREHOUSE) {
+                if ($sourceType === self::SOURCE_CATALOG) {
+                    $this->assertCatalogItem($centralSizes, $size, $barcode);
+                } elseif ((int) $sender->role_id === User::ROLE_WAREHOUSE) {
                     $this->deductWarehouseStock($sender, $productColor, $size, $barcode, $quantity);
                 } else {
                     $centralSizes = $this->deductCentralStock($centralSizes, $size, $barcode, $quantity);
@@ -206,7 +165,8 @@ class InventoryTransferService
                 $totalMerchantAmount += $merchantAmount;
             }
 
-            if ((int) $sender->role_id === User::ROLE_ADMIN) {
+            if ($sourceType === self::SOURCE_INVENTORY &&
+                (int) $sender->role_id === User::ROLE_ADMIN) {
                 $productColor->sizes = json_encode($centralSizes);
                 $productColor->stock = array_sum(array_map(function ($size) {
                     return (int) ($size['stock'] ?? 0);
@@ -251,6 +211,7 @@ class InventoryTransferService
 
         return [
             'status' => 'success',
+            'source_type' => $sourceType,
             'destination_user_id' => $result['destination']->id,
             'items' => $result['saved_items'],
             'retail_price_usd' => $retailPrice,
@@ -258,7 +219,12 @@ class InventoryTransferService
         ];
     }
 
-    private function assertCountryAccess(User $sender, User $destination, ProductColor $productColor): void
+    private function assertCountryAccess(
+        User $sender,
+        User $destination,
+        ProductColor $productColor,
+        string $sourceType
+    ): void
     {
         if (!in_array((int) $sender->role_id, [User::ROLE_ADMIN, User::ROLE_WAREHOUSE], true)) {
             throw ValidationException::withMessages([
@@ -272,7 +238,8 @@ class InventoryTransferService
             ]);
         }
 
-        if ((int) $sender->role_id === User::ROLE_WAREHOUSE &&
+        if ($sourceType === self::SOURCE_INVENTORY &&
+            (int) $sender->role_id === User::ROLE_WAREHOUSE &&
             (int) $destination->id === (int) $sender->id) {
             throw ValidationException::withMessages([
                 'destination_user_id' => 'يجب أن تكون جهة الاستلام مختلفة عن المستودع المرسل.',
@@ -293,6 +260,20 @@ class InventoryTransferService
                 'product_color_id' => 'The selected product is not available in this country.',
             ]);
         }
+    }
+
+    private function assertCatalogItem(array $sizes, string $size, string $barcode): void
+    {
+        foreach ($sizes as $catalogSize) {
+            if ((string) ($catalogSize['size'] ?? '') === $size &&
+                (string) ($catalogSize['barcode'] ?? '') === $barcode) {
+                return;
+            }
+        }
+
+        throw ValidationException::withMessages([
+            'items' => "المقاس {$size} أو الباركود المحدد لا ينتمي إلى هذا الموديل.",
+        ]);
     }
 
     private function deductWarehouseStock(

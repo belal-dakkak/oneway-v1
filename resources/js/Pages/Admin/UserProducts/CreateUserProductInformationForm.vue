@@ -202,6 +202,7 @@ export default defineComponent({
                 wholesale_price: this.form.wholesale_price,
                 price_before_discount: this.form.price_before_discount || null,
                 currency_code: this.currency.code,
+                source_type: 'inventory',
                 items,
             }).then(response => {
                 this.showSuccessMessage(response.data.msg)
