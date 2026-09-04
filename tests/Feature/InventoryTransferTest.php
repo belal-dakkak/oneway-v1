@@ -48,6 +48,11 @@ class InventoryTransferTest extends TestCase
             $table->unsignedInteger('country_id');
             $table->timestamps();
         });
+        Schema::create('categories', function (Blueprint $table) {
+            $table->id();
+            $table->string('name');
+            $table->timestamps();
+        });
         Schema::create('products', function (Blueprint $table) {
             $table->id();
             $table->string('name');
@@ -55,6 +60,7 @@ class InventoryTransferTest extends TestCase
             $table->unsignedBigInteger('category_id')->nullable();
             $table->unsignedInteger('country_id');
             $table->string('barcode')->nullable();
+            $table->text('sizes')->nullable();
             $table->decimal('cost_price', 20, 4)->default(0);
             $table->decimal('retail_price', 20, 4)->default(0);
             $table->decimal('sale_price', 20, 4)->default(0);
@@ -225,6 +231,25 @@ class InventoryTransferTest extends TestCase
         $this->assertSame([
             ['size' => 'M', 'barcode' => 'CENTRAL-M', 'stock' => 10],
         ], $availability[$productColor->id]);
+    }
+
+    public function test_product_colors_json_exposes_virtual_transfer_stock_without_database_columns(): void
+    {
+        $warehouse = $this->user(User::ROLE_WAREHOUSE, 4, 'product-colors-page@example.test');
+        $productColor = $this->productColor(4, [
+            ['size' => 'M', 'barcode' => 'PAGE-M', 'stock' => 10],
+        ]);
+        $this->stock($warehouse, $productColor, 'M', 'PAGE-M', 3, 20, 10);
+
+        $this->actingAs($warehouse)
+            ->getJson(route('productColors.index'))
+            ->assertOk()
+            ->assertJsonPath('data.0.transfer_stock', 3)
+            ->assertJsonPath('data.0.transfer_sizes.0.stock', 3)
+            ->assertJsonPath('data.0.transfer_sizes.0.barcode', 'PAGE-M');
+
+        $this->assertFalse(Schema::hasColumn('product_colors', 'transfer_sizes'));
+        $this->assertFalse(Schema::hasColumn('product_colors', 'transfer_stock'));
     }
 
     public function test_warehouse_can_transfer_to_another_warehouse_in_the_same_country(): void
