@@ -12,6 +12,7 @@
                     :users="users"
                     :products="products"
                     :sizes = "sizes"
+                    :currency="currency"
                 />
 
                 <jet-section-border />
@@ -42,7 +43,8 @@ export default defineComponent({
     props: {
         users: Object,
         products: Object,
-        sizes: Object
+        sizes: Object,
+        currency: Object,
     }
 })
 </script>

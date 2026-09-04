@@ -61,6 +61,7 @@ class ProductColorController extends Controller
         }
 
         $rate = app(CurrencyService::class)->rate(Country::defaultCurrency(auth()->user()->country_id));
+        $currencyCode = Country::defaultCurrency(auth()->user()->country_id);
 
         return Inertia::render('Admin/ProductColors/Index', [
             'products'  => $products,
@@ -69,7 +70,12 @@ class ProductColorController extends Controller
             'merchants' => $merchants,
             'filters'   => $request->all(['search', 'field', 'direction', 'subsearch']),
             'sizes'     => $new_sizes,
-            'rate'      => $rate
+            'rate'      => $rate,
+            'currency'  => [
+                'code' => $currencyCode,
+                'rate' => $rate,
+                'decimals' => $currencyCode === 'SYP' ? 0 : 2,
+            ],
         ]);
     }
 

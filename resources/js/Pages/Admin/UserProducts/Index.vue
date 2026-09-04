@@ -16,17 +16,17 @@
 
           <div class="flex flex-col" v-if="admin.role === 1">
               <label dir="rtl" class="pr-2"> إجمالي سعر الكلفة </label>
-              <span class="bg-emerald-500 px-2 rounded-md text-3xl text-white">{{ Math.round(Number(total_wholesale_price)) }}</span>
+              <span class="bg-emerald-500 px-2 rounded-md text-3xl text-white">{{ Math.round(Number(total_wholesale_price)) }} {{ currency.code }}</span>
           </div>
 
           <div class="flex flex-col" v-if="admin.role === 1">
               <label dir="rtl" class="pr-2"> إجمالي سعر الجملة </label>
-              <span class="bg-emerald-500 px-2 rounded-md text-3xl text-white">{{ Math.round(Number(total_sale_price)) }}</span>
+              <span class="bg-emerald-500 px-2 rounded-md text-3xl text-white">{{ Math.round(Number(total_sale_price)) }} {{ currency.code }}</span>
           </div>
 
           <div class="flex flex-col" v-if="admin.role === 1">
               <label dir="rtl" class="pr-2"> إجمالي سعر التجزئة </label>
-              <span class="bg-emerald-500 px-2 rounded-md text-3xl text-white">{{ Math.round(Number(total_retail_price)) }}</span>
+              <span class="bg-emerald-500 px-2 rounded-md text-3xl text-white">{{ Math.round(Number(total_retail_price)) }} {{ currency.code }}</span>
           </div>
 
           <div class="mt-8 flex justify-between space-x-4">
@@ -135,22 +135,22 @@
                 </td>
                 <td class="mx-auto max-w-sm p-6 text-sm leading-6 sm:text-base sm:leading-7" v-if="admin.role != 3">
                     <div class="ml-4">
-                        <div class="text-sm font-medium">{{ currencyExchange(item.colors[0].wholesale_price, rate) }}</div>
+                        <div class="text-sm font-medium">{{ displayPrice(item.colors[0].wholesale_price) }} {{ currency.code }}</div>
                     </div>
                 </td>
                 <td class="mx-auto max-w-sm p-6 text-sm leading-6 sm:text-base sm:leading-7" v-if="admin.role != 3">
                     <div class="ml-4">
-                        <div class="text-sm font-medium">{{ currencyExchange(item?.product?.product?.sale_price != null ? Number(item.product.product.sale_price) : 0, rate) }}</div>
+                        <div class="text-sm font-medium">{{ displayPrice(item?.product?.product?.sale_price != null ? Number(item.product.product.sale_price) : 0) }} {{ currency.code }}</div>
                     </div>
                 </td>
                 <td class="mx-auto max-w-sm p-6 text-sm leading-6 sm:text-base sm:leading-7">
                     <div class="ml-4">
-                        <div class="text-sm font-medium">{{ currencyExchange(item.colors[0].retail_price, rate) }}</div>
+                        <div class="text-sm font-medium">{{ displayPrice(item.colors[0].retail_price) }} {{ currency.code }}</div>
                     </div>
                 </td>
                 <td class="mx-auto max-w-sm p-6 text-sm leading-6 sm:text-base sm:leading-7">
                     <div class="ml-4">
-                        <div class="text-sm font-medium">{{ currencyExchange(item.colors[0].price_before_discount, rate) }}</div>
+                        <div class="text-sm font-medium">{{ displayPrice(item.colors[0].price_before_discount || 0) }} {{ currency.code }}</div>
                     </div>
                 </td>
                 <!-- <td class="mx-auto max-w-sm p-6 text-sm leading-6 sm:text-base sm:leading-7">
@@ -197,7 +197,7 @@
                                   <div class="px-1" dir="rtl">
                                       <jet-label for="user" :value="__('Shop')" />
                                       <Multiselect v-model="user" :options="users" :multiple="false" :close-on-select="true" placeholder="اختر محل من قائمة المحلات" label="name"
-                                                   track-by="product_color_id" />
+                                                   track-by="id" />
                                   </div>
                                   <div class="px-1">
                                       <jet-label for="wholesale_price" :value="__('Wholesale Price')" dir="rtl" />
@@ -207,7 +207,7 @@
                                       </div>
                                       <div class="flex items-center">
                                           <jet-input id="wholesale_priceAed" type="number" class="mt-1 block w-full" v-model="wholesale_priceAed" autocomplete="wholesale_priceAed" />
-                                          <jet-label class="ml-2" for="wholesale_priceAed" value="AED" dir="rtl" />
+                                          <jet-label class="ml-2" for="wholesale_priceAed" :value="currency.code" dir="rtl" />
                                       </div>
                                   </div>
 
@@ -219,7 +219,7 @@
                                       </div>
                                       <div class="flex items-center">
                                           <jet-input id="retail_priceAed" type="number" class="mt-1 block w-full" v-model="retail_priceAed" autocomplete="retail_priceAed" />
-                                          <jet-label class="ml-2" for="retail_priceAed" value="AED" dir="rtl" />
+                                          <jet-label class="ml-2" for="retail_priceAed" :value="currency.code" dir="rtl" />
                                       </div>
                                   </div>
 
@@ -253,7 +253,7 @@
                                         <div class="inline-block align-middle mt-2">
                                             <jet-label :for="'sizestock'+size.size" :value="__('Stock (الكمية)')" style="font-size: 1rem;" dir="rtl" />
                                             <jet-label :for="'sizestock'+size.size" :value="'الحد الأعظمي للكمية المراد إرسالها  '+size.old_stock" style="font-size: 14px;color: red;text-align: center;padding: 10px;" dir="rtl" />
-                                            <jet-input :id="'sizestock'+size.size" dir="ltr" type="number" min="0" :max="item.colors[index].stock" class="mt-1 block w-full" v-model="size.stock" />
+                                            <jet-input :id="'sizestock'+size.size" dir="ltr" type="number" min="0" :max="size.available_stock" class="mt-1 block w-full" v-model="size.quantity" />
                                         </div>
                                     </div>
                                 </div>
@@ -308,7 +308,7 @@
                                         </div>
                                         <div class="flex items-center">
                                             <jet-input id="edit_price_before_discountAed" type="number" class="mt-1 block w-full" v-model="edit_price_beforeAed" autocomplete="price_before_discountAed" />
-                                            <jet-label class="ml-2" for="edit_price_before_discountAed" value="AED" dir="rtl" />
+                                            <jet-label class="ml-2" for="edit_price_before_discountAed" :value="currency.code" dir="rtl" />
                                         </div>
                                     </div>
                                 </div>
@@ -368,7 +368,8 @@ export default {
         stock_products: Number,
         total_wholesale_price: Number,
         total_sale_price: Number,
-        total_retail_price: Number
+        total_retail_price: Number,
+        currency: Object,
     },
     setup() {
         const admin = computed(() => usePage().props.value.auth.user)
@@ -401,7 +402,6 @@ export default {
             wholesale_price: '',
             stock: '',
             barcode: '',
-            currencyExchange: Currency.getExchangeMethod(),
 
             items: [],
             loading: false,
@@ -421,23 +421,21 @@ export default {
             this.params[filter] = value;
         },
         confirmResult(){
-            if (!this.user || !this.retail_price  || !this.wholesale_price ){
+            const destinationId = this.user?.id
+            const items = (this.clsizes || []).filter(size => Number(size.quantity) > 0)
+            if (!destinationId || !this.retail_price || !this.wholesale_price || !items.length){
                 this.resultError = true;
             }else{
                 this.resultLoading = true;
                 let formData = new FormData;
-                formData.append('user', this.user.id)
+                formData.append('destination_user_id', destinationId)
                 formData.append('retail_price', this.retail_price)
                 formData.append('wholesale_price', this.wholesale_price)
+                formData.append('currency_code', 'USD')
                 if(this.merchant)
-                    formData.append('merchant', this.merchant.id)
-                // formData.append('stock', this.stock)
-                // formData.append('size', this.size)
-                // formData.append('barcode', this.barcode)
-                formData.append('lsizes', JSON.stringify(this.clsizes))
-                formData.append('product', this.itemId)
-                formData.append('travel', '1')
-                formData.append('is_warehouse', '1')
+                    formData.append('merchant_id', this.merchant.id)
+                formData.append('items', JSON.stringify(items))
+                formData.append('product_color_id', this.itemId)
 
                 axios.post(this.route('userProducts.store'), formData,{
                     headers: {
@@ -447,7 +445,7 @@ export default {
                 }).then((result) => {
                     if (result.status === 200){
                         this.showSuccessMessage(result.data.msg)
-                        this.$inertia.get(route('userProducts.index'))
+                        this.$inertia.get(route('userProducts.index', {shop: destinationId}))
                     }else{
                         this.showErrorMessage('حدث خطأ ما')
                     }
@@ -464,6 +462,9 @@ export default {
                     this.user = null;
                     this.retail_price = null;
                     this.wholesale_price = null;
+                }).catch((error) => {
+                    this.resultLoading = false;
+                    this.showErrorMessage(error.response?.data?.message || 'حدث خطأ أثناء إرسال البضاعة')
                 });
             }
         },
@@ -552,18 +553,17 @@ export default {
             this.showModal = true;
             this.itemId = item.product.id;
             this.item = item;
-            this.clsizes = item.colors;
+            this.clsizes = item.colors.map(size => ({
+                ...size,
+                old_stock: Number(size.stock),
+                available_stock: Number(size.stock),
+                quantity: 0,
+            }));
             // this.stock = item.stock;
             // this.size = item.size;
             // this.barcode = item.barcode;
             this.wholesale_price = item.colors[0].wholesale_price;
             this.retail_price = item.colors[0].retail_price;
-
-            this.clsizes.forEach((item) => {
-                item.old_stock = item.stock;
-                item.stock = 1;
-            });
-
 
         },
         searchForModel(){
@@ -638,24 +638,27 @@ export default {
             document.getElementById(tooltipID).classList.toggle("hidden");
         },
         updateRetailPriceAed(newRetailPriceAed) {
-            const newRetailPrice = Currency.exchange(newRetailPriceAed, 1 / this.rate);
+            const newRetailPrice = Currency.toUsd(newRetailPriceAed, this.rate);
 
             if (Math.abs(newRetailPrice - this.retail_price) > 0.01) {
                 this.retail_price = newRetailPrice;
             }
         },
         updateWholesalePriceAed(newWholesalePriceAed) {
-            const newWholesalePrice = Currency.exchange(newWholesalePriceAed, 1 / this.rate);
+            const newWholesalePrice = Currency.toUsd(newWholesalePriceAed, this.rate);
 
             if (Math.abs(newWholesalePrice - this.wholesale_price) > 0.01) {
                 this.wholesale_price = newWholesalePrice;
             }
         },
         updateEditPriceBeforeAed(newPriceAed) {
-            const newPrice = Currency.exchange(newPriceAed, 1 / this.rate);
+            const newPrice = Currency.toUsd(newPriceAed, this.rate);
             if (Math.abs(newPrice - this.edit_price_before) > 0.01) {
                 this.edit_price_before = newPrice;
             }
+        },
+        displayPrice(value) {
+            return Currency.fromUsd(value, this.currency.rate, this.currency.decimals)
         },
 
         // new code
@@ -763,7 +766,7 @@ export default {
     computed: {
         retail_priceAed: {
             get() {
-                return Currency.exchange(this.retail_price, this.rate);
+                return Currency.fromUsd(this.retail_price, this.rate, this.currency.decimals);
             },
             set(newValue) {
                 this.updateRetailPriceAed(newValue);
@@ -771,7 +774,7 @@ export default {
         },
         wholesale_priceAed: {
             get() {
-                return Currency.exchange(this.wholesale_price, this.rate);
+                return Currency.fromUsd(this.wholesale_price, this.rate, this.currency.decimals);
             },
             set(newValue) {
                 this.updateWholesalePriceAed(newValue);
@@ -779,7 +782,7 @@ export default {
         },
         edit_price_beforeAed: {
             get() {
-                return Currency.exchange(this.edit_price_before, this.rate);
+                return Currency.fromUsd(this.edit_price_before, this.rate, this.currency.decimals);
             },
             set(newValue) {
                 this.updateEditPriceBeforeAed(newValue);

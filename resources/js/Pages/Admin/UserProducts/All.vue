@@ -82,12 +82,12 @@
                   </td>
                   <td class="mx-auto max-w-sm p-6 text-sm leading-6 sm:text-base sm:leading-7">
                       <div class="ml-4">
-                          <div class="text-sm font-medium">{{ item.retail_price }}</div>
+                            <div class="text-sm font-medium">{{ displayPrice(item.retail_price) }} {{ currency.code }}</div>
                       </div>
                   </td>
                   <td class="mx-auto max-w-sm p-6 text-sm leading-6 sm:text-base sm:leading-7">
                       <div class="ml-4">
-                          <div class="text-sm font-medium">{{ item.price_before_discount }}</div>
+                            <div class="text-sm font-medium">{{ displayPrice(item.price_before_discount) }} {{ currency.code }}</div>
                       </div>
                   </td>
                   <td class="mx-auto max-w-sm p-6 text-sm leading-6 sm:text-base sm:leading-7">
@@ -105,7 +105,7 @@
                           @click="deleteItem(item.id)">
                           <vue-feather :type="'trash-2'" stroke-width="2"></vue-feather>
                       </button>
-                      <button class="p-2 pb-1 rounded-md text-white btn-ghost bg-blue-400 hover:bg-blue-600 hover:text-white" @click="sendToShop(item)" v-if="admin.role === 2">
+                        <button class="p-2 pb-1 rounded-md text-white btn-ghost bg-blue-400 hover:bg-blue-600 hover:text-white" @click="sendToShop(item)" v-if="admin.role === 2 && Number(item.user_id) === Number(admin.id)">
                           <vue-feather :type="'shopping-cart'" stroke-width="2"></vue-feather>
                       </button>
                   </td>
@@ -131,15 +131,15 @@
                                     <div class="px-1" dir="rtl">
                                         <jet-label for="user" value="المحل" />
                                         <Multiselect v-model="user" :options="users" :multiple="false" :close-on-select="true" placeholder="اختر محل من قائمة المحلات" label="name"
-                                                     track-by="product_color_id" />
+                                                     track-by="id" />
                                     </div>
                                     <div class="px-1">
-                                        <jet-label for="wholesale_price" :value="__('Wholesale Price')" dir="rtl" />
+                                        <jet-label for="wholesale_price" :value="__('Wholesale Price') + ' (' + currency.code + ')'" dir="rtl" />
                                         <jet-input id="wholesale_price" type="number" class="mt-1 block w-full" v-model="wholesale_price" autocomplete="wholesale_price" />
                                     </div>
 
                                     <div class="px-1">
-                                        <jet-label for="retail_price" :value="__('Retail Price')" dir="rtl" />
+                                        <jet-label for="retail_price" :value="__('Retail Price') + ' (' + currency.code + ')'" dir="rtl" />
                                         <jet-input id="retail_price" type="number" class="mt-1 block w-full" v-model="retail_price" autocomplete="retail_price" />
                                     </div>
 
@@ -207,6 +207,7 @@
   import JetInput from "@/Jetstream/Input";
   import JetInputError from "@/Jetstream/InputError";
   import {debounce} from "lodash/function";
+  import Currency from '@/Utils/Currency.js';
 
   const components = { AppLayout, MeeTable, Pagination, JetButton,  JetLabel, Multiselect, JetInput, JetInputError }
 
@@ -218,8 +219,9 @@
       props: {
           products: Object,
           filters: Object,
-          users: Object,
-          merchants: Object
+           users: Object,
+           merchants: Object,
+           currency: Object,
       },
       setup() {
           const admin = computed(() => usePage().props.value.auth.user)
@@ -254,16 +256,20 @@
               }else{
                   this.resultLoading = true;
                   let formData = new FormData;
-                  formData.append('user', this.user.id)
+                  const destinationId = this.user.id
+                  formData.append('destination_user_id', destinationId)
                   formData.append('retail_price', this.retail_price)
                   formData.append('wholesale_price', this.wholesale_price)
+                  formData.append('currency_code', this.currency.code)
                   if (this.merchant)
-                      formData.append('merchant', this.merchant.id)
-                   formData.append('stock', this.stock)
-                  formData.append('product', this.itemId)
+                      formData.append('merchant_id', this.merchant.id)
+                  formData.append('items', JSON.stringify([{
+                      size: this.item.size,
+                      barcode: this.item.barcode,
+                      quantity: Number(this.stock),
+                  }]))
+                  formData.append('product_color_id', this.itemId)
                   formData.append('price_before_discount', this.price_before_discount)
-                  formData.append('travel', '1')
-                  formData.append('is_warehouse', '1')
 
                   axios.post(this.route('userProducts.store'), formData,{
                       headers: {
@@ -273,7 +279,7 @@
                   }).then((result) => {
                       if (result.status === 200){
                           this.showSuccessMessage(result.data.msg)
-                          this.$inertia.get(route('userProducts.all'))
+                          this.$inertia.get(route('userProducts.index', {shop: destinationId}))
                       }else{
                           this.showErrorMessage('حدث خطأ ما')
                       }
@@ -288,7 +294,10 @@
                       this.retail_price = null;
                       this.wholesale_price = null;
                       this.price_before_discount = null;
-                  } );
+                  }).catch((error) => {
+                      this.resultLoading = false;
+                      this.showErrorMessage(error.response?.data?.message || 'حدث خطأ أثناء إرسال البضاعة')
+                  });
               }
           },
           closeModal(){
@@ -343,9 +352,14 @@
               this.itemId = item.product_color_id;
               this.item = item;
               this.stock = item.stock;
-              this.wholesale_price = item.wholesale_price;
-              this.retail_price = item.retail_price;
-              this.price_before_discount = item.price_before_discount;
+              this.wholesale_price = this.displayPrice(item.wholesale_price);
+              this.retail_price = this.displayPrice(item.retail_price);
+              this.price_before_discount = item.price_before_discount
+                  ? this.displayPrice(item.price_before_discount)
+                  : '';
+          },
+          displayPrice(value) {
+              return Currency.fromUsd(value, this.currency.rate, this.currency.decimals)
           },
           searchForModel(){
               this.page = 1;

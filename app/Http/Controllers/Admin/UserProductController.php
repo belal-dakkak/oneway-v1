@@ -10,6 +10,9 @@ use App\Models\User;
 use App\Models\UserProduct;
 use App\Models\UserProductLog;
 use App\Repositories\UserProductRepository;
+use App\Services\CurrencyService;
+use App\Services\InventoryTransferService;
+use App\Support\Country;
 use Carbon\Carbon;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
@@ -23,10 +26,15 @@ class UserProductController extends Controller
 {
 
     private $productRepository;
+    private $inventoryTransfer;
 
-    public function __construct(UserProductRepository $productRepository)
+    public function __construct(
+        UserProductRepository $productRepository,
+        InventoryTransferService $inventoryTransfer
+    )
     {
         $this->productRepository = $productRepository;
+        $this->inventoryTransfer = $inventoryTransfer;
     }
 
     public function all(Request $request)
@@ -54,7 +62,8 @@ class UserProductController extends Controller
             'products' => $products,
             'users' => $users,
             'merchants' => $merchants,
-            'filters' => $request->all(['search', 'field', 'direction'])
+            'filters' => $request->all(['search', 'field', 'direction']),
+            'currency' => $this->currencyData(),
         ]);
     }
 
@@ -141,9 +150,17 @@ class UserProductController extends Controller
         $nproducts  = array();
         $color_products  = array();
         foreach ($products as $product) {
-            if(!array_key_exists($product->product_color_id,$nproducts))
-                $nproducts[$product->product_color_id] = array();
-            array_push($nproducts[$product->product_color_id],$product);
+            $groupKey = implode(':', [
+                $product->user_id,
+                $product->product_color_id,
+                $product->wholesale_price,
+                $product->retail_price,
+                $product->price_before_discount,
+                $product->merchant_id,
+            ]);
+            if(!array_key_exists($groupKey,$nproducts))
+                $nproducts[$groupKey] = array();
+            array_push($nproducts[$groupKey],$product);
         }
 
         $allProductsCount = 0;
@@ -151,8 +168,8 @@ class UserProductController extends Controller
         $totalSalePrice = 0;
         $totalRetailPrice = 0;
 
-        foreach ($nproducts as $key => $color) {
-            $product_color  = ProductColor::query()->with('product')->find($key);
+        foreach ($nproducts as $color) {
+            $product_color  = ProductColor::query()->with('product')->find($color[0]->product_color_id);
             $sub_sizes = array();
             $total_qty = 0;
             $group_wholesale_price = 0;
@@ -226,7 +243,8 @@ class UserProductController extends Controller
             'total_wholesale_price' => $totalWholesalePrice * $rate,
             'total_sale_price' => $totalSalePrice * $rate,
             'total_retail_price' => $totalRetailPrice * $rate,
-            'filters' => $request->all(['search', 'field', 'direction', 'shop'])
+            'filters' => $request->all(['search', 'field', 'direction', 'shop']),
+            'currency' => $this->currencyData(),
         ]);
     }
 
@@ -241,11 +259,14 @@ class UserProductController extends Controller
                 ->select([
                     'user_products.stock',
                     'user_products.wholesale_price',
-                    'product_colors.barcode',
+                    'user_products.retail_price',
+                    'user_products.price_before_discount',
+                    'user_products.size',
+                    'user_products.barcode',
                     'user_products.id',
                     'user_products.product_color_id',
                     'products.name',
-                    DB::raw("CONCAT(products.name,' (',colors.name, ' )', ' (',product_colors.barcode, ' )') as product_name")
+                    DB::raw("CONCAT(products.name,' (',colors.name, ' )', ' (',user_products.size, ' - ',user_products.barcode, ' )') as product_name")
                 ])
                 ->join('product_colors', 'product_color_id', '=', 'product_colors.id')
                 ->join('products', 'product_colors.product_id', '=', 'products.id')
@@ -259,35 +280,19 @@ class UserProductController extends Controller
         return Inertia::render('Admin/UserProducts/Create', [
             'users' => $users,
             'products' => $products,
-            'sizes' => $new_sizes
+            'sizes' => $new_sizes,
+            'currency' => $this->currencyData(),
         ]);
     }
 
-    public function store(Request $request)
+    public function store(UserProductRequest $request)
     {
-        //dd($request->all(), json_decode($request->get('lsizes'),true));
+        $result = $this->inventoryTransfer->transfer(auth()->user(), $request->validated());
 
-        $res = $this->productRepository->add($request);
-
-        if(is_null($res))
-            return response()->json([
-                'success' => true,
-                'msg' => 'حدث خطأ ما لم يتم إرسال الشحنة بنجاح'
-            ]);
-        if($res == 'nosize')
-            return response()->json([
-                'success' => true,
-                'msg' => 'الحجم المطلوب إرساله غير متوفر في هذا المنتج'
-            ]);
-        if($res == 'nostock')
-            return response()->json([
-                'success' => true,
-                'msg' => 'الكمية المطلوب إرسالها غير متوفرة في هذا المنتج'
-            ]);
-        return response()->json([
+        return response()->json(array_merge($result, [
             'success' => true,
-            'msg' => 'تم إنشاء الشحنة بنجاح'
-        ]);
+            'msg' => 'تم إرسال البضاعة وحفظ الأسعار بنجاح.',
+        ]));
     }
 
     public function update(Request $request, UserProduct $userProduct)
@@ -343,12 +348,27 @@ class UserProductController extends Controller
 
     public function match(Request $request)
     {
-        $userId = $request->get('user');
-        $productId = $request->get('product');
+        $validated = $request->validate([
+            'user' => ['required', 'integer', 'exists:users,id'],
+            'product' => ['required', 'integer', 'exists:product_colors,id'],
+        ]);
+
+        $countryId = (int) auth()->user()->country_id;
+        $destinationExists = User::query()
+            ->whereKey($validated['user'])
+            ->where('country_id', $countryId)
+            ->exists();
+
+        if (!$destinationExists) {
+            return response()->json([
+                'message' => 'The selected shop is not available in this country.',
+            ], 422);
+        }
 
         $item = UserProduct::query()
-            ->where('user_id', $userId)
-            ->where('product_color_id', $productId)
+            ->where('country_id', $countryId)
+            ->where('user_id', $validated['user'])
+            ->where('product_color_id', $validated['product'])
             ->first();
 
         if ($item)
@@ -413,6 +433,18 @@ class UserProductController extends Controller
         $log = UserProductLog::query()->find($id);
         $log->update(['approved' => 1]);
         return Redirect::route('dashboard');
+    }
+
+    private function currencyData(): array
+    {
+        $countryId = (int) auth()->user()->country_id;
+        $code = Country::defaultCurrency($countryId);
+
+        return [
+            'code' => $code,
+            'rate' => app(CurrencyService::class)->rate($code),
+            'decimals' => $code === 'SYP' ? 0 : 2,
+        ];
     }
 
 }

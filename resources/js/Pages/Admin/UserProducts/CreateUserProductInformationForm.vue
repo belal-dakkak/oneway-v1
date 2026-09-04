@@ -1,224 +1,267 @@
 <template>
     <MeeForm @submitted="createUserProductInformation">
-
-        <div class="grid grid-cols-5 p-4" dir="rtl">
-
-            <div class="px-4" dir="rtl">
+        <div class="grid grid-cols-1 gap-4 p-4 md:grid-cols-5" dir="rtl">
+            <div class="px-4">
                 <jet-label for="user" :value="__('Shop')" />
-                <Multiselect ref="user" v-model="form.user" v-on:select="goToProducts" :options="users" :multiple="false" :close-on-select="true" placeholder="اختر محل من قائمة المحلات" label="name"
-                             track-by="product_color_id" />
-                <jet-input-error :message="form.errors.user" class="mt-2" />
+                <Multiselect
+                    ref="user"
+                    v-model="form.user"
+                    :options="users"
+                    :multiple="false"
+                    :close-on-select="true"
+                    placeholder="اختر محل من قائمة المحلات"
+                    label="name"
+                    track-by="id"
+                />
             </div>
 
-            <div class="px-4" dir="rtl">
+            <div class="px-4">
                 <jet-label for="product" :value="__('Product')" />
-                <Multiselect ref="product" v-model="form.product" v-on:select="goToPrice" :options="products" :multiple="false" :close-on-select="true" placeholder="اختر المنتج من القائمة" label="product_name"
-                             track-by="id" />
-                <jet-input-error :message="form.errors.product" class="mt-2" />
-            </div>
-            <!-- <div class="px-4" dir="rtl">
-                <jet-label for="categories" :value="__('Size')" />
-                <Multiselect v-model="form.size" :options="sizes" :multiple="false" :close-on-select="true" placeholder="اختر الاحجام" label="name" track-by="id" />
-                <jet-input-error :message="form.errors.sizes" class="mt-2" />
-            </div> -->
-            <div class="px-4">
-                <jet-label for="wholesale_price" :value="__('Wholesale Price')" dir="rtl" />
-                <jet-input ref="price" id="wholesale_price" type="number" class="mt-1 block w-full" v-model="form.wholesale_price" autocomplete="wholesale_price" />
-                <jet-input-error :message="form.errors.wholesale_price" class="mt-2" />
+                <Multiselect
+                    ref="product"
+                    v-model="form.product"
+                    :options="products"
+                    :multiple="false"
+                    :close-on-select="true"
+                    placeholder="اختر المنتج من القائمة"
+                    label="product_name"
+                    track-by="id"
+                />
             </div>
 
             <div class="px-4">
-                <jet-label for="retail_price" :value="__('Retail Price')" dir="rtl" />
-                <jet-input id="retail_price" type="number" class="mt-1 block w-full" v-model="form.retail_price" autocomplete="retail_price" />
-                <jet-input-error :message="form.errors.retail_price" class="mt-2" />
+                <jet-label for="wholesale_price" :value="__('Wholesale Price') + ' (' + currency.code + ')'" />
+                <jet-input id="wholesale_price" type="number" min="0" class="mt-1 block w-full" v-model="form.wholesale_price" />
             </div>
 
             <div class="px-4">
-                <jet-label for="price_before_discount" :value="__('Price Before Discount')" dir="rtl" />
-                <jet-input id="price_before_discount" type="number" class="mt-1 block w-full" v-model="form.price_before_discount" autocomplete="price_before_discount" />
-                <jet-input-error :message="form.errors.price_before_discount" class="mt-2" />
+                <jet-label for="retail_price" :value="__('Retail Price') + ' (' + currency.code + ')'" />
+                <jet-input id="retail_price" type="number" min="0" class="mt-1 block w-full" v-model="form.retail_price" />
             </div>
 
             <div class="px-4">
-                <jet-label for="stock" :value="__('Stock')" dir="rtl" />
-                <jet-input id="stock" type="number" class="mt-1 block w-full" v-model="form.stock" autocomplete="stock" />
-                <jet-input-error :message="form.errors.stock" class="mt-2" />
+                <jet-label for="price_before_discount" :value="__('Price Before Discount') + ' (' + currency.code + ')'" />
+                <jet-input id="price_before_discount" type="number" min="0" class="mt-1 block w-full" v-model="form.price_before_discount" />
             </div>
-            <div class="px-4">
-                <jet-label for="barcode" :value="__('Barcode')" dir="rtl" />
-                <jet-input id="barcode" type="text" class="mt-1 block w-full" v-model="form.barcode" autocomplete="barcode" />
-                <jet-input-error :message="form.errors.barcode" class="mt-2" />
+        </div>
+
+        <div v-if="transferItems.length" class="space-y-3 px-8 pb-6" dir="rtl">
+            <div
+                v-for="item in transferItems"
+                :key="item.barcode"
+                class="grid grid-cols-1 items-end gap-3 rounded-lg border bg-gray-50 p-4 md:grid-cols-4"
+            >
+                <div><strong>{{ __('Size') }}:</strong> {{ item.size }}</div>
+                <div><strong>{{ __('Barcode') }}:</strong> {{ item.barcode }}</div>
+                <div><strong>{{ __('Current Stock') }}:</strong> {{ item.available_stock }}</div>
+                <div>
+                    <jet-label :for="'quantity-' + item.barcode" :value="__('Stock')" />
+                    <jet-input
+                        :id="'quantity-' + item.barcode"
+                        type="number"
+                        min="0"
+                        :max="item.available_stock"
+                        class="mt-1 block w-full"
+                        v-model="item.quantity"
+                    />
+                </div>
             </div>
         </div>
     </MeeForm>
 </template>
 
 <script>
-    import { defineComponent } from 'vue'
-    import JetButton from '@/Jetstream/Button.vue'
-    import JetFormSection from '@/Jetstream/FormSection.vue'
-    import JetInput from '@/Jetstream/Input.vue'
-    import JetInputError from '@/Jetstream/InputError.vue'
-    import JetLabel from '@/Jetstream/Label.vue'
-    import JetActionMessage from '@/Jetstream/ActionMessage.vue'
-    import JetSecondaryButton from '@/Jetstream/SecondaryButton.vue'
-    import { MeeTextarea, MeeRadio, MeeStatus } from "@/Shared/Ui";
-    import Multiselect from '@suadelabs/vue3-multiselect'
-    import JetCheckbox from '@/Jetstream/Checkbox.vue'
-    import MeeForm from "@/Shared/Ui/MeeForm";
-    import {throttle} from "lodash";
-    import {computed} from "vue";
-    import {usePage} from "@inertiajs/inertia-vue3";
-    import axios from "axios";
+import { defineComponent, computed } from 'vue'
+import { usePage } from '@inertiajs/inertia-vue3'
+import JetInput from '@/Jetstream/Input.vue'
+import JetLabel from '@/Jetstream/Label.vue'
+import Multiselect from '@suadelabs/vue3-multiselect'
+import MeeForm from '@/Shared/Ui/MeeForm'
+import Currency from '@/Utils/Currency.js'
 
-    export default defineComponent({
-        components: {
-            MeeForm,
-            JetActionMessage,
-            JetButton,
-            JetFormSection,
-            JetInput,
-            JetInputError,
-            JetLabel,
-            JetSecondaryButton,
-            JetCheckbox,
-            MeeTextarea,
-            MeeRadio,
-            MeeStatus,
-            Multiselect,
-        },
-        props: {
-          users: Object,
-          products: Object,
-          sizes: Object
-        },
-        data() {
-            return {
-                form: this.$inertia.form({
-                    _method: 'POST',
-                    user: '',
-                    product: '',
-                    retail_price: '',
-                    wholesale_price: '',
-                    stock: '',
-                    size: '',
-                    barcode: '',
-                    price_before_discount: ''
-                }),
-                user: 'init',
-                product: 'init'
-            }
-        },
+export default defineComponent({
+    components: { MeeForm, JetInput, JetLabel, Multiselect },
 
-        mounted() {
-            this.$refs.user.$el.focus()
-        },
+    props: {
+        users: Object,
+        products: Object,
+        sizes: Object,
+        currency: Object,
+    },
 
-        methods: {
-            createUserProductInformation() {
-                if (!this.form.user || !this.form.product || !this.form.stock || !this.form.retail_price)
-                    this.showErrorMessage(__('Please fill required fields'))
-                if(this.admin.role === 2){
-                    if (this.form.stock > this.form.product.stock)
-                        this.showErrorMessage(__('The number you entered bigger that what you have!'))
-                    else{
-                        this.form.post(route('userProducts.store'), {
-                            errorBag: 'createUserProductInformation',
-                            preserveScroll: true
-                        });
-                    }
-                }else{
-                    let formData = new FormData;
-                    formData = this.form.data()
-                    axios.post(this.route('userProducts.store'), formData).then((response) => {
-                            if (response.data.success){
-                                this.showSuccessMessage(response.data.msg)
-                                this.form.user = ''
-                                this.form.product = ''
-                                this.form.stock = ''
-                                this.form.retail_price = ''
-                                this.form.barcode = ''
-                                this.form.wholesale_price = ''
-                                this.form.price_before_discount = ''
-                                this.form.barcode = ''
-                            }else{
-                                this.showErrorMessage('حدث خطأ ما')
-                            }
-                    }).catch(error => {
-                        this.showErrorMessage('حدث خطأ ما')
-                    })
-                }
-            },
-            showSuccessMessage(msg){
-                return this.$swal.fire({
-                        html: '<p class="text-white pt-5 font-extrabold">'+msg+'</p>',
-                        icon: 'success',
-                        iconColor: '#FFFFFF',
-                        width: 400,
-                        showConfirmButton: false,
-                        padding: '1em',
-                        toast: true,
-                        position: 'bottom-end',
-                        color: '#FFFFFF',
-                        background: '#34d399',
-                        timer: 2000,
-                        timerProgressBar: true,
-                    },
-                )
-            },
-            showErrorMessage(msg){
-                return this.$swal.fire({
-                        html: '<p class="text-white pt-5 font-extrabold">'+msg+'</p>',
-                        icon: 'warning',
-                        iconColor: '#FFFFFF',
-                        width: 400,
-                        showConfirmButton: false,
-                        padding: '1em',
-                        toast: true,
-                        position: 'bottom-end',
-                        color: '#FFFFFF',
-                        background: '#e96e83',
-                        timer: 2000,
-                        timerProgressBar: true,
-                    },
-                )
-            },
-            goToProducts(){
-                this.$refs.product.$el.focus()
-            },
-            goToPrice(){
-                this.$refs.price.$el.focus()
-            }
-        },
-
-        watch: {
+    data() {
+        return {
             form: {
-                handler: throttle(function () {
-                    if (this.form.user && this.form.product && this.user !== this.form.user && this.product !== this.form.product){
-                        this.user = this.form.user;
-                        this.product = this.form.product;
+                user: null,
+                product: null,
+                retail_price: '',
+                wholesale_price: '',
+                price_before_discount: '',
+            },
+            transferItems: [],
+            loading: false,
+        }
+    },
 
-                        let formData = new FormData;
-                        formData.append('user', this.form.user.id)
-                        formData.append('product', this.form.product.id)
-                        formData.append('barcode', this.form.barcode)
-                        axios.post(this.route('userProducts.match'), formData)
-                            .then((response) => {
-                                if (response){
-                                    this.form.stock = response.data.stock;
-                                    this.form.retail_price = response.data.retail_price;
-                                    this.form.wholesale_price = response.data.wholesale_price;
-                                    this.form.price_before_discount = response.data.price_before_discount;
-                                }
-                            })
-                    }
-                }),
-                deep: true
+    watch: {
+        'form.product'(product) {
+            this.prepareItems(product)
+            this.prefillProductPrices(product)
+            this.loadExistingPrices()
+        },
+        'form.user'() {
+            this.loadExistingPrices()
+        },
+    },
+
+    mounted() {
+        this.$refs.user.$el.focus()
+    },
+
+    methods: {
+        prepareItems(product) {
+            if (!product) {
+                this.transferItems = []
+                return
             }
+
+            const sizes = product.clone_list_sizes || product.list_sizes
+            if (Array.isArray(sizes)) {
+                this.transferItems = sizes.map(item => ({
+                    size: item.size,
+                    barcode: item.barcode,
+                    available_stock: Number(item.stock || 0),
+                    quantity: 0,
+                }))
+                return
+            }
+
+            this.transferItems = product.size && product.barcode ? [{
+                size: product.size,
+                barcode: product.barcode,
+                available_stock: Number(product.stock || 0),
+                quantity: 0,
+            }] : []
         },
-        setup() {
-            const admin = computed(() => usePage().props.value.auth.user)
-            return { admin }
+
+        prefillProductPrices(product) {
+            if (!product) return
+
+            const baseProduct = product.product || {}
+            const wholesale = product.wholesale_price ?? baseProduct.cost_price
+            const retail = product.retail_price ?? baseProduct.retail_price
+            const beforeDiscount = product.price_before_discount ?? baseProduct.price_before_discount
+
+            this.form.wholesale_price = this.toDisplay(wholesale)
+            this.form.retail_price = this.toDisplay(retail)
+            this.form.price_before_discount = beforeDiscount ? this.toDisplay(beforeDiscount) : ''
         },
-    })
+
+        loadExistingPrices() {
+            if (!this.form.user || !this.form.product) return
+
+            axios.post(this.route('userProducts.match'), {
+                user: this.form.user.id,
+                product: this.productColorId,
+            }).then(response => {
+                if (!response.data) return
+                this.form.retail_price = this.toDisplay(response.data.retail_price)
+                this.form.wholesale_price = this.toDisplay(response.data.wholesale_price)
+                this.form.price_before_discount = response.data.price_before_discount
+                    ? this.toDisplay(response.data.price_before_discount)
+                    : ''
+            })
+        },
+
+        createUserProductInformation() {
+            if (this.loading) return
+
+            const items = this.transferItems
+                .filter(item => Number(item.quantity) > 0)
+                .map(item => ({
+                    size: item.size,
+                    barcode: item.barcode,
+                    quantity: Number(item.quantity),
+                }))
+
+            if (!this.form.user || !this.form.product || !this.form.retail_price ||
+                !this.form.wholesale_price || !items.length) {
+                this.showErrorMessage(__('Please fill required fields'))
+                return
+            }
+
+            this.loading = true
+            axios.post(this.route('userProducts.store'), {
+                destination_user_id: this.form.user.id,
+                product_color_id: this.productColorId,
+                retail_price: this.form.retail_price,
+                wholesale_price: this.form.wholesale_price,
+                price_before_discount: this.form.price_before_discount || null,
+                currency_code: this.currency.code,
+                items,
+            }).then(response => {
+                this.showSuccessMessage(response.data.msg)
+                this.$inertia.get(this.route('userProducts.index', {
+                    shop: response.data.destination_user_id,
+                }))
+            }).catch(error => {
+                const errors = error.response?.data?.errors
+                const firstError = errors ? Object.values(errors).flat()[0] : null
+                this.showErrorMessage(firstError || error.response?.data?.message || 'حدث خطأ أثناء إرسال البضاعة')
+            }).finally(() => {
+                this.loading = false
+            })
+        },
+
+        toDisplay(value) {
+            if (value === null || value === undefined || value === '') return ''
+            return Currency.fromUsd(value, this.currency.rate, this.currency.decimals)
+        },
+
+        showSuccessMessage(msg) {
+            return this.$swal.fire({
+                html: '<p class="text-white pt-5 font-extrabold">' + msg + '</p>',
+                icon: 'success',
+                iconColor: '#FFFFFF',
+                width: 400,
+                showConfirmButton: false,
+                padding: '1em',
+                toast: true,
+                position: 'bottom-end',
+                color: '#FFFFFF',
+                background: '#34d399',
+                timer: 2000,
+                timerProgressBar: true,
+            })
+        },
+
+        showErrorMessage(msg) {
+            return this.$swal.fire({
+                html: '<p class="text-white pt-5 font-extrabold">' + msg + '</p>',
+                icon: 'warning',
+                iconColor: '#FFFFFF',
+                width: 400,
+                showConfirmButton: false,
+                padding: '1em',
+                toast: true,
+                position: 'bottom-end',
+                color: '#FFFFFF',
+                background: '#e96e83',
+                timer: 2500,
+                timerProgressBar: true,
+            })
+        },
+    },
+
+    computed: {
+        productColorId() {
+            return this.form.product?.product_color_id || this.form.product?.id || null
+        },
+    },
+
+    setup() {
+        const admin = computed(() => usePage().props.value.auth.user)
+        return { admin }
+    },
+})
 </script>

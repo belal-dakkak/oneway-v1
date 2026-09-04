@@ -29,6 +29,30 @@ class Currency
         return isInt ? result : result.toFixed(decimals);
     }
 
+    static fromUsd(value, rate, decimals = 2)
+    {
+        const amount = Number(value || 0);
+        const exchangeRate = Number(rate);
+        const precision = Number(decimals);
+
+        if (!Number.isFinite(amount) || !Number.isFinite(exchangeRate) || exchangeRate <= 0)
+            return (0).toFixed(precision);
+
+        return (amount * exchangeRate).toFixed(precision);
+    }
+
+    static toUsd(value, rate, decimals = 2)
+    {
+        const amount = Number(value || 0);
+        const exchangeRate = Number(rate);
+        const precision = Number(decimals);
+
+        if (!Number.isFinite(amount) || !Number.isFinite(exchangeRate) || exchangeRate <= 0)
+            return (0).toFixed(precision);
+
+        return (amount / exchangeRate).toFixed(precision);
+    }
+
     static format(value, label)
     {
         let result = 0.00;

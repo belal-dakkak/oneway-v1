@@ -82,7 +82,7 @@
                     </div>
                 </td>
 
-                <td class="mx-auto max-w-sm p-6 text-sm leading-6 sm:text-base sm:leading-7">{{ currencyExchange(item.product.cost_price, rate) }}</td>
+                <td class="mx-auto max-w-sm p-6 text-sm leading-6 sm:text-base sm:leading-7">{{ displayPrice(item.product.cost_price) }} {{ currency.code }}</td>
                 <!-- <td class="mx-auto max-w-sm p-6 text-sm leading-6 sm:text-base sm:leading-7">{{ item.product.raw_sizes }}</td> -->
                 <td class="flex flex-wrap space-x-3 mt-2" v-if="admin.role === 1 || admin.role === 2">
                      <!--<p @click="printItems(item.id,item.stock,item.barcode)" class="p-2 pb-1 rounded-md text-white btn-ghost bg-teal-400 hover:bg-teal-600 hover:text-white">
@@ -121,12 +121,12 @@
                                                    track-by="id" />
                                   </div>
                                   <div class="px-1">
-                                      <jet-label for="wholesale_price" :value="__('Wholesale Price')" dir="rtl" />
+                                      <jet-label for="wholesale_price" :value="__('Wholesale Price') + ' (' + currency.code + ')'" dir="rtl" />
                                       <jet-input id="wholesale_price" type="number" class="mt-1 block w-full" v-model="wholesale_price" autocomplete="wholesale_price" />
                                   </div>
 
                                   <div class="px-1">
-                                      <jet-label for="retail_price" :value="__('Retail Price')" dir="rtl" />
+                                      <jet-label for="retail_price" :value="__('Retail Price') + ' (' + currency.code + ')'" dir="rtl" />
                                       <jet-input id="retail_price" type="number" class="mt-1 block w-full" v-model="retail_price" autocomplete="retail_price" />
                                   </div>
 
@@ -166,7 +166,7 @@
                                         <div class="inline-block align-middle mt-2">
                                             <jet-label :for="'sizestock'+size.size" :value="__('Stock (الكمية)')" style="font-size: 1rem;" dir="rtl" />
                                             <jet-label :for="'sizestock'+size.size" :value="'الحد الأعظمي للكمية المراد إرسالها  '+size.stock" style="font-size: 14px;color: red;text-align: center;padding: 10px;" dir="rtl" />
-                                            <jet-input :id="'sizestock'+size.size" dir="ltr" type="number" min="0" :max="lsizes[index].stock" class="mt-1 block w-full" v-model="size.stock" />
+                                            <jet-input :id="'sizestock'+size.size" dir="ltr" type="number" min="0" :max="size.available_stock" class="mt-1 block w-full" v-model="size.quantity" />
                                         </div>
                                     </div>
                                 </div>
@@ -235,6 +235,7 @@ export default {
         merchants: Object,
         sizes: Object,
         rate: Number,
+        currency: Object,
     },
     data() {
         return {
@@ -259,30 +260,27 @@ export default {
             barcode: '',
             lsizes: null,
             clsizes:null,
-            rate: this.rate,
-            currencyExchange: Currency.getExchangeMethod(),
             page: 2,
 
         }
     },
     methods: {
         confirmResult(){
-            if (!this.user || !this.stock  || !this.retail_price  || !this.wholesale_price || !this.merchant ){
+            const destinationId = this.user?.id
+            const items = (this.clsizes || []).filter(size => Number(size.quantity) > 0)
+            if (!destinationId || !this.retail_price || !this.wholesale_price || !items.length){
                 this.resultError = true;
             }else{
                 this.resultLoading = true;
                 let formData = new FormData;
-                formData.append('user', this.user.id)
+                formData.append('destination_user_id', destinationId)
                 if (this.merchant)
-                    formData.append('merchant', this.merchant.id)
-                formData.append('retail_price', this.retail_price / this.rate)
-                formData.append('wholesale_price', this.wholesale_price / this.rate)
-                formData.append('stock', this.stock)
-                formData.append('product', this.itemId)
-                // formData.append('size', this.size)
-                // formData.append('barcode', this.barcode)
-                formData.append('lsizes', JSON.stringify(this.clsizes))
-                formData.append('travel', '1')
+                    formData.append('merchant_id', this.merchant.id)
+                formData.append('retail_price', this.retail_price)
+                formData.append('wholesale_price', this.wholesale_price)
+                formData.append('currency_code', this.currency.code)
+                formData.append('product_color_id', this.itemId)
+                formData.append('items', JSON.stringify(items))
 
                 axios.post(this.route('userProducts.store'), formData,{
                     headers: {
@@ -292,6 +290,7 @@ export default {
                 }).then((result) => {
                     if (result.status === 200){
                         this.showSuccessMessage(result.data.msg)
+                        this.$inertia.get(route('userProducts.index', {shop: destinationId}))
                     }else{
                         this.showErrorMessage('حدث خطأ ما')
                     }
@@ -306,7 +305,10 @@ export default {
                     this.user = null;
                     this.retail_price = null;
                     this.wholesale_price = null;
-                } );
+                }).catch((error) => {
+                    this.resultLoading = false;
+                    this.showErrorMessage(error.response?.data?.message || 'حدث خطأ أثناء إرسال البضاعة')
+                });
             }
         },
         searchForModel(){
@@ -336,13 +338,17 @@ export default {
             this.item = item;
             this.barcode = item.barcode;
             this.lsizes = item.list_sizes
-            this.clsizes = item.clone_list_sizes
+            this.clsizes = (item.clone_list_sizes || []).map(size => ({
+                ...size,
+                available_stock: Number(size.stock),
+                quantity: 0,
+            }))
             this.stock = item.stock;
-            this.wholesale_price = this.currencyExchange(item.product.cost_price, this.rate);
-            this.retail_price    = this.currencyExchange(item.product.retail_price, this.rate);
-
-
-
+            this.wholesale_price = this.displayPrice(item.product.cost_price);
+            this.retail_price    = this.displayPrice(item.product.retail_price);
+        },
+        displayPrice(value) {
+            return Currency.fromUsd(value, this.currency.rate, this.currency.decimals)
         },
         async printItems(item, barcode){
             this.isLoading = true;
