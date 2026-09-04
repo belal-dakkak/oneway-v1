@@ -183,7 +183,7 @@ class InventoryTransferTest extends TestCase
         $this->assertEquals(50, $destination->fresh()->wholesale_price);
     }
 
-    public function test_warehouse_destinations_exclude_itself_and_keep_other_local_warehouses(): void
+    public function test_transfer_destinations_follow_catalog_and_inventory_source_rules(): void
     {
         $warehouse = $this->user(User::ROLE_WAREHOUSE, 4, 'source-warehouse@example.test');
         $otherWarehouse = $this->user(User::ROLE_WAREHOUSE, 4, 'destination-warehouse@example.test');
