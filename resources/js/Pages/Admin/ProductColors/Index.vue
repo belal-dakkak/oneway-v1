@@ -73,6 +73,10 @@
                     <div class="ml-4">
                         <div class="text-sm text-center font-medium bg-fuchsia-200 p-1 rounded-lg">Barcode: {{ item.barcode }}</div>
 
+                        <div class="text-sm text-center font-medium bg-amber-100 p-1 rounded-lg">
+                            الكمية المسجلة: {{ catalogStock(item) }}
+                        </div>
+
                         <!-- <div class="text-sm text-center font-medium bg-teal-200 p-1 rounded-lg">Sizes: {{ item.size }}</div> -->
 
                         <div class="text-sm text-center font-medium bg-rose-200 p-1 rounded-lg">Color: {{ item.color.name }} {{ item.color.code }}</div>
@@ -109,8 +113,11 @@
                           <span class="absolute top-1 right-1 mt-1 mr-2 cursor-pointer" @click="closeModal()">X</span>
 
                           <div class="modal-header flex justify-center">
-                              <h3 class="text-teal-600 text-3xl font-bold">{{ __('Send')}} {{this.item.product.name}} {{ __('To')}}</h3>
-                          </div>
+                               <h3 class="text-teal-600 text-3xl font-bold">{{ __('Send')}} {{this.item.product.name}} {{ __('To')}}</h3>
+                           </div>
+                           <div class="mt-3 text-center text-lg font-bold text-pcr" dir="rtl">
+                               إجمالي الكمية المراد إرسالها: {{ transferQuantityTotal }}
+                           </div>
 
                           <div class="modal-body border-b-4 border-state-500 pb-6"  style="height: 500px;overflow: scroll;">
                               <div class="flex justify-around items-stretch py-6">
@@ -160,7 +167,8 @@
                                         </div>
                                         <div class="inline-block align-middle mt-2" dir="rtl">
                                             <jet-label for="" :value="'Barcode (الباركود)'" style="font-size: 1rem;" />
-                                            <jet-label for="" :value="size.barcode" style="font-size: 1rem;color: red;text-align: center;padding: 10px;" />
+                                             <jet-label for="" :value="size.barcode" style="font-size: 1rem;color: red;text-align: center;padding: 10px;" />
+                                             <jet-label for="" :value="'الكمية المسجلة: ' + (Number(size.stock) || 0)" style="font-size: 14px;color: #92400e;text-align: center;padding: 10px;" dir="rtl" />
                                         </div>
                                         <div class="inline-block align-middle mt-2">
                                             <jet-label :for="'sizestock'+size.size" :value="__('Stock (الكمية)')" style="font-size: 1rem;" dir="rtl" />
@@ -263,7 +271,21 @@ export default {
 
         }
     },
+    computed: {
+        transferQuantityTotal() {
+            return (this.clsizes || []).reduce((total, size) => {
+                const quantity = Number(size.quantity)
+                return total + (Number.isFinite(quantity) && quantity > 0 ? quantity : 0)
+            }, 0)
+        },
+    },
     methods: {
+        catalogStock(item) {
+            const sizes = Array.isArray(item?.clone_list_sizes) ? item.clone_list_sizes : []
+            if (!sizes.length) return Number(item?.stock) || 0
+
+            return sizes.reduce((total, size) => total + (Number(size.stock) || 0), 0)
+        },
         confirmResult(){
             this.normalizePrice('retail_price')
             this.normalizePrice('wholesale_price')
