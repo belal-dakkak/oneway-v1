@@ -68,6 +68,8 @@ class OrderRepository
     {
         try {
             DB::beginTransaction();
+            $countryId = (int) auth()->user()->country_id;
+            $displayCurrency = $this->currencyService->displayForCountry($countryId);
             $orderCash = $request->get('type') == Order::TYPE_CASH;
             $payment = $request->get('payment') ? $request->get('payment')['value']:0;
 
@@ -97,6 +99,8 @@ class OrderRepository
                     'payment_type' => $payment,
                     'curr_type' => $request->get('currency')['value'],
                     'curr_rate' => $request->get('currency')['rate'],
+                    'display_currency' => $displayCurrency['code'] ?? null,
+                    'display_rate' => $displayCurrency['rate'] ?? null,
                     'discount' => $request->get('discount', 0),
                     'total_price_before_discount' => $totalPriceBeforeDisc,
                 ]);
@@ -118,6 +122,8 @@ class OrderRepository
                     'payment_type' => $payment,
                     'curr_type' => $request->get('currency')['value'],
                     'curr_rate' => $request->get('currency')['rate'],
+                    'display_currency' => $displayCurrency['code'] ?? null,
+                    'display_rate' => $displayCurrency['rate'] ?? null,
                     'discount' => $request->get('discount', 0),
                     'total_price_before_discount' => $totalPriceBeforeDisc,
                 ]);
@@ -405,9 +411,13 @@ class OrderRepository
                 goto generate;
 
 
-            $userId = auth()->id();
-            $countryCode = Country::code();
-            $countryId = Country::id($countryCode);
+            $userId = $request->is('api/*')
+                ? (int) $request->input('authenticated_user_id')
+                : auth()->id();
+            $countryId = $request->is('api/*')
+                ? (int) $request->input('country_id', optional(auth()->user())->country_id ?: Country::id())
+                : Country::id();
+            $countryCode = Country::codeFromId($countryId);
             $paymentType = $request->get('payment')['name'];
             $currencyCode = $this->currencyService->validateForCountry(
                 strtoupper((string) $request->get('currency', Country::defaultCurrency($countryId))),
@@ -418,6 +428,7 @@ class OrderRepository
                 throw new Exception('Card payment is not available for Syria.');
             }
             $currencyRate = $this->currencyService->rate($currencyCode);
+            $displayCurrency = $this->currencyService->displayForCountry($countryId);
 
             $order = new WebsiteOrder([
                 'notes' => $request->get('notes'),
@@ -437,6 +448,8 @@ class OrderRepository
                 'payment_type' => $request->get('payment')['name'],
                 'curr_type' => $currencyCode,
                 'curr_rate' => $currencyRate,
+                'display_currency' => $displayCurrency['code'] ?? null,
+                'display_rate' => $displayCurrency['rate'] ?? null,
                 'country_id' => $countryId,
                 'status' => $request->get('payment')['name'] === 'card' ? WebsiteOrder::STATUS_UNPAID : WebsiteOrder::STATUS_PENDING,
             ]);
@@ -1856,6 +1869,7 @@ class OrderRepository
             // 'total_price_without_tax' => array_sum(array_column($dataArr,'price_without_tax')),
             // 'total_tax_value'         => array_sum(array_column($dataArr,'tax_value')),
             'totalRefunds'            => $totalRefunds,
+            'currency'                => Country::defaultCurrency((int) $country),
             'filters'                 => $request->all(['search', 'field', 'direction']),
             'shops'                   => $main_shops,
         ];

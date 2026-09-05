@@ -79,6 +79,17 @@ class Country
         return self::definitionFromId($countryId)['default_currency'] ?? 'USD';
     }
 
+    public static function baseCurrency(int $countryId): string
+    {
+        return self::definitionFromId($countryId)['base_currency'] ?? self::defaultCurrency($countryId);
+    }
+
+    public static function displayCurrency(int $countryId): ?string
+    {
+        $currency = self::definitionFromId($countryId)['display_currency'] ?? null;
+        return $currency ? strtoupper((string) $currency) : null;
+    }
+
     public static function timezone(int $countryId): string
     {
         return self::definitionFromId($countryId)['timezone'] ?? config('app.timezone');

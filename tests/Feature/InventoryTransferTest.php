@@ -169,9 +169,9 @@ class InventoryTransferTest extends TestCase
         app(InventoryTransferService::class)->transfer($warehouse, [
             'destination_user_id' => $shop->id,
             'product_color_id' => $productColor->id,
-            'currency_code' => 'SYP',
-            'retail_price' => 1300000,
-            'wholesale_price' => 650000,
+            'currency_code' => 'USD',
+            'retail_price' => 100,
+            'wholesale_price' => 50,
             'price_before_discount' => null,
             'merchant_id' => null,
             'items' => [['size' => 'M', 'barcode' => 'SY-M', 'quantity' => 2]],
@@ -221,9 +221,9 @@ class InventoryTransferTest extends TestCase
             'source_type' => InventoryTransferService::SOURCE_CATALOG,
             'destination_user_id' => $shop->id,
             'product_color_id' => $productColor->id,
-            'currency_code' => 'SYP',
-            'retail_price' => 260000,
-            'wholesale_price' => 130000,
+            'currency_code' => 'USD',
+            'retail_price' => 20,
+            'wholesale_price' => 10,
             'items' => [
                 ['size' => 'M', 'barcode' => 'CATALOG-M', 'quantity' => 1000],
             ],
@@ -252,9 +252,9 @@ class InventoryTransferTest extends TestCase
             'source_type' => InventoryTransferService::SOURCE_CATALOG,
             'destination_user_id' => $warehouse->id,
             'product_color_id' => $productColor->id,
-            'currency_code' => 'SYP',
-            'retail_price' => 260000,
-            'wholesale_price' => 130000,
+            'currency_code' => 'USD',
+            'retail_price' => 20,
+            'wholesale_price' => 10,
             'items' => [
                 ['size' => 'M', 'barcode' => 'CATALOG-SELF-M', 'quantity' => 100],
             ],
@@ -275,9 +275,9 @@ class InventoryTransferTest extends TestCase
             'source_type' => InventoryTransferService::SOURCE_CATALOG,
             'destination_user_id' => $shop->id,
             'product_color_id' => $productColor->id,
-            'currency_code' => 'SYP',
-            'retail_price' => 260000,
-            'wholesale_price' => 130000,
+            'currency_code' => 'USD',
+            'retail_price' => 20,
+            'wholesale_price' => 10,
             'items' => [
                 ['size' => 'M', 'barcode' => 'ADMIN-CATALOG-M', 'quantity' => 50],
             ],
@@ -298,9 +298,9 @@ class InventoryTransferTest extends TestCase
             'source_type' => InventoryTransferService::SOURCE_CATALOG,
             'destination_user_id' => $shop->id,
             'product_color_id' => $productColor->id,
-            'currency_code' => 'SYP',
-            'retail_price' => 260000,
-            'wholesale_price' => 130000,
+            'currency_code' => 'USD',
+            'retail_price' => 20,
+            'wholesale_price' => 10,
             'items' => [
                 ['size' => 'XL', 'barcode' => 'FAKE-CATALOG-XL', 'quantity' => 50],
             ],
@@ -324,9 +324,9 @@ class InventoryTransferTest extends TestCase
         $this->actingAs($warehouse)->postJson(route('userProducts.store'), [
             'destination_user_id' => $destination->id,
             'product_color_id' => $productColor->id,
-            'currency_code' => 'SYP',
-            'retail_price' => 260000,
-            'wholesale_price' => 130000,
+            'currency_code' => 'USD',
+            'retail_price' => 20,
+            'wholesale_price' => 10,
             'items' => [
                 ['size' => 'M', 'barcode' => 'WAREHOUSE-M', 'quantity' => 2],
             ],
@@ -354,9 +354,9 @@ class InventoryTransferTest extends TestCase
         $this->actingAs($warehouse)->postJson(route('userProducts.store'), [
             'destination_user_id' => $warehouse->id,
             'product_color_id' => $productColor->id,
-            'currency_code' => 'SYP',
-            'retail_price' => 260000,
-            'wholesale_price' => 130000,
+            'currency_code' => 'USD',
+            'retail_price' => 20,
+            'wholesale_price' => 10,
             'items' => [
                 ['size' => 'M', 'barcode' => 'SELF-M', 'quantity' => 2],
             ],
@@ -424,6 +424,29 @@ class InventoryTransferTest extends TestCase
         ]);
 
         $this->assertSame(5, $productColor->fresh()->stock);
+        $this->assertDatabaseCount('user_products', 0);
+    }
+
+    public function test_syria_transfer_rejects_syp_as_an_input_currency(): void
+    {
+        $admin = $this->user(User::ROLE_ADMIN, 4, 'syria-currency-admin@example.test');
+        $shop = $this->user(User::ROLE_SHOP, 4, 'syria-currency-shop@example.test');
+        $productColor = $this->productColor(4, [
+            ['size' => 'M', 'barcode' => 'SY-USD-M', 'stock' => 5],
+        ]);
+
+        $this->actingAs($admin)->postJson(route('userProducts.store'), [
+            'source_type' => InventoryTransferService::SOURCE_CATALOG,
+            'destination_user_id' => $shop->id,
+            'product_color_id' => $productColor->id,
+            'currency_code' => 'SYP',
+            'retail_price' => 260000,
+            'wholesale_price' => 130000,
+            'items' => [
+                ['size' => 'M', 'barcode' => 'SY-USD-M', 'quantity' => 1],
+            ],
+        ])->assertStatus(422)->assertJsonValidationErrors('currency_code');
+
         $this->assertDatabaseCount('user_products', 0);
     }
 

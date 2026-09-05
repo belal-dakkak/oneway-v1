@@ -4,6 +4,7 @@ namespace App\Http\Controllers;
 
 use App\Models\Currency;
 use App\Models\CountryCommerceSetting;
+use App\Services\CurrencyService;
 use App\Support\Country;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Redirect;
@@ -63,6 +64,7 @@ class CurrencyController extends Controller
         }
         Currency::query()->updateOrCreate(['name' => 'aed'], ['label' => 'AED', 'rate' => $data['aed']]);
         Currency::query()->updateOrCreate(['name' => 'syp'], ['label' => 'SYP', 'rate' => $data['syp']]);
+        app(CurrencyService::class)->clearRateCache();
         foreach (Country::allowedIds() as $countryId) {
             $commerce = $data['commerce'][$countryId] ?? $data['commerce'][(string) $countryId] ?? null;
             if ($commerce) {

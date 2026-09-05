@@ -6,6 +6,7 @@
                     :categories="categories"
                     :colors="colors"
                     :sizes="sizes"
+                    :currency="currency"
                 />
 
                 <jet-section-border />
@@ -37,6 +38,7 @@ export default defineComponent({
         categories: Array,
         colors: Array,
         sizes: Array,
+        currency: Object,
     }
 })
 </script>

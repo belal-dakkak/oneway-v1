@@ -452,6 +452,17 @@
                 </tr>
                 @endif
 
+                @if(isset($displayTotal) && $displayTotal !== null)
+                <tr>
+                    <td style="text-align: center !important;direction: rtl;" colspan="3" class="sum-up line">
+                        المقابل التقريبي (للعرض فقط) / Approximate display value
+                    </td>
+                    <td style="text-align: center !important;direction: rtl;" colspan="3" class="line price">
+                        ≈ {{ number_format($displayTotal, $displayDecimals, '.', ',') }} {{ $displayCurrency }}
+                    </td>
+                </tr>
+                @endif
+
                 <tr>
                     <td style="text-align: center !important;direction: rtl;" colspan="3" class="sum-up line">
                         إجمالي الضريبة  / Total VAT

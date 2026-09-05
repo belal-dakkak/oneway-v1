@@ -50,12 +50,20 @@ class ProductController extends Controller
             return $products;
         }
 
-        $rate = $this->currencyService->rate(Country::defaultCurrency(auth()->user()->country_id));
+        $countryId = (int) auth()->user()->country_id;
+        $currencyCode = Country::defaultCurrency($countryId);
+        $rate = $this->currencyService->rate($currencyCode);
 
         return Inertia::render('Admin/Products/Index', [
             'products' => $products,
             'filters'  => $request->all(['search', 'field', 'direction']),
-            'rate'     => $rate
+            'rate'     => $rate,
+            'currency' => [
+                'code' => $currencyCode,
+                'rate' => $rate,
+                'decimals' => $currencyCode === 'SYP' ? 0 : 2,
+                'display' => $this->currencyService->displayForCountry($countryId),
+            ],
         ]);
     }
 
@@ -65,11 +73,14 @@ class ProductController extends Controller
         $colors = Color::query()->get();
         $sizes = getSizesVariables();
         $new_sizes = getNewSizesVariables();
+        $currencyCode = Country::defaultCurrency((int) auth()->user()->country_id);
+        $rate = $this->currencyService->rate($currencyCode);
 
         return Inertia::render('Admin/Products/Create', [
             'categories' => $categories,
             'colors' => $colors,
             'sizes' => $new_sizes,
+            'currency' => ['code' => $currencyCode, 'rate' => $rate, 'decimals' => $currencyCode === 'SYP' ? 0 : 2],
         ]);
     }
 
@@ -85,6 +96,7 @@ class ProductController extends Controller
         $selectedColors = getColors($product->colors);
 
         $rate = $this->currencyService->rate(Country::defaultCurrency(auth()->user()->country_id));
+        $currencyCode = Country::defaultCurrency((int) auth()->user()->country_id);
 
         return Inertia::render('Admin/Products/Edit', [
             'categories' => $categories,
@@ -93,7 +105,8 @@ class ProductController extends Controller
             'product' => $product,
             'selected_sizes' => $selectedSizes,
             'selected_colors' => $selectedColors,
-            'rate' => $rate
+            'rate' => $rate,
+            'currency' => ['code' => $currencyCode, 'rate' => $rate, 'decimals' => $currencyCode === 'SYP' ? 0 : 2],
         ]);
     }
 

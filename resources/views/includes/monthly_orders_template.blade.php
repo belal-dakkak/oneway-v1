@@ -214,7 +214,7 @@
                                 <td class="td-med"> {{ $item['price_without_tax'] ? $item['price_without_tax'] : 0 }} </td>
                                 <td class="td-med"> {{ $item['tax_value'] ? $item['tax_value'] : 0 }} </td>
                                 <td class="td-med"> {{ $item['total_price'] ? $item['total_price'] : 0 }} </td>
-                                <td class="td-med"> AED </td>
+                                <td class="td-med"> {{ $all_orders['currency'] ?? 'USD' }} </td>
                             </tr>
 
                     @endforeach

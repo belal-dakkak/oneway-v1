@@ -226,6 +226,13 @@
             <td></td>
             <td style="font-weight: bolder; color: darkslateblue">{{$formatMoney($order->total_price)}}</td>
         </tr>
+        @if(isset($displayTotal) && $displayTotal !== null)
+            <tr class="total">
+                <td style="font-weight: bold">المقابل التقريبي (للعرض فقط)<br>Approximate display value</td>
+                <td></td>
+                <td style="font-weight: bolder; color: #64748b">≈ {{ number_format($displayTotal, $displayDecimals, '.', ',') }} {{ $displayCurrency }}</td>
+            </tr>
+        @endif
         <tr class="total">
             <td style="font-weight: bold">إجمالي المدفوعات <br> Total payments</td>
             <td></td>

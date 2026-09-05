@@ -42,26 +42,30 @@
                         </div>
 
                         <div class="col-span-8 py-4 sm:col-span-4">
-                            <jet-label for="cost_price" :value="__('Cost Price')" dir="rtl" />
-                            <jet-input id="cost_price" type="number" class="mt-1 block w-full" v-model="form.cost_price" autocomplete="cost_price" />
+                            <jet-label for="cost_price" :value="__('Cost Price') + ' (' + currency.code + ')'" dir="rtl" />
+                            <jet-input id="cost_price" type="number" min="0" :step="currency.code === 'SYP' ? 1 : 0.01" class="mt-1 block w-full" v-model="form.cost_price" autocomplete="cost_price" @blur="normalizePrice('cost_price')" />
+                            <syp-equivalent :usd="form.cost_price" />
                             <jet-input-error :message="form.errors.cost_price" class="mt-2" />
                         </div>
 
                         <div class="col-span-8 py-4 sm:col-span-4">
-                            <jet-label for="sale_price" :value="__('Sale Price')" dir="rtl" />
-                            <jet-input id="sale_price" type="number" min="0" class="mt-1 block w-full" v-model="form.sale_price" autocomplete="sale_price" />
+                            <jet-label for="sale_price" :value="__('Sale Price') + ' (' + currency.code + ')'" dir="rtl" />
+                            <jet-input id="sale_price" type="number" min="0" :step="currency.code === 'SYP' ? 1 : 0.01" class="mt-1 block w-full" v-model="form.sale_price" autocomplete="sale_price" @blur="normalizePrice('sale_price')" />
+                            <syp-equivalent :usd="form.sale_price" />
                             <jet-input-error :message="form.errors.sale_price" class="mt-2" />
                         </div>
 
                         <div class="col-span-8 py-4 sm:col-span-4">
-                            <jet-label for="retail_price" :value="__('Retail Price')" dir="rtl" />
-                            <jet-input id="retail_price" type="number" class="mt-1 block w-full" v-model="form.retail_price" autocomplete="retail_price" />
+                            <jet-label for="retail_price" :value="__('Retail Price') + ' (' + currency.code + ')'" dir="rtl" />
+                            <jet-input id="retail_price" type="number" min="0" :step="currency.code === 'SYP' ? 1 : 0.01" class="mt-1 block w-full" v-model="form.retail_price" autocomplete="retail_price" @blur="normalizePrice('retail_price')" />
+                            <syp-equivalent :usd="form.retail_price" />
                             <jet-input-error :message="form.errors.retail_price" class="mt-2" />
                         </div>
 
                         <div class="col-span-8 py-4 sm:col-span-4">
-                            <jet-label for="price_before_discount" :value="__('Price Before Discount')" dir="rtl" />
-                            <jet-input id="price_before_discount" type="number" class="mt-1 block w-full" v-model="form.price_before_discount" autocomplete="price_before_discount" />
+                            <jet-label for="price_before_discount" :value="__('Price Before Discount') + ' (' + currency.code + ')'" dir="rtl" />
+                            <jet-input id="price_before_discount" type="number" min="0" :step="currency.code === 'SYP' ? 1 : 0.01" class="mt-1 block w-full" v-model="form.price_before_discount" autocomplete="price_before_discount" @blur="normalizePrice('price_before_discount')" />
+                            <syp-equivalent :usd="form.price_before_discount" />
                             <jet-input-error :message="form.errors.price_before_discount" class="mt-2" />
                         </div>
 
@@ -196,6 +200,7 @@ export default defineComponent({
         categories: Array,
         colors: Array,
         sizes: Array,
+        currency: Object,
     },
     data(){
         return {
@@ -227,6 +232,10 @@ export default defineComponent({
         }
     },
     methods:{
+        normalizePrice(field) {
+            if (this.form[field] === '' || this.form[field] === null || this.form[field] === undefined) return
+            this.form[field] = Currency.normalizeInput(this.form[field], this.currency.code)
+        },
         AddField: function () {
             this.products.push({ image: '', stock: '', color: '' ,sizes:[{size: '',stock: '0'}]});
         },

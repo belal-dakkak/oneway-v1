@@ -83,6 +83,7 @@
                   <td class="mx-auto max-w-sm p-6 text-sm leading-6 sm:text-base sm:leading-7">
                       <div class="ml-4">
                             <div class="text-sm font-medium">{{ formattedPrice(item.retail_price) }} {{ currency.code }}</div>
+                            <syp-equivalent :usd="item.retail_price" :display-currency="currency.display" />
                       </div>
                   </td>
                   <td class="mx-auto max-w-sm p-6 text-sm leading-6 sm:text-base sm:leading-7">
@@ -136,16 +137,19 @@
                                     <div class="px-1">
                                         <jet-label for="wholesale_price" :value="__('Wholesale Price') + ' (' + currency.code + ')'" dir="rtl" />
                                         <jet-input id="wholesale_price" type="number" min="0" :step="priceStep()" class="mt-1 block w-full" v-model="wholesale_price" autocomplete="wholesale_price" @blur="normalizePrice('wholesale_price')" />
+                                        <syp-equivalent :usd="wholesale_price" :display-currency="currency.display" />
                                     </div>
 
                                     <div class="px-1">
                                         <jet-label for="retail_price" :value="__('Retail Price') + ' (' + currency.code + ')'" dir="rtl" />
                                         <jet-input id="retail_price" type="number" min="0" :step="priceStep()" class="mt-1 block w-full" v-model="retail_price" autocomplete="retail_price" @blur="normalizePrice('retail_price')" />
+                                        <syp-equivalent :usd="retail_price" :display-currency="currency.display" />
                                     </div>
 
                                     <div class="px-1">
                                         <jet-label for="price_before_discount" :value="__('Price Before Discount') + ' (' + currency.code + ')'" dir="rtl" />
                                         <jet-input id="price_before_discount" type="number" min="0" :step="priceStep()" class="mt-1 block w-full" v-model="price_before_discount" autocomplete="price_before_discount" @blur="normalizePrice('price_before_discount')" />
+                                        <syp-equivalent :usd="price_before_discount" :display-currency="currency.display" />
                                     </div>
 
                                     <div class="px-1">

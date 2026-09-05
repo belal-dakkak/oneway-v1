@@ -21,7 +21,8 @@
 
                         <div class="w-full px-6">
                             <jet-label for="amount" value="المبلغ المدفوع" dir="rtl" />
-                            <jet-input ref="price" id="amount" type="number" class="mt-1 block w-full" v-model="form.amount" autocomplete="amount" />
+                            <jet-input ref="price" id="amount" type="number" min="0" step="0.01" class="mt-1 block w-full" v-model="form.amount" autocomplete="amount" />
+                            <syp-equivalent :usd="form.amount" />
                             <jet-input-error :message="form.errors.amount" class="mt-2" />
                         </div>
 

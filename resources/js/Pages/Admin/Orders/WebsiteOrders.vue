@@ -149,7 +149,10 @@
                         <td class="p-4">
                             <div class="flex flex-col gap-1 text-xs">
                                 <span class="bg-purple-100 p-1 rounded text-center">إجمالي المنتجات: {{ formatMoney(item.total_price - (item.shipping_fee || 0) - (item.cod_fee || 0), item) }}</span>
-                                <span class="bg-fuchsia-100 p-1 rounded text-center">إجمالي: {{ formatMoney(item.total_price, item) }}</span>
+                                <span class="bg-fuchsia-100 p-1 rounded text-center">
+                                    إجمالي: {{ formatMoney(item.total_price, item) }}
+                                    <syp-equivalent v-if="item.display_currency && Number(item.display_rate) > 0" :usd="item.total_price" :display-currency="orderDisplayCurrency(item)" />
+                                </span>
                                 <span v-if="item.shipping_fee > 0" class="bg-blue-50 p-1 rounded text-center text-[10px]">توصيل: {{ formatMoney(item.shipping_fee, item) }}</span>
                                 <span v-if="item.cod_fee > 0" class="bg-orange-50 p-1 rounded text-center text-[10px]">رسوم دفع: {{ formatMoney(item.cod_fee, item) }}</span>
                                 <span class="bg-teal-100 p-1 rounded text-center">مدفوع: {{ formatMoney(item.paid_price, item) }}</span>
@@ -363,6 +366,15 @@ export default {
                 minimumFractionDigits: decimals,
                 maximumFractionDigits: decimals,
             }) + ' ' + currency;
+        },
+        orderDisplayCurrency(order) {
+            if (!order?.display_currency || Number(order?.display_rate) <= 0) return null;
+            return {
+                code: order.display_currency,
+                rate: Number(order.display_rate),
+                decimals: order.display_currency === 'SYP' ? 0 : 2,
+                approximate: true,
+            };
         },
         async changeStatus(item) {
             try {

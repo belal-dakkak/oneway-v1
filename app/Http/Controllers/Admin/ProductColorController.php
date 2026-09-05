@@ -83,6 +83,7 @@ class ProductColorController extends Controller
                 'code' => $currencyCode,
                 'rate' => $rate,
                 'decimals' => $currencyCode === 'SYP' ? 0 : 2,
+                'display' => app(CurrencyService::class)->displayForCountry((int) auth()->user()->country_id),
             ],
         ]);
     }
@@ -139,12 +140,15 @@ class ProductColorController extends Controller
         $colors = Color::query()->get();
         $sizes = getSizesVariables();
         $new_sizes = getNewSizesVariables();
+        $currencyCode = Country::defaultCurrency((int) auth()->user()->country_id);
+        $rate = app(CurrencyService::class)->rate($currencyCode);
 
         return Inertia::render('Admin/ProductColors/Create', [
             'categories' => $categories,
             'colors' => $colors,
             'sizes' => $new_sizes,
             'new_sizes' => $new_sizes,
+            'currency' => ['code' => $currencyCode, 'rate' => $rate, 'decimals' => $currencyCode === 'SYP' ? 0 : 2],
         ]);
     }
 

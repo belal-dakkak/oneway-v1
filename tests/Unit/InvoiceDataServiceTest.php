@@ -91,6 +91,41 @@ class InvoiceDataServiceTest extends TestCase
         $this->assertSame(200001.0, $line->total_price);
     }
 
+    public function test_new_syria_usd_invoice_uses_its_frozen_syp_display_rate(): void
+    {
+        $order = new WebsiteOrder([
+            'curr_type' => 'USD',
+            'curr_rate' => 1,
+            'total_price' => 12.20,
+            'display_currency' => 'SYP',
+            'display_rate' => 13000,
+        ]);
+        $order->setRelation('items', new Collection());
+
+        $data = (new InvoiceDataService())->forOrder($order);
+
+        $this->assertSame('USD', $data['currency']);
+        $this->assertSame(2, $data['decimals']);
+        $this->assertSame('SYP', $data['displayCurrency']);
+        $this->assertSame(0, $data['displayDecimals']);
+        $this->assertSame(158600.0, $data['displayTotal']);
+    }
+
+    public function test_historical_syp_invoice_is_not_reinterpreted_without_display_snapshot(): void
+    {
+        $order = new WebsiteOrder([
+            'curr_type' => 'SYP',
+            'curr_rate' => 13000,
+            'total_price' => 200001,
+        ]);
+        $order->setRelation('items', new Collection());
+
+        $data = (new InvoiceDataService())->forOrder($order);
+
+        $this->assertSame('SYP', $data['currency']);
+        $this->assertNull($data['displayTotal']);
+    }
+
     private function orderItem(Product $product, int $colorId, int $qty, float $unit, float $total, float $net, float $tax): OrderItem
     {
         $color = new ProductColor();

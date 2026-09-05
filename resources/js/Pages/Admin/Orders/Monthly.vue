@@ -94,22 +94,22 @@
 
             <div class="flex flex-col" v-if="user.role === 1">
                 <label dir="rtl" class="pr-2"> إجمالي المبيع</label>
-                <span class="bg-emerald-500 px-2 rounded-md text-3xl text-white">{{ Number(totalSales).toFixed(2) }}</span>
+                <span class="bg-emerald-500 px-2 rounded-md text-3xl text-white">{{ money(totalSales) }}</span>
             </div>
 
             <div class="flex flex-col" v-if="user.role === 1">
                 <label dir="rtl" class="pr-2">  الإجمالي غير  ش.ض</label>
-                <span class="bg-emerald-500 px-2 rounded-md text-3xl text-white">{{ Number(totalPriceWithoutTax).toFixed(2) }}</span>
+                <span class="bg-emerald-500 px-2 rounded-md text-3xl text-white">{{ money(totalPriceWithoutTax) }}</span>
             </div>
 
             <div class="flex flex-col" v-if="user.role === 1">
                 <label dir="rtl" class="pr-2"> إجمالي الضريبه</label>
-                <span class="bg-emerald-500 px-2 rounded-md text-3xl text-white">{{ Number(totalTaxValue).toFixed(2) }}</span>
+                <span class="bg-emerald-500 px-2 rounded-md text-3xl text-white">{{ money(totalTaxValue) }}</span>
             </div>
 
             <div class="flex flex-col" v-if="user.role === 1">
                 <label dir="rtl" class="pr-2"> إجمالي المرتجعات</label>
-                <span class="bg-emerald-500 px-2 rounded-md text-3xl text-white">{{ Number(totalRefunds).toFixed(2) }}</span>
+                <span class="bg-emerald-500 px-2 rounded-md text-3xl text-white">{{ money(totalRefunds) }}</span>
             </div>
 
             <div class="flex flex-col" v-if="user.role === 1">
@@ -190,26 +190,26 @@
 
                   <td class="mx-auto max-w-sm p-6 text-sm leading-6 sm:text-base sm:leading-7">
                       <div class="ml-4">
-                          <div class="text-sm font-medium">{{ item.price_without_tax }}</div>
+                          <div class="text-sm font-medium">{{ money(item.price_without_tax) }}</div>
                       </div>
                   </td>
 
                   <td class="mx-auto max-w-sm p-6 text-sm leading-6 sm:text-base sm:leading-7">
                       <div class="ml-4">
-                          <div class="text-sm font-medium">{{ item.tax_value != null ? item.tax_value : 0 }}</div>
+                          <div class="text-sm font-medium">{{ money(item.tax_value != null ? item.tax_value : 0) }}</div>
                       </div>
                   </td>
 
                   <td class="mx-auto max-w-sm p-6 text-sm leading-6 sm:text-base sm:leading-7">
                       <div class="ml-4">
-                          <div class="text-sm font-medium">{{ item.total_price }}</div>
+                          <div class="text-sm font-medium">{{ money(item.total_price) }}</div>
                       </div>
                   </td>
 
 
                   <td class="mx-auto max-w-sm p-6 text-sm leading-6 sm:text-base sm:leading-7">
                       <div class="ml-4">
-                          <div class="text-sm font-medium"> AED </div>
+                          <div class="text-sm font-medium">{{ currency }}</div>
                       </div>
                   </td>
 
@@ -265,7 +265,8 @@
           total_tax_value: Number,
           count: Number,
           total_refund: Number,
-          shop_name: String
+          shop_name: String,
+          currency: { type: String, default: 'USD' }
       },
       data() {
           var ordersd = []
@@ -312,6 +313,10 @@
           }
       },
       methods: {
+
+          money(value) {
+              return `${Currency.formatAmount(value, this.currency)} ${this.currency}`;
+          },
 
           handleSelect(selectedItem) {
               // Extract the ID of the selected object

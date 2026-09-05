@@ -429,11 +429,13 @@ class UserProductController extends Controller
     {
         $countryId = (int) auth()->user()->country_id;
         $code = Country::defaultCurrency($countryId);
+        $service = app(CurrencyService::class);
 
         return [
             'code' => $code,
-            'rate' => app(CurrencyService::class)->rate($code),
+            'rate' => $service->rate($code),
             'decimals' => $code === 'SYP' ? 0 : 2,
+            'display' => $service->displayForCountry($countryId),
         ];
     }
 

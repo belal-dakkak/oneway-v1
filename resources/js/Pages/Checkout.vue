@@ -149,7 +149,10 @@
                   </span>
                   <span class="line-clamp-1 font-medium">{{ item.product.name }} x {{ item.quantity }}</span>
                 </div>
-                <span class="font-bold">{{ store.formatPrice(store.getItemPrice(item) * item.quantity) }}</span>
+                <span class="font-bold">
+                  {{ store.formatPrice(store.getItemPrice(item) * item.quantity) }}
+                  <syp-equivalent :usd="store.getItemPrice(item) * item.quantity" />
+                </span>
               </div>
             </div>
 
@@ -172,7 +175,10 @@
               </div>
               <div class="flex justify-between text-xl font-extrabold pt-4 border-t border-dashed">
                 <span>{{ store.t('total') }}</span>
-                <span class="text-primary">{{ store.formatPrice(totalWithShipping) }}</span>
+                <span class="text-primary">
+                  {{ store.formatPrice(totalWithShipping) }}
+                  <syp-equivalent :usd="totalWithShipping" />
+                </span>
               </div>
             </div>
 

@@ -45,6 +45,7 @@ class HandleInertiaRequests extends Middleware
         $countryId = Country::id($countryCode);
         $currencyService = app(CurrencyService::class);
         $currencyOptions = $currencyService->optionsForCountry($countryId, true);
+        $displayCurrency = $currencyService->displayForCountry($countryId);
         $commerce = CountryCommerceSetting::query()->where('country_id', $countryId)->first();
 
         return array_merge(parent::share($request), [
@@ -55,7 +56,9 @@ class HandleInertiaRequests extends Middleware
                 if($user){
                     $credit  = $user->wallet?$user->wallet->credit:0;
                     $debit   = $user->wallet?$user->wallet->debit:0;
-                    $country = $user->country_id;
+                    // Some historical users do not have a country assigned. Keep
+                    // their dashboard usable by falling back to the active country.
+                    $country = (int) ($user->country_id ?: Country::id());
                 }else{
                     $credit = 0;
                     $debit  = 0;
@@ -78,8 +81,8 @@ class HandleInertiaRequests extends Middleware
                             'name' => $user->name,
                             'role' => $user->role_id,
                             'country_id' => $user->country_id,
-                            'credit' => round($credit),
-                            'debit' => round($debit),
+                            'credit' => round($credit, $country === Country::SYRIA ? 2 : 0),
+                            'debit' => round($debit, $country === Country::SYRIA ? 2 : 0),
                             'notifications' => $user->notifications()->orderByDesc('created_at')->limit(5)->get(),
                             'notifications_count' => $user->unreadNotifications()->count(),
                         ]
@@ -101,11 +104,13 @@ class HandleInertiaRequests extends Middleware
             'country_availability' => [
                 'LB' => true,
                 'AE' => true,
-                'SY' => collect($currencyService->optionsForCountry(Country::SYRIA, true))->contains('code', 'SYP'),
+                'SY' => true,
                 'TR' => false,
             ],
             'currency_options' => $currencyOptions,
             'default_currency' => Country::defaultCurrency($countryId),
+            'base_currency' => Country::baseCurrency($countryId),
+            'display_currency' => $displayCurrency,
             'commerce' => $commerce ? $commerce->toArray() : [
                 'shipping_fee_usd' => 0,
                 'free_shipping_threshold_usd' => null,

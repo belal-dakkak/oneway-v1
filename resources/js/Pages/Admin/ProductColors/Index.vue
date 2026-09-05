@@ -85,7 +85,10 @@
                     </div>
                 </td>
 
-                <td class="mx-auto max-w-sm p-6 text-sm leading-6 sm:text-base sm:leading-7">{{ formattedPrice(item.product.cost_price) }} {{ currency.code }}</td>
+                <td class="mx-auto max-w-sm p-6 text-sm leading-6 sm:text-base sm:leading-7">
+                    {{ formattedPrice(item.product.cost_price) }} {{ currency.code }}
+                    <syp-equivalent :usd="item.product.cost_price" />
+                </td>
                 <!-- <td class="mx-auto max-w-sm p-6 text-sm leading-6 sm:text-base sm:leading-7">{{ item.product.raw_sizes }}</td> -->
                 <td class="flex flex-wrap space-x-3 mt-2" v-if="admin.role === 1 || admin.role === 2">
                      <!--<p @click="printItems(item.id,item.stock,item.barcode)" class="p-2 pb-1 rounded-md text-white btn-ghost bg-teal-400 hover:bg-teal-600 hover:text-white">
@@ -129,11 +132,13 @@
                                   <div class="px-1">
                                       <jet-label for="wholesale_price" :value="__('Wholesale Price') + ' (' + currency.code + ')'" dir="rtl" />
                                       <jet-input id="wholesale_price" type="number" min="0" :step="priceStep()" class="mt-1 block w-full" v-model="wholesale_price" autocomplete="wholesale_price" @blur="normalizePrice('wholesale_price')" />
+                                      <syp-equivalent :usd="wholesale_price" />
                                   </div>
 
                                   <div class="px-1">
                                       <jet-label for="retail_price" :value="__('Retail Price') + ' (' + currency.code + ')'" dir="rtl" />
                                       <jet-input id="retail_price" type="number" min="0" :step="priceStep()" class="mt-1 block w-full" v-model="retail_price" autocomplete="retail_price" @blur="normalizePrice('retail_price')" />
+                                      <syp-equivalent :usd="retail_price" />
                                   </div>
 
                                   <!-- <div class="px-1">

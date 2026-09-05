@@ -2,6 +2,8 @@
 
 namespace App\Models;
 
+use App\Services\CurrencyService;
+use App\Support\Country;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
@@ -166,26 +168,33 @@ class Product extends Model
     public function getFinalPriceAttribute()
     {
         $subtotal = $this->final_price_value;
-        $currency = ' AED ';
-        return number_format(ceil($subtotal), 2, '.', '0') . $currency;
+        $currency = $this->presentationCurrency();
+        return $currency === 'USD'
+            ? number_format($subtotal, 2, '.', '') . ' USD'
+            : number_format(ceil($subtotal), 2, '.', '0') . ' AED ';
     }
 
     public function getFinalPriceValueAttribute()
     {
-        $subtotal = $this->retail_price * app(\App\Services\CurrencyService::class)->rate('AED');
-        return ceil($subtotal);
+        $currency = $this->presentationCurrency();
+        $subtotal = app(CurrencyService::class)->fromUsd($this->retail_price, $currency);
+        return $currency === 'USD' ? round($subtotal, 2) : ceil($subtotal);
     }
 
     public function getFormattedPriceBeforeDiscountAttribute()
     {
         $price = $this->price_before_discount_value;
-        $currency = ' AED ';
-        return number_format(ceil($price), 2, '.', '0') . $currency;
+        $currency = $this->presentationCurrency();
+        return $currency === 'USD'
+            ? number_format($price, 2, '.', '') . ' USD'
+            : number_format(ceil($price), 2, '.', '0') . ' AED ';
     }
 
     public function getPriceBeforeDiscountValueAttribute()
     {
-        return ceil($this->price_before_discount * app(\App\Services\CurrencyService::class)->rate('AED'));
+        $currency = $this->presentationCurrency();
+        $price = app(CurrencyService::class)->fromUsd($this->price_before_discount, $currency);
+        return $currency === 'USD' ? round($price, 2) : ceil($price);
     }
 
     public function getPriceBeforeDiscountRawAttribute()
@@ -206,7 +215,7 @@ class Product extends Model
         }
 
         // Fake discount logic
-        $aedRetailPrice = $this->retail_price * app(\App\Services\CurrencyService::class)->rate('AED');
+        $aedRetailPrice = $this->retail_price * app(CurrencyService::class)->rate('AED');
         if ($aedRetailPrice > 150) {
             return $this->retail_price / 0.4;
         } else {
@@ -216,13 +225,36 @@ class Product extends Model
 
     public function getWholesalePriceValueAttribute()
     {
-        return ceil($this->sale_price * app(\App\Services\CurrencyService::class)->rate('AED'));
+        $currency = $this->presentationCurrency();
+        $price = app(CurrencyService::class)->fromUsd($this->sale_price, $currency);
+        return $currency === 'USD' ? round($price, 2) : ceil($price);
     }
 
     public function getFormattedWholesalePriceAttribute()
     {
         $price = $this->wholesale_price_value;
-        $currency = ' AED ';
-        return number_format(ceil($price), 2, '.', '0') . $currency;
+        $currency = $this->presentationCurrency();
+        return $currency === 'USD'
+            ? number_format($price, 2, '.', '') . ' USD'
+            : number_format(ceil($price), 2, '.', '0') . ' AED ';
+    }
+
+    private function presentationCurrency(): string
+    {
+        $countryId = (int) $this->country_id;
+        if ((int) request()->input('country_id') === Country::SYRIA) {
+            $countryId = Country::SYRIA;
+        }
+        $requestCountry = request()->header('Accept-Country');
+        if ($requestCountry && Country::code($requestCountry) === 'SY') {
+            $countryId = Country::SYRIA;
+        }
+        if ($countryId === Country::SYRIA ||
+            ($countryId === Country::globalProductId() && Country::id() === Country::SYRIA)) {
+            return 'USD';
+        }
+
+        // Preserve the legacy presentation contract for Lebanon and UAE.
+        return 'AED';
     }
 }

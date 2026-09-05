@@ -32,16 +32,19 @@
             <div class="px-4">
                 <jet-label for="wholesale_price" :value="__('Wholesale Price') + ' (' + currency.code + ')'" />
                 <jet-input id="wholesale_price" type="number" min="0" :step="priceStep()" class="mt-1 block w-full" v-model="form.wholesale_price" @blur="normalizeFormPrice('wholesale_price')" />
+                <syp-equivalent :usd="form.wholesale_price" :display-currency="currency.display" />
             </div>
 
             <div class="px-4">
                 <jet-label for="retail_price" :value="__('Retail Price') + ' (' + currency.code + ')'" />
                 <jet-input id="retail_price" type="number" min="0" :step="priceStep()" class="mt-1 block w-full" v-model="form.retail_price" @blur="normalizeFormPrice('retail_price')" />
+                <syp-equivalent :usd="form.retail_price" :display-currency="currency.display" />
             </div>
 
             <div class="px-4">
                 <jet-label for="price_before_discount" :value="__('Price Before Discount') + ' (' + currency.code + ')'" />
                 <jet-input id="price_before_discount" type="number" min="0" :step="priceStep()" class="mt-1 block w-full" v-model="form.price_before_discount" @blur="normalizeFormPrice('price_before_discount')" />
+                <syp-equivalent :usd="form.price_before_discount" :display-currency="currency.display" />
             </div>
         </div>
 

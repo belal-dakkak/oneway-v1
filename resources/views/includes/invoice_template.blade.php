@@ -400,6 +400,13 @@
                             </tr>
                             @endif
 
+                            @if(isset($displayTotal) && $displayTotal !== null)
+                            <tr class="total" style="width: 100% !important">
+                                <td width="50%" class="td-med1 bg_color1" style="color: black;">المقابل التقريبي (للعرض فقط)<br>Approximate display value</td>
+                                <td width="50%" class="td-med1">≈ {{ number_format($displayTotal, $displayDecimals, '.', ',') }} {{ $displayCurrency }}</td>
+                            </tr>
+                            @endif
+
                             <tr class="total" style="width: 100% !important">
                                 <td width="50%" class="td-med bg_color1" style="color: black;">إجمالي المدفوعات <br> Total payments</td>
                                 <td width="50%" class="td-med">{{ number_format($order->paid_price, $moneyDecimals) }} {{ $Currency }}</td>

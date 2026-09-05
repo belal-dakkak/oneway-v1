@@ -77,6 +77,7 @@
             {{ discountPercentage }}%
           </span>
         </template>
+        <syp-equivalent :usd="$page.props.isMerchant ? product.sale_price : product.retail_price" />
       </div>
 
       <!-- Line 3: Actions (Review Right, Cart Left) -->

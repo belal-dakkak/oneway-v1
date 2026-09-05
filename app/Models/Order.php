@@ -26,11 +26,13 @@ class Order extends Model
     const PAY_CHEQUE = 1;
     protected $fillable = ['seller_id', 'buyer_id', 'shipper_id', 'type', 'barcode','total_price_before_discount',
         'discount', 'total_price', 'paid_price', 'remain_price', 'invoice', 'sent_at', 'shipping_details_id',
-        'status','payment_type','curr_type','curr_rate','notes',
+        'status','payment_type','curr_type','curr_rate','display_currency','display_rate','notes',
         'tax_ratio','tax_value','price_without_tax','trn','order_type',
         'first_name', 'last_name', 'email', 'phone', 'address', 'city', 'building_name', 'flat_number',
         'shipping_fee', 'cod_fee',
     ];
+
+    protected $casts = ['curr_rate' => 'float', 'display_rate' => 'float'];
 
     protected $appends = ['date', 'sent_date','payment_label'];
 

@@ -9,6 +9,8 @@ use App\Models\Category;
 use App\Models\Color;
 use App\Models\Contact;
 use App\Models\Product;
+use App\Services\CurrencyService;
+use App\Support\Country;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Session;
@@ -16,8 +18,36 @@ use Illuminate\Support\Facades\Session;
 
 class MainController extends ApiController
 {
-    public function currencies(): JsonResponse
+    public function currencies(Request $request): JsonResponse
     {
+        $countryId = Country::idForCurrency(
+            $request->header('Accept-Currency', 'AED'),
+            $request->header('Accept-Country')
+        );
+
+        if ($countryId === Country::SYRIA) {
+            $display = app(CurrencyService::class)->displayForCountry($countryId);
+            return $this->respondSuccess([
+                [
+                    'code' => 'USD',
+                    'symbol' => '$',
+                    'base' => true,
+                    'transaction_enabled' => true,
+                    'display_only' => false,
+                ],
+                [
+                    'code' => 'SYP',
+                    'symbol' => 'ل.س',
+                    'base' => false,
+                    'transaction_enabled' => false,
+                    'display_only' => true,
+                    'rate' => $display['rate'] ?? null,
+                    'approximate' => true,
+                    'available' => $display !== null,
+                ],
+            ]);
+        }
+
         $currencies = [
             [
                 'code' => 'USD',

@@ -66,6 +66,30 @@ class CurrencyService
         return $options;
     }
 
+    public function displayForCountry(int $countryId): ?array
+    {
+        $code = Country::displayCurrency($countryId);
+        if (!$code) {
+            return null;
+        }
+
+        try {
+            return [
+                'code' => $code,
+                'rate' => $this->rate($code),
+                'decimals' => $code === 'SYP' ? 0 : 2,
+                'approximate' => true,
+            ];
+        } catch (InvalidArgumentException $exception) {
+            return null;
+        }
+    }
+
+    public function clearRateCache(): void
+    {
+        self::$rates = [];
+    }
+
     public function fromUsd($amount, string $code): float
     {
         return $this->fromUsdAtRate($amount, $this->rate($code), $code);

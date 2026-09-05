@@ -88,13 +88,13 @@
                     </div>
                 </td>
 
-                <td class="mx-auto max-w-sm p-6 text-sm leading-6 sm:text-base sm:leading-7">{{ currencyExchange(item.cost_price, rate) }}</td>
+                <td class="mx-auto max-w-sm p-6 text-sm leading-6 sm:text-base sm:leading-7">{{ currencyExchange(item.cost_price, rate) }} {{ currency.code }}<syp-equivalent :usd="item.cost_price" :display-currency="currency.display" /></td>
 
-                <td class="mx-auto max-w-sm p-6 text-sm leading-6 sm:text-base sm:leading-7">{{ currencyExchange(item.sale_price, rate) }}</td>
+                <td class="mx-auto max-w-sm p-6 text-sm leading-6 sm:text-base sm:leading-7">{{ currencyExchange(item.sale_price, rate) }} {{ currency.code }}<syp-equivalent :usd="item.sale_price" :display-currency="currency.display" /></td>
 
-                <td class="mx-auto max-w-sm p-6 text-sm leading-6 sm:text-base sm:leading-7">{{ currencyExchange(item.retail_price, rate) }}</td>
+                <td class="mx-auto max-w-sm p-6 text-sm leading-6 sm:text-base sm:leading-7">{{ currencyExchange(item.retail_price, rate) }} {{ currency.code }}<syp-equivalent :usd="item.retail_price" :display-currency="currency.display" /></td>
 
-                <td class="mx-auto max-w-sm p-6 text-sm leading-6 sm:text-base sm:leading-7">{{ item.price_before_discount_raw ? currencyExchange(item.price_before_discount_raw, rate) : __('Not Provided') }}</td>
+                <td class="mx-auto max-w-sm p-6 text-sm leading-6 sm:text-base sm:leading-7">{{ item.price_before_discount_raw ? currencyExchange(item.price_before_discount_raw, rate) : __('Not Provided') }} {{ item.price_before_discount_raw ? currency.code : '' }}<syp-equivalent v-if="item.price_before_discount_raw" :usd="item.price_before_discount_raw" :display-currency="currency.display" /></td>
 
                 <td class="mx-auto max-w-sm p-6 text-sm leading-6 sm:text-base sm:leading-7">
                     <button 
@@ -138,7 +138,8 @@ export default {
     props: {
         products: Object,
         filters: Object,
-        rate: Number
+        rate: Number,
+        currency: Object,
     },
     data() {
         return {

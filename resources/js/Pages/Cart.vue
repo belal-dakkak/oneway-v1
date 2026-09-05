@@ -60,6 +60,7 @@
                   </span>
                   <div class="text-lg font-bold text-primary">
                     {{ store.formatPrice(store.getItemPrice(item) * item.quantity) }}
+                    <syp-equivalent :usd="store.getItemPrice(item) * item.quantity" />
                   </div>
                 </div>
               </div>
@@ -94,7 +95,10 @@
                 </div>
                 <div class="flex justify-between text-xl font-extrabold pt-4 border-t border-dashed">
                     <span>{{ store.t('total') }}</span>
-                    <span class="text-primary">{{ store.formatPrice(totalWithShipping) }}</span>
+                    <span class="text-primary">
+                      {{ store.formatPrice(totalWithShipping) }}
+                      <syp-equivalent :usd="totalWithShipping" />
+                    </span>
                 </div>
             </div>
           <div v-if="store.isMerchant && store.getCartCount < 20" class="mb-6 p-4 bg-amber-500/10 border border-amber-500/20 rounded-xl text-amber-600 text-sm font-bold flex items-center gap-2">

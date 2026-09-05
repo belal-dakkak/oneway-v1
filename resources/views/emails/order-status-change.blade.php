@@ -128,6 +128,12 @@
                         <td>Total Amount:</td>
                         <td>{{ number_format($order->total_price, $order->curr_type === 'SYP' ? 0 : 2) }} {{ $order->curr_type ?: ($order->country_id == 2 ? 'AED' : 'USD') }}</td>
                     </tr>
+                    @if($order->display_currency && $order->display_rate > 0)
+                    <tr>
+                        <td>Approximate display value:</td>
+                        <td>≈ {{ number_format($order->total_price * $order->display_rate, $order->display_currency === 'SYP' ? 0 : 2) }} {{ $order->display_currency }} (display only)</td>
+                    </tr>
+                    @endif
                 </table>
             </div>
 

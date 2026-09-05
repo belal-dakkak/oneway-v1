@@ -25,6 +25,7 @@
           <div class="text-right rtl:text-left">
             <p class="text-sm text-muted-foreground mb-1">{{ store.t('total') }}</p>
             <p class="font-bold text-lg text-amber-600">{{ formatPrice(order.total_price) }}</p>
+            <syp-equivalent v-if="orderDisplayCurrency" :usd="order.total_price" :display-currency="orderDisplayCurrency" />
           </div>
         </div>
 
@@ -69,7 +70,14 @@ export default {
       return Number(value).toLocaleString(undefined, { minimumFractionDigits: decimals, maximumFractionDigits: decimals }) + ' ' + currency
     }
 
-    return { store, formatPrice }
+    const orderDisplayCurrency = {
+      code: props.order.display_currency,
+      rate: props.order.display_rate,
+      decimals: 0,
+      approximate: true,
+    }
+
+    return { store, formatPrice, orderDisplayCurrency }
   }
 }
 </script>

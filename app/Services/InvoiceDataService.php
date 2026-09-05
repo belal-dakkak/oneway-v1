@@ -40,6 +40,12 @@ class InvoiceDataService
         $currency = strtoupper((string) ($order->curr_type ?: 'USD'));
         $decimals = $currency === 'SYP' ? 0 : 2;
         $rate = $order instanceof WebsiteOrder ? 1.0 : (float) ($order->curr_rate ?: 1);
+        $displayCurrency = strtoupper((string) ($order->display_currency ?: ''));
+        $displayRate = (float) ($order->display_rate ?: 0);
+        $displayDecimals = $displayCurrency === 'SYP' ? 0 : 2;
+        $displayTotal = $displayCurrency !== '' && $displayRate > 0
+            ? round((float) $order->total_price * $displayRate, $displayDecimals)
+            : null;
 
         if ($order instanceof WebsiteOrder) {
             $order->loadMissing('items.product.product');
@@ -52,7 +58,16 @@ class InvoiceDataService
             $items = $this->orderItems($order, $rate, $decimals);
         }
 
-        return compact('order', 'items', 'currency', 'decimals');
+        return compact(
+            'order',
+            'items',
+            'currency',
+            'decimals',
+            'displayCurrency',
+            'displayRate',
+            'displayDecimals',
+            'displayTotal'
+        );
     }
 
     private function websiteItems(WebsiteOrder $order, int $decimals): Collection
