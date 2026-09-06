@@ -58,9 +58,11 @@
                 </div>
             </div>
 
-            <div class="flex flex-col" v-if="user.role === 1">
-                <label dir="rtl" class="pr-2"> إجمالي المبيع (الموقع) </label>
-                <span class="bg-emerald-500 px-2 rounded-md text-3xl text-white">{{ Number(totalSales || 0).toFixed(2) }}</span>
+            <div class="flex flex-wrap gap-3" v-if="user.role === 1" dir="rtl">
+                <div v-for="(values, code) in totalsByCurrency" :key="code" class="flex flex-col rounded-md bg-emerald-500 px-3 py-2 text-white">
+                    <span class="font-bold">{{ formatMoney(values.total, code) }}</span>
+                    <span class="text-xs">إجمالي مبيعات الموقع</span>
+                </div>
             </div>
 
             <div class="flex flex-col" v-if="user.role === 1">
@@ -300,7 +302,8 @@ export default {
         count: Number,
         total_price_without_tax: Number,
         total_tax_value: Number,
-        buyers: Array
+        buyers: Array,
+        totals_by_currency: Object
     },
     data() {
         return {
@@ -317,6 +320,7 @@ export default {
             totalSales: this.total,
             totalPriceWithoutTax: this.total_price_without_tax,
             totalTaxValue: this.total_tax_value,
+            totalsByCurrency: this.totals_by_currency || {},
             totalCount: this.count,
             showModal: false,
             products: null,
@@ -326,6 +330,11 @@ export default {
         }
     },
     methods: {
+        formatMoney(value, code) {
+            const currency = String(code || 'USD').toUpperCase();
+            const decimals = currency === 'SYP' ? 0 : 2;
+            return Number(value || 0).toLocaleString(undefined, { minimumFractionDigits: decimals, maximumFractionDigits: decimals }) + ' ' + currency;
+        },
         handleSelect(selectedItem) {
             this.params['buyer'] = selectedItem.id;
         },
@@ -419,6 +428,7 @@ export default {
                 this.totalPriceWithoutTax = response.data.total_price_without_tax;
                 this.totalTaxValue = response.data.total_tax_value;
                 this.totalCount = response.data.count;
+                this.totalsByCurrency = response.data.totals_by_currency || {};
             });
         }, 500),
         handleScroll() {

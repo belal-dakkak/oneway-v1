@@ -227,6 +227,11 @@
 
                     @foreach($all_orders['orders'] as $key => $item)
 
+                        @php
+                            $rowCurrency = strtoupper($item->curr_type ?: 'USD');
+                            $rowDecimals = $rowCurrency === 'SYP' ? 0 : 2;
+                        @endphp
+
                         <tr class=" ">
                             <td class="td-med"> {{ $counter }} </td>
                             @if($is_website_order)
@@ -234,6 +239,7 @@
                                 $country_name = match((int)$item->country_id) {
                                     1 => 'Lebanon',
                                     2 => 'UAE',
+                                    4 => 'Syria',
                                     default => '-'
                                 };
                             @endphp
@@ -247,11 +253,11 @@
 
                             @if($seller != null && $seller->enable_tax == 'yes')
                                 <td class="td-med"> {{ $item->trn }} </td>
-                                <td class="td-med"> {{ $item->price_without_tax }} </td>
-                                <td class="td-med"> {{ $item->tax_value }} </td>
-                                <td class="td-med"> {{ $item->price_without_tax + $item->tax_value }} </td>
+                                <td class="td-med"> {{ number_format($item->price_without_tax, $rowDecimals) }} {{ $rowCurrency }} </td>
+                                <td class="td-med"> {{ number_format($item->tax_value, $rowDecimals) }} {{ $rowCurrency }} </td>
+                                <td class="td-med"> {{ number_format($item->price_without_tax + $item->tax_value, $rowDecimals) }} {{ $rowCurrency }} </td>
                             @else
-                                <td class="td-med"> {{ $item->total_price }} </td>
+                                <td class="td-med"> {{ number_format($item->total_price, $rowDecimals) }} {{ $rowCurrency }} </td>
                             @endif
 
                             <td class="td-med"> {{ $item->items->sum('qty') }} </td>
@@ -285,6 +291,22 @@
                 </tr>
 
 
+                @if(!empty($all_orders['totals_by_currency']))
+                    @foreach($all_orders['totals_by_currency'] as $currencyCode => $summary)
+                    @php($moneyDecimals = $currencyCode === 'SYP' ? 0 : 2)
+                    <tr class="">
+                        <td colspan="6" @if($seller != null && $seller->enable_tax == 'yes') style="width: 55.5% !important" @else style="width: 71% !important" @endif class="td-med">{{ $currencyCode }}</td>
+                        @if($seller != null && $seller->enable_tax == 'yes')
+                            <td class="td-med">{{ number_format($summary['net'], $moneyDecimals) }}</td>
+                            <td class="td-med">{{ number_format($summary['tax'], $moneyDecimals) }}</td>
+                            <td class="td-med">{{ number_format($summary['total'], $moneyDecimals) }}</td>
+                        @else
+                            <td class="td-med">{{ number_format($summary['total'], $moneyDecimals) }}</td>
+                        @endif
+                        <td class="td-med">{{ $loop->first ? $all_orders['count'] : '' }}</td>
+                    </tr>
+                    @endforeach
+                @else
                 <tr class="">
                     <td colspan="6" @if($seller != null && $seller->enable_tax == 'yes') style="width: 55.5% !important" @else style="width: 71% !important" @endif class="td-med"></td>
 
@@ -298,6 +320,7 @@
 
                     <td class="td-med"> {{ $all_orders['count'] }} </td>
                 </tr>
+                @endif
 
             </table>
 

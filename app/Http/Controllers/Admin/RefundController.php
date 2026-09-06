@@ -15,6 +15,7 @@ use App\Services\CurrencyService;
 use App\Support\Country;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Redirect;
 use Inertia\Inertia;
 use Inertia\Response;
@@ -49,6 +50,7 @@ class RefundController extends Controller
             return [
                 'refunds' => $refunds['refunds'],
                 'total'   => $refunds['total'],
+                'totals_by_currency' => $refunds['totals_by_currency'] ?? [],
             ];
         }
         $shops = User::query()->whereIn('role_id', [User::ROLE_SHOP, User::ROLE_WAREHOUSE])->where('country_id',auth()->user()->country_id)->get();
@@ -69,6 +71,7 @@ class RefundController extends Controller
             'rate'    => $rate,
             'refunds' => $refunds['refunds'],
             'total'   => $refunds['total'],
+            'totals_by_currency' => $refunds['totals_by_currency'] ?? [],
             'shops'   => $shops,
             'buyers'  => $buyers,
             'filters' => $request->all(['search', 'buyer', 'shop', 'field', 'direction'])
@@ -82,7 +85,15 @@ class RefundController extends Controller
 
     public function store(Request $request): RedirectResponse
     {
-        $this->refundRepository->add($request);
+        $request->validate([
+            'selected_products' => ['required', 'array', 'min:1'],
+            'selected_products.*.product_id' => ['required', 'integer', 'exists:order_items,id'],
+            'selected_products.*.qty' => ['required', 'integer', 'min:1'],
+        ]);
+
+        DB::transaction(function () use ($request) {
+            $this->refundRepository->add($request);
+        });
         $request->session()->flash('success', 'تم إنشاء المرتجع بنجاح');
         return Redirect::route('refunds.index');
     }
@@ -106,6 +117,7 @@ class RefundController extends Controller
             $result->product_color = $item->product->productColor;
             $result->stock = $item->qty;
             $result->price = currencyExchange($item->item_price, $rate);
+            $result->currency_code = strtoupper($item->order->curr_type ?: 'USD');
             $result->id = $item->id;
             return $result;
         }

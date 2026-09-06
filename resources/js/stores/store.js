@@ -7,7 +7,12 @@ import { Inertia } from '@inertiajs/inertia'
 export const useStore = defineStore('main', () => {
   // State
   const initialCountry = localStorage.getItem('country') || 'AE'
-  const cart = ref(JSON.parse(localStorage.getItem(`cart_${initialCountry}`) || '[]'))
+  const cartKey = (countryCode, merchant) => `cart_${countryCode}_${merchant ? 'wholesale' : 'retail'}`
+  const currencyKey = (countryCode, merchant) => `currency_${countryCode}_${merchant ? 'wholesale' : 'retail'}`
+  const initialCart = localStorage.getItem(cartKey(initialCountry, false))
+    || localStorage.getItem(`cart_${initialCountry}`)
+    || '[]'
+  const cart = ref(JSON.parse(initialCart))
   const favorites = ref(JSON.parse(localStorage.getItem('favorites') || '[]'))
   const isRTL = ref(localStorage.getItem('isRTL') === 'true')
   const locale = ref(localStorage.getItem('locale') || 'en')
@@ -26,11 +31,11 @@ export const useStore = defineStore('main', () => {
 
   // Watchers for persistence
   watch(currency, (val) => {
-    localStorage.setItem(`currency_${country.value}`, val)
+    localStorage.setItem(currencyKey(country.value, isMerchant.value), val)
   })
 
   watch(cart, (newCart) => {
-    localStorage.setItem(`cart_${country.value}`, JSON.stringify(newCart))
+    localStorage.setItem(cartKey(country.value, isMerchant.value), JSON.stringify(newCart))
   }, { deep: true })
 
   watch(favorites, (newFavorites) => {
@@ -51,7 +56,9 @@ export const useStore = defineStore('main', () => {
 
   // Getters
   const getItemPrice = (item) => {
-    const basePrice = Number(item.product.price || item.product.retail_price || 0)
+    const basePrice = Number(isMerchant.value
+      ? (item.product.sale_price || 0)
+      : (item.product.price || item.product.retail_price || 0))
     return currency.value === 'USD' ? basePrice : basePrice * exchangeRate.value
   }
 
@@ -266,14 +273,14 @@ export const useStore = defineStore('main', () => {
   }
 
   const syncContext = (countryCode, options = [], defaultCurrency = 'USD', commerceSettings = null) => {
-    const changedCountry = country.value !== countryCode
     country.value = countryCode
     currencyOptions.value = Array.isArray(options) ? options : []
     if (commerceSettings) commerce.value = commerceSettings
-    if (changedCountry) {
-      cart.value = JSON.parse(localStorage.getItem(`cart_${countryCode}`) || '[]')
-    }
-    const savedCurrency = localStorage.getItem(`currency_${countryCode}`)
+    const scopedCartKey = cartKey(countryCode, isMerchant.value)
+    const legacyCart = !isMerchant.value ? localStorage.getItem(`cart_${countryCode}`) : null
+    cart.value = JSON.parse(localStorage.getItem(scopedCartKey) || legacyCart || '[]')
+    localStorage.setItem(scopedCartKey, JSON.stringify(cart.value))
+    const savedCurrency = localStorage.getItem(currencyKey(countryCode, isMerchant.value))
     const allowedCodes = currencyOptions.value.map(item => item.code)
     currency.value = allowedCodes.includes(savedCurrency)
       ? savedCurrency

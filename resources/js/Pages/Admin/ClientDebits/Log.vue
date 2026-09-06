@@ -108,7 +108,7 @@
                                         <span v-if="log.color === 'green'">+</span>
                                         <span v-else>-</span>
                                         <!-- {{ currencyExchange(log.amount, rate) }} -->
-                                        {{ Math.round(log.amount * rate).toFixed(2) }}
+                                        {{ formatMoney(log.amount, log.currency_code || debit.currency_code) }}
 
                                     </div>
                                 </div>
@@ -175,6 +175,14 @@ export default defineComponent({
         filters: Object,
     },
     methods: {
+        formatMoney(value, code) {
+            const currency = String(code || 'USD').toUpperCase();
+            const decimals = currency === 'SYP' ? 0 : 2;
+            return Number(value || 0).toLocaleString(undefined, {
+                minimumFractionDigits: decimals,
+                maximumFractionDigits: decimals
+            }) + ' ' + currency;
+        },
         encodeUrlWhatsapp(){
             let number = this.debtor.phone;
             this.params.start_date = this.start_date?.value??"";

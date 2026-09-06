@@ -8,7 +8,7 @@ use App\Http\Requests\Api\CheckoutRequest;
 use App\Models\Order;
 use App\Models\WebsiteOrder;
 use App\Repositories\OrderRepository;
-use App\Services\CurrencyService;
+use App\Services\SalesCurrencyPolicy;
 use App\Support\Country;
 use InvalidArgumentException;
 
@@ -16,12 +16,12 @@ use InvalidArgumentException;
 class CartController extends ApiController
 {
     private $orderRepository;
-    private $currencyService;
+    private $salesCurrencyPolicy;
 
-    public function __construct(OrderRepository $orderRepository, CurrencyService $currencyService)
+    public function __construct(OrderRepository $orderRepository, SalesCurrencyPolicy $salesCurrencyPolicy)
     {
         $this->orderRepository = $orderRepository;
-        $this->currencyService = $currencyService;
+        $this->salesCurrencyPolicy = $salesCurrencyPolicy;
     }
 
     public function store(CheckoutRequest $request)
@@ -44,7 +44,10 @@ class CartController extends ApiController
             $request->header('Accept-Currency', Country::defaultCurrency($countryId))
         ));
         try {
-            $currency = $this->currencyService->validateForCountry($requestedCurrency, $countryId, true);
+            // The mobile API currently represents the normal retail storefront.
+            // The server policy therefore forces Syrian API sales to SYP.
+            $currency = $this->salesCurrencyPolicy
+                ->websiteOption($countryId, false, $requestedCurrency)['code'];
         } catch (InvalidArgumentException $exception) {
             return $this->respondError('The selected currency is not available for this country.');
         }

@@ -33,10 +33,17 @@ return [
             'timezone' => 'Asia/Damascus',
             'phone_code' => '963',
             'admin_currencies' => ['USD'],
-            'storefront_currencies' => ['USD'],
+            'storefront_currencies' => ['SYP', 'USD'],
             'default_currency' => 'USD',
             'base_currency' => 'USD',
             'display_currency' => 'SYP',
+            'sales_currencies' => [
+                'simple' => 'SYP',
+                'complex' => 'SYP',
+                'complex_from_multi' => 'USD',
+                'website_retail' => 'SYP',
+                'website_wholesale' => 'USD',
+            ],
             'storefront' => true,
         ],
         'TR' => [

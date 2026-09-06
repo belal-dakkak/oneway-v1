@@ -7,21 +7,13 @@ use App\Models\Refund;
 use App\Models\User;
 use App\Models\UserProduct;
 use App\Models\Wallet;
-use App\Models\Order;
 use Illuminate\Contracts\Pagination\LengthAwarePaginator;
 use Illuminate\Http\Request;
 use Carbon\Carbon;
-use App\Services\TaxCalculator;
+use Illuminate\Validation\ValidationException;
 
 class RefundRepository
 {
-    private $taxCalculator;
-
-    public function __construct(TaxCalculator $taxCalculator)
-    {
-        $this->taxCalculator = $taxCalculator;
-    }
-
     public function add(Request $request): Refund
     {
 
@@ -29,9 +21,6 @@ class RefundRepository
         $selectedProducts = $request->get('selected_products');
 
 		//dd($selectedProducts);
-
-		// new
-		$userId = auth()->id();
 
 		$refund = null;
 
@@ -42,7 +31,7 @@ class RefundRepository
 
 			//dd($product);
 
-            $orderItem = OrderItem::query()->find($product['product_id']);
+            $orderItem = OrderItem::query()->lockForUpdate()->find($product['product_id']);
 
 			/*
 			$orderItem = OrderItem::query()->whereHas('product', function ($query) use ($product){
@@ -53,11 +42,24 @@ class RefundRepository
 			//dd($orderItem);
 
 			if($orderItem) {
+                $refundQty = (int) $product['qty'];
+                if ($refundQty <= 0 || $refundQty > (int) $orderItem->qty) {
+                    throw ValidationException::withMessages([
+                        'selected_products' => 'كمية المرتجع أكبر من الكمية المتبقية في الفاتورة.',
+                    ]);
+                }
+
+                $seller = optional($orderItem->order)->seller;
+                if (! $seller || (int) $seller->country_id !== (int) auth()->user()->country_id) {
+                    abort(403);
+                }
+                if (auth()->user()->role_id !== User::ROLE_ADMIN
+                    && (int) $orderItem->order->seller_id !== (int) auth()->id()) {
+                    abort(403);
+                }
 
 				$itemBarcode = $orderItem->product->productColor->barcode;
 				$orderBarcode = $orderItem->order->barcode;
-
-				$rate = $orderItem->order->curr_rate;
 
 				/*
 				$userProduct = UserProduct::query()
@@ -69,78 +71,40 @@ class RefundRepository
 
 				//dd($userProduct);
 
-				$newStock = $userProduct->stock + $product['qty'];
+				$newStock = $userProduct->stock + $refundQty;
 				$userProduct->update(['stock' => $newStock]);
 
                 // $orderItem->update(['qty' => $orderItem->qty - $product['qty']]);
 				
-				$new_qty = $orderItem->qty - $product['qty'];
+				$new_qty = $orderItem->qty - $refundQty;
+				$rateAux = (float) $orderItem->order->curr_rate ?: 1;
+				$productPrice = (float) $orderItem->item_price;
 
                 $orderItem->update([
-                    'qty' => $new_qty
+                    'qty' => $new_qty,
+                    'total_price' => $productPrice * $new_qty,
+                    'total_price_paid' => $productPrice * $new_qty * $rateAux,
                 ]);
-
-				$rateAux = (float) $orderItem->order->curr_rate ?: 1;
-
-				$productPrice = $product['price'] / $rateAux; // Price in $
 
 				$refund = new Refund([
 					'order_item_id' => $product['product_id'],
-					'qty' => $product['qty'],
+					'qty' => $refundQty,
 					'item_price' => $productPrice,
-					'total_price' => $productPrice * $product['qty'],
-                    'total_price_paid' => $productPrice * $product['qty'] * $rate,
+					'total_price' => $productPrice * $refundQty,
+                    'total_price_paid' => $productPrice * $refundQty * $rateAux,
 					'item_barcode' => $itemBarcode,
 					'order_barcode' => $orderBarcode,
 				]);
 				$refund->save();
-				$total += ($product['price'] * $product['qty'])/$rate;
+				$total += $productPrice * $refundQty;
 				
 				/////////////////////////////////////////////////////////////
                 /////////////////////////////////////////////////////////////
 
                 $order      = $orderItem->order;
-                $order_item = $orderItem;
-                $item_price = $productPrice;
-
                 // Track this order as touched
                 if ($order && !in_array($order->id, $touchedOrderIds)) {
                     $touchedOrderIds[] = $order->id;
-                }
-
-                if($userProduct) {
-
-                    if($userProduct->user) {
-
-                        if($userProduct->user->enable_tax == 'yes') {
-
-                            $tax_ratio             = $userProduct->user->tax_ratio;
-                            $order_total_tax_ratio = $tax_ratio;
-
-                            $orderType = $order->order_type ?: ($order->type === Order::TYPE_CASH ? 'simple' : 'complex');
-                            $tax = $this->taxCalculator->calculate((float) $item_price, (float) $tax_ratio, $orderType);
-                            $price_without_tax = $tax['price_without_tax'];
-                            $tax_value = $tax['tax_value'];
-                            $price_with_vat = $tax['price_with_tax'];
-
-                            $item_price_paid        = $price_with_vat * $order->curr_rate;
-                            $total_price_paid       = $new_qty * $price_with_vat * $order->curr_rate;
-                            $tax_value_paid         = $tax_value * $order->curr_rate;
-                            $price_without_tax_paid = $price_without_tax * $order->curr_rate;
-
-                            $order_item->update([
-                                'tax_ratio'              => $tax_ratio,
-                                'tax_value'              => $new_qty > 0 ? $tax_value : 0,
-                                'price_without_tax'      => $new_qty > 0 ? $price_without_tax : 0,
-                                'total_price'            => $price_with_vat *  $new_qty,
-                                'item_price'             => $price_with_vat,
-                                'item_price_paid'        => ($item_price_paid),
-                                'total_price_paid'       => ($total_price_paid),
-                                'tax_value_paid'         => $new_qty > 0 ? ($tax_value_paid) : 0,
-                                'price_without_tax_paid' => $new_qty > 0 ? ($price_without_tax_paid) : 0,
-                            ]);
-                        }
-                    }
                 }
 
                 /////////////////////////////////////////////////////////////
@@ -179,27 +143,34 @@ class RefundRepository
             }
         }
 
-        $oldCredit = auth()->user()->wallet? auth()->user()->wallet->credit : 0;
-        Wallet::query()->updateOrCreate(
-            ['user_id' => auth()->id()],
-            ['credit' => $oldCredit - $total, 'user_id' => auth()->id()]
-        );
+        $wallet = Wallet::query()->where('user_id', auth()->id())->lockForUpdate()->first();
+        if (! $wallet) {
+            $wallet = Wallet::query()->create([
+                'user_id' => auth()->id(),
+                'credit' => 0,
+                'debit' => 0,
+            ]);
+        }
+        $wallet->decrement('credit', $total);
 
         return $refund;
     }
 
     public function getRefunds(Request $request)
     {
-        $refunds = Refund::query()->with(['orderItem']);
+        $refunds = Refund::query()->with(['orderItem.order']);
         $country = auth()->user()->country_id;
         $refunds->whereHas('orderItem', function ($query) use ($country){
             $query->whereHas('product', function ($q) use ($country){
                 $q->where('country_id',$country);
             });
         });
-        if ($search = $request->get('search'))
-            $refunds->where('item_barcode', 'LIKE', "%$search%")
-                ->orWhere('order_barcode', 'LIKE', "%$search%");
+        if ($search = $request->get('search')) {
+            $refunds->where(function ($query) use ($search) {
+                $query->where('item_barcode', 'LIKE', "%$search%")
+                    ->orWhere('order_barcode', 'LIKE', "%$search%");
+            });
+        }
 
         if (auth()->user()->role_id != User::ROLE_ADMIN)
             $refunds->whereHas('orderItem', function ($query){
@@ -249,11 +220,24 @@ class RefundRepository
             $refunds->orderByDesc('id');
         }
 
-        $totalAmount = $refunds->sum('refunds.total_price');
+        $totalsByCurrency = (clone $refunds)
+            ->reorder()
+            ->join('order_items as refund_order_items', 'refunds.order_item_id', '=', 'refund_order_items.id')
+            ->join('orders as refund_orders', 'refund_order_items.order_id', '=', 'refund_orders.id')
+            ->selectRaw("UPPER(COALESCE(refund_orders.curr_type, 'USD')) as currency_code")
+            ->selectRaw('SUM(CASE WHEN refunds.total_price_paid IS NOT NULL AND refunds.total_price_paid <> 0 THEN refunds.total_price_paid ELSE refunds.total_price * COALESCE(refund_orders.curr_rate, 1) END) as total')
+            ->groupBy('currency_code')
+            ->pluck('total', 'currency_code')
+            ->map(function ($total) {
+                return (float) $total;
+            })
+            ->toArray();
+        $totalAmount = count($totalsByCurrency) === 1 ? (float) reset($totalsByCurrency) : 0;
 
         return [
             'refunds' => $refunds->paginate(10),
-            'total'   => ($totalAmount)
+            'total'   => $totalAmount,
+            'totals_by_currency' => $totalsByCurrency,
         ];
     }
 

@@ -20,6 +20,8 @@ use App\Models\WebsiteOrderItem;
 use App\Models\Wallet;
 use App\Services\TaxCalculator;
 use App\Services\CurrencyService;
+use App\Services\ClientAccountService;
+use App\Services\SalesCurrencyPolicy;
 use App\Services\Payment\WebsiteOrderStockService;
 use App\Support\Country;
 use App\Models\CountryCommerceSetting;
@@ -39,16 +41,22 @@ class OrderRepository
     private $taxCalculator;
     private $currencyService;
     private $websiteOrderStockService;
+    private $clientAccounts;
+    private $salesCurrencyPolicy;
 
     public function __construct(
         TaxCalculator $taxCalculator,
         CurrencyService $currencyService,
-        WebsiteOrderStockService $websiteOrderStockService
+        WebsiteOrderStockService $websiteOrderStockService,
+        ClientAccountService $clientAccounts,
+        SalesCurrencyPolicy $salesCurrencyPolicy
     )
     {
         $this->taxCalculator = $taxCalculator;
         $this->currencyService = $currencyService;
         $this->websiteOrderStockService = $websiteOrderStockService;
+        $this->clientAccounts = $clientAccounts;
+        $this->salesCurrencyPolicy = $salesCurrencyPolicy;
     }
 
     private function clearHomeCache()
@@ -69,7 +77,10 @@ class OrderRepository
         try {
             DB::beginTransaction();
             $countryId = (int) auth()->user()->country_id;
-            $displayCurrency = $this->currencyService->displayForCountry($countryId);
+            $currencyCode = strtoupper((string) $request->input('currency.code', $request->input('currency.value', 'USD')));
+            $displayCurrency = $countryId === Country::SYRIA
+                ? null
+                : $this->currencyService->displayForCountry($countryId);
             $orderCash = $request->get('type') == Order::TYPE_CASH;
             $payment = $request->get('payment') ? $request->get('payment')['value']:0;
 
@@ -78,7 +89,10 @@ class OrderRepository
             if (Order::query()->where('barcode', $barcode)->exists())
                 goto generate;
 
-            $totalPriceBeforeDisc = number_format((float)$request->get('total_price_before_discount'), 2, '.', '');
+            $totalPriceBeforeDisc = $this->currencyService->round(
+                (float) $request->get('total_price_before_discount'),
+                $currencyCode
+            );
 
             $order_total_tax_ratio         = 0;
 
@@ -218,12 +232,15 @@ class OrderRepository
             $codFeePercentage = $request->get('enable_cod') ? (float)$request->get('cod_fee', 0) : 0;
             $codFee = $codFeePercentage > 0 ? ($totalPrice * ($codFeePercentage / 100)) : 0;
             
-            $totalPriceAfterDiscount = number_format((float)$totalPrice - $request->get('discount', 0) + $shippingFee + $codFee, 2, '.', '');
+            $totalPriceAfterDiscount = $this->currencyService->round(
+                (float) $totalPrice - $request->get('discount', 0) + $shippingFee + $codFee,
+                $currencyCode
+            );
             //        $receipt = $this->generatePDF($order->id);
             if($request->has('paid_price'))
-                $paidPrice = number_format((float)$request->get('paid_price'), 2, '.', '');
+                $paidPrice = $this->currencyService->round((float) $request->get('paid_price'), $currencyCode);
             else
-                $paidPrice = number_format((float)$totalPriceAfterDiscount, 2, '.', '');
+                $paidPrice = $this->currencyService->round((float) $totalPriceAfterDiscount, $currencyCode);
             // return ['paid_price' => $paidPrice,
             //         'total_price' => $totalPriceAfterDiscount,
             //         'remain_price' => 0,
@@ -305,9 +322,12 @@ class OrderRepository
             }
 
             $orderTax = $this->taxCalculator->calculate((float) $order->total_price, (float) $order_total_tax_ratio, $request->order_type);
-            $order_total_price_without_tax = $orderTax['price_without_tax'];
-            $order_total_tax_value = $orderTax['tax_value'];
-            $order_total_price = $orderTax['price_with_tax'];
+            $order_total_price = $this->currencyService->round($orderTax['price_with_tax'], $currencyCode);
+            $order_total_price_without_tax = $this->currencyService->round($orderTax['price_without_tax'], $currencyCode);
+            $order_total_tax_value = $this->currencyService->round(
+                $order_total_price - $order_total_price_without_tax,
+                $currencyCode
+            );
 
             $calc_remain_price = $order_total_price - $order->paid_price;
             $calc_total_price  = $order_total_price;
@@ -324,7 +344,7 @@ class OrderRepository
 
             // start new code
 
-            if (! $orderCash && $calc_remain_price > 0) {
+            if (false && ! $orderCash && $calc_remain_price > 0) {
 
                 if (!$userId)
                        throw new Exception('رجاءً اختر الزبون عند إنشاء طلبية بالدين');
@@ -381,6 +401,13 @@ class OrderRepository
 
             // end new code
 
+            if (!$orderCash && $calc_remain_price > 0 && !$userId) {
+                throw new Exception('A customer is required when an order has an outstanding balance.');
+            }
+            if (!$orderCash) {
+                $this->clientAccounts->syncOrderDebt($order);
+            }
+
 
             Wallet::query()->updateOrCreate([
                 'user_id' => auth()->id()
@@ -419,16 +446,20 @@ class OrderRepository
                 : Country::id();
             $countryCode = Country::codeFromId($countryId);
             $paymentType = $request->get('payment')['name'];
-            $currencyCode = $this->currencyService->validateForCountry(
-                strtoupper((string) $request->get('currency', Country::defaultCurrency($countryId))),
+            $isMerchant = (bool) Session::get('is_merchant');
+            $currency = $this->salesCurrencyPolicy->websiteOption(
                 $countryId,
-                true
+                $isMerchant,
+                (string) $request->get('currency', Country::defaultCurrency($countryId))
             );
+            $currencyCode = $currency['code'];
             if ($countryCode === 'SY' && $paymentType !== 'cod') {
                 throw new Exception('Card payment is not available for Syria.');
             }
-            $currencyRate = $this->currencyService->rate($currencyCode);
-            $displayCurrency = $this->currencyService->displayForCountry($countryId);
+            $currencyRate = $currency['rate'];
+            $displayCurrency = $countryId === Country::SYRIA
+                ? null
+                : $this->currencyService->displayForCountry($countryId);
 
             $order = new WebsiteOrder([
                 'notes' => $request->get('notes'),
@@ -451,6 +482,7 @@ class OrderRepository
                 'display_currency' => $displayCurrency['code'] ?? null,
                 'display_rate' => $displayCurrency['rate'] ?? null,
                 'country_id' => $countryId,
+                'pricing_mode' => $isMerchant ? 'wholesale' : 'retail',
                 'status' => $request->get('payment')['name'] === 'card' ? WebsiteOrder::STATUS_UNPAID : WebsiteOrder::STATUS_PENDING,
             ]);
 
@@ -459,8 +491,6 @@ class OrderRepository
             $totalPrice = 0;
             $totalPriceBeforeDiscount = 0;
             $decimals = $currencyCode === 'SYP' ? 0 : 2;
-            $isMerchant = (bool) Session::get('is_merchant');
-
             foreach ($request->get('items') as $product){
                 $productObj = ProductColor::query()
                     ->with('product')
@@ -549,6 +579,9 @@ class OrderRepository
             $orderCash = $request->get('type') == Order::TYPE_CASH;
 
             $orderOldPrice = $orderCash ? $order->total_price : $order->paid_price;
+            $oldRemainPrice = (float) $order->remain_price;
+            $oldBuyerId = $order->buyer_id ? (int) $order->buyer_id : null;
+            $oldCurrency = strtoupper((string) ($order->curr_type ?: 'USD'));
 
             $order_total_tax_ratio         = 0;
 
@@ -570,6 +603,7 @@ class OrderRepository
 
 
             $rate = (float) $request->input('currency.rate', $order->curr_rate ?: 1);
+            $currencyCode = strtoupper((string) ($order->curr_type ?: 'USD'));
 
             $totalPrice = 0;
             Log::log(LogLevel::INFO, $request->get('selected_products'));
@@ -715,29 +749,31 @@ class OrderRepository
                 }
             }
 
-            $discount = $request->get('discount', 0) / $rate;
+            $discountLocal = (float) $request->get('discount', 0);
+            $discount = $discountLocal / $rate;
 
-            $shippingFee = $request->get('enable_shipping') ? (float)$request->get('shipping_fee', 0) : 0;
+            $shippingFeeLocal = $request->get('enable_shipping') ? (float)$request->get('shipping_fee', 0) : 0;
+            $shippingFee = $shippingFeeLocal / $rate;
             $codFeePercentage = $request->get('enable_cod') ? (float)$request->get('cod_fee', 0) : 0;
             $codFee = $codFeePercentage > 0 ? ($totalPrice * ($codFeePercentage / 100)) : 0;
 
             $totalPriceAfterDiscount = $totalPrice - $discount + $shippingFee + $codFee;
-
-            // $paidPrice = $request->get('paid_price');
-            $paidPrice   = !is_null($request->get('paid_price')) ? ($request->get('paid_price') / $rate) : ($totalPriceAfterDiscount);
-
-            $remainPrice = currencyExchange($totalPriceAfterDiscount - $paidPrice, $rate);
-            $paidPrice   = currencyExchange($paidPrice, $rate);
+            $totalPriceLocal = $this->currencyService->fromUsdAtRate($totalPriceAfterDiscount, $rate, $currencyCode);
+            $paidPrice = !is_null($request->get('paid_price'))
+                ? $this->currencyService->round((float) $request->get('paid_price'), $currencyCode)
+                : $totalPriceLocal;
+            $remainPrice = $this->currencyService->round($totalPriceLocal - $paidPrice, $currencyCode);
+            $codFeeLocal = $this->currencyService->fromUsdAtRate($codFee, $rate, $currencyCode);
 
             if ($orderCash)
                 $order->update([
                     'discount'                    => $request->get('discount', 0),
                     'total_price_before_discount' => $request->get('total_price_before_discount'),
                     'paid_price'                  => $paidPrice,
-                    'total_price'                 => currencyExchange($totalPriceAfterDiscount, $rate),
+                    'total_price'                 => $totalPriceLocal,
                     'remain_price'                => $remainPrice,
-                    'shipping_fee'                => $shippingFee,
-                    'cod_fee'                     => $codFee,
+                    'shipping_fee'                => $shippingFeeLocal,
+                    'cod_fee'                     => $codFeeLocal,
                 ]);
             else {
                 $order->update([
@@ -746,12 +782,15 @@ class OrderRepository
                     'discount'                    => $request->get('discount', 0),
                     'total_price_before_discount' => $request->get('total_price_before_discount'),
                     'paid_price'                  => $paidPrice,
-                    'total_price'                 => currencyExchange($totalPriceAfterDiscount, $rate),
+                    'total_price'                 => $totalPriceLocal,
                     'remain_price'                => $remainPrice,
-                    'shipping_fee'                => $shippingFee,
-                    'cod_fee'                     => $codFee,
+                    'shipping_fee'                => $shippingFeeLocal,
+                    'cod_fee'                     => $codFeeLocal,
                 ]);
 
+                // Legacy single-currency customer balance handling is intentionally disabled.
+                // ClientAccountService updates the account keyed by seller, buyer and currency below.
+                if (false) {
                 // new code for if
                 //if ($remainPrice > 0){
 
@@ -761,7 +800,7 @@ class OrderRepository
                     //     ->where('debtor_id', $order->buyer_id)
                     //     ->first();
 
-					 if ($remainPrice > 0){
+					 if (false && $remainPrice > 0){
 						// new code
 						$clientDebit = ClientDebit::query()->firstOrCreate([
 								'creditor_id' => auth()->id(),
@@ -835,14 +874,18 @@ class OrderRepository
 					}
 
                 //} // end // new code for if
+                }
             }
 
             ///////////////////////////////////////////////////////////////
 
             $orderTax = $this->taxCalculator->calculate((float) $order->total_price, (float) $order_total_tax_ratio, $request->order_type);
-            $order_total_price_without_tax = $orderTax['price_without_tax'];
-            $order_total_tax_value = $orderTax['tax_value'];
-            $order_total_price = $orderTax['price_with_tax'];
+            $order_total_price = $this->currencyService->round($orderTax['price_with_tax'], $currencyCode);
+            $order_total_price_without_tax = $this->currencyService->round($orderTax['price_without_tax'], $currencyCode);
+            $order_total_tax_value = $this->currencyService->round(
+                $order_total_price - $order_total_price_without_tax,
+                $currencyCode
+            );
 
             $calc_remain_price = $order_total_price - $order->paid_price;
             $calc_total_price  = $order_total_price;
@@ -855,6 +898,15 @@ class OrderRepository
                 'total_price'       => $order_total_price,
                 'remain_price'       => $calc_remain_price,
             ]);
+
+            if (!$orderCash) {
+                $this->clientAccounts->syncOrderDebt(
+                    $order,
+                    $oldRemainPrice,
+                    $oldBuyerId,
+                    $oldCurrency
+                );
+            }
 
 
 
@@ -879,7 +931,6 @@ class OrderRepository
             return $order;
 
         }catch (Exception $exception){
-            dd($exception->getMessage());
             DB::rollBack();
             Log::error($exception->getLine().'-'.$exception->getMessage());
             return false;
@@ -1169,6 +1220,7 @@ class OrderRepository
 		$total_price_without_tax_paid = $total_price_without_tax_paid;
 
         $total_price_with_tax_paid = $total_price_without_tax_paid + $total_tax_value + $calc_val;
+        $totalsByCurrency = $this->currencyTotals($orders);
 
         ///////////////////////////////////////////////////////////////////////////////////////////////////////////
 
@@ -1185,6 +1237,7 @@ class OrderRepository
                 'total' => $total_price_with_tax_paid,
                 'total_tax_value' => $total_tax_value,
                 'total_price_without_tax' => $total_price_without_tax_paid,
+                'totals_by_currency' => $totalsByCurrency,
                 // 'total_tax_value' => $total_tax_value,
                 // 'total_price_without_tax' => round($totalAmount - $total_tax_value,2),
             ];
@@ -1202,6 +1255,7 @@ class OrderRepository
                 'total' => $total_price_with_tax_paid,
                 'total_tax_value' => $total_tax_value,
                 'total_price_without_tax' => $total_price_without_tax_paid,
+                'totals_by_currency' => $totalsByCurrency,
                 // 'total' => $totalAmount,
                 // 'total_tax_value' => $total_tax_value,
                 // 'total_price_without_tax' => $totalAmount - $total_tax_value,
@@ -1403,6 +1457,7 @@ class OrderRepository
 		$total_price_without_tax_paid = $total_price_without_tax_paid ;
 
         $total_price_with_tax_paid = $total_price_without_tax_paid + $total_tax_value;
+        $totalsByCurrency = $this->currencyTotals($orders);
 
         ///////////////////////////////////////////////////////////////////////////////////////////////////////////
 
@@ -1423,6 +1478,7 @@ class OrderRepository
                 // 'total_tax_value' => $total_tax_value,
                 // 'total_price_without_tax' => $totalAmount - $total_tax_value,
                 'totalRefunds' => $totalRefunds,
+                'totals_by_currency' => $totalsByCurrency,
             ];
 
         } else {
@@ -1442,6 +1498,7 @@ class OrderRepository
                 // 'total_tax_value' => $total_tax_value,
                 // 'total_price_without_tax' => $totalAmount - $total_tax_value,
                 'totalRefunds' => $totalRefunds,
+                'totals_by_currency' => $totalsByCurrency,
             ];
         }
     }
@@ -1659,6 +1716,9 @@ class OrderRepository
 
     public function getMonthlyOrders(Request $request, $debts = false, $profits = false, $with = null,$pagination = true,$withItems = true)
     {
+        if ((int) auth()->user()->country_id === Country::SYRIA) {
+            return $this->getMonthlyOrdersByCurrency($request);
+        }
 
         $rate = $this->currencyService->rate(Country::defaultCurrency(auth()->user()->country_id));
 
@@ -1880,6 +1940,138 @@ class OrderRepository
 
     }
 
+    private function getMonthlyOrdersByCurrency(Request $request): array
+    {
+        $start = $request->get('start_date')
+            ? Carbon::parse($request->get('start_date'))->startOfDay()
+            : ($request->get('date')
+                ? Carbon::parse($request->get('date'))->startOfDay()
+                : Carbon::now()->startOfMonth());
+        $end = $request->get('end_date')
+            ? Carbon::parse($request->get('end_date'))->endOfDay()
+            : ($request->get('date')
+                ? Carbon::parse($request->get('date'))->endOfDay()
+                : Carbon::now()->endOfDay());
+
+        $orders = Order::query()
+            ->with(['seller', 'items'])
+            ->whereHas('seller', function ($query) {
+                $query->where('country_id', Country::SYRIA);
+            })
+            ->when(auth()->user()->role_id !== User::ROLE_ADMIN, function ($query) {
+                $query->where('seller_id', auth()->id());
+            })
+            ->when($request->get('shop'), function ($query, $shop) {
+                $query->where('seller_id', $shop);
+            })
+            ->whereBetween('created_at', [$start, $end])
+            ->get();
+
+        $rows = [];
+        foreach ($orders as $order) {
+            $currency = strtoupper((string) ($order->curr_type ?: 'USD'));
+            $date = Carbon::parse($order->created_at)->format('Y-m-d');
+            $key = implode('|', [$date, $order->seller_id, $currency]);
+            if (!isset($rows[$key])) {
+                $rows[$key] = [
+                    'shop_name' => optional($order->seller)->name ?: '',
+                    'date' => $date,
+                    'currency' => $currency,
+                    'count' => 0,
+                    'price_without_tax' => 0,
+                    'tax_value' => 0,
+                    'total_price' => 0,
+                    'total_refund' => 0,
+                ];
+            }
+            $rows[$key]['count'] += (int) $order->items->sum('qty');
+            $rows[$key]['price_without_tax'] += (float) $order->price_without_tax;
+            $rows[$key]['tax_value'] += (float) $order->tax_value;
+            $rows[$key]['total_price'] += (float) $order->total_price;
+        }
+
+        $refunds = Refund::query()
+            ->with(['orderItem.order.seller'])
+            ->whereBetween('refunds.created_at', [$start, $end])
+            ->whereHas('orderItem.order.seller', function ($query) {
+                $query->where('country_id', Country::SYRIA);
+            })
+            ->when(auth()->user()->role_id !== User::ROLE_ADMIN, function ($query) {
+                $query->whereHas('orderItem.order', function ($order) {
+                    $order->where('seller_id', auth()->id());
+                });
+            })
+            ->when($request->get('shop'), function ($query, $shop) {
+                $query->whereHas('orderItem.order', function ($order) use ($shop) {
+                    $order->where('seller_id', $shop);
+                });
+            })
+            ->get();
+
+        foreach ($refunds as $refund) {
+            $order = optional($refund->orderItem)->order;
+            if (!$order) {
+                continue;
+            }
+            $currency = strtoupper((string) ($order->curr_type ?: 'USD'));
+            $date = Carbon::parse($refund->created_at)->format('Y-m-d');
+            $key = implode('|', [$date, $order->seller_id, $currency]);
+            if (!isset($rows[$key])) {
+                $rows[$key] = [
+                    'shop_name' => optional($order->seller)->name ?: '',
+                    'date' => $date,
+                    'currency' => $currency,
+                    'count' => 0,
+                    'price_without_tax' => 0,
+                    'tax_value' => 0,
+                    'total_price' => 0,
+                    'total_refund' => 0,
+                ];
+            }
+            $rows[$key]['total_refund'] += (float) ($refund->total_price_paid
+                ?: ((float) $refund->total_price * (float) ($order->curr_rate ?: 1)));
+        }
+
+        $totals = [];
+        foreach ($rows as &$row) {
+            $currency = $row['currency'];
+            $decimals = $currency === 'SYP' ? 0 : 2;
+            foreach (['price_without_tax', 'tax_value', 'total_price', 'total_refund'] as $field) {
+                $row[$field] = round($row[$field], $decimals);
+            }
+            if (!isset($totals[$currency])) {
+                $totals[$currency] = ['total' => 0, 'net' => 0, 'tax' => 0, 'refunds' => 0, 'count' => 0];
+            }
+            $totals[$currency]['total'] += $row['total_price'];
+            $totals[$currency]['net'] += $row['price_without_tax'];
+            $totals[$currency]['tax'] += $row['tax_value'];
+            $totals[$currency]['refunds'] += $row['total_refund'];
+            $totals[$currency]['count'] += $row['count'];
+        }
+        unset($row);
+        uasort($rows, function ($left, $right) {
+            return strcmp($right['date'], $left['date']);
+        });
+
+        $shops = User::query()
+            ->whereIn('role_id', [User::ROLE_SHOP, User::ROLE_WAREHOUSE])
+            ->where('country_id', Country::SYRIA)
+            ->get();
+
+        return [
+            'orders' => array_values($rows),
+            'totals_by_currency' => $totals,
+            'total' => 0,
+            'count' => array_sum(array_column($totals, 'count')),
+            'total_price_without_tax' => 0,
+            'total_tax_value' => 0,
+            'totalRefunds' => 0,
+            'currency' => null,
+            'filters' => $request->all(['search', 'field', 'direction', 'shop', 'date', 'start_date', 'end_date']),
+            'shops' => transformDataForVue($shops),
+        ];
+    }
+
     public function getProducts()
     {
         return UserProduct::query()
@@ -1999,6 +2191,7 @@ class OrderRepository
 
         $totalAmount = $query->sum('total_price');
         $count = $query->count();
+        $totalsByCurrency = $this->currencyTotals($query);
 
         if ($pagination) {
             $orders = $query->paginate(10);
@@ -2012,6 +2205,35 @@ class OrderRepository
             'count' => $count,
             'total_price_without_tax' => 0,
             'total_tax_value' => 0,
+            'totals_by_currency' => $totalsByCurrency,
         ];
+    }
+
+    private function currencyTotals($query): array
+    {
+        $model = (clone $query)->getModel();
+        $isOrder = $model instanceof Order;
+        $table = $model->getTable();
+        $select = "UPPER(COALESCE({$table}.curr_type, 'USD')) as currency_code, SUM({$table}.total_price) as total, SUM({$table}.paid_price) as paid, SUM({$table}.remain_price) as remaining";
+        if ($isOrder) {
+            $select .= ", SUM({$table}.price_without_tax) as net, SUM({$table}.tax_value) as tax";
+        }
+
+        return (clone $query)
+            ->reorder()
+            ->selectRaw($select)
+            ->groupBy('currency_code')
+            ->get()
+            ->keyBy('currency_code')
+            ->map(function ($row) {
+                return [
+                    'total' => (float) $row->total,
+                    'paid' => (float) $row->paid,
+                    'remaining' => (float) $row->remaining,
+                    'net' => isset($row->net) ? (float) $row->net : 0,
+                    'tax' => isset($row->tax) ? (float) $row->tax : 0,
+                ];
+            })
+            ->toArray();
     }
 }

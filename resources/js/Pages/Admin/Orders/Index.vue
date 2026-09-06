@@ -114,19 +114,12 @@
                 </div>
             </div>
 
-            <div class="flex flex-col" v-if="user.role === 1">
-                <label dir="rtl" class="pr-2"> إجمالي المبيع</label>
-                <span class="bg-emerald-500 px-2 rounded-md text-3xl text-white">{{ (totalSales).toFixed(2) }}</span>
-            </div>
-
-            <div class="flex flex-col" v-if="user.role === 1">
-                <label dir="rtl" class="pr-2">  الإجمالي غير  ش.ض</label>
-                <span class="bg-emerald-500 px-2 rounded-md text-3xl text-white">{{ Number(totalPriceWithoutTax).toFixed(2) }}</span>
-            </div>
-
-            <div class="flex flex-col" v-if="user.role === 1">
-                <label dir="rtl" class="pr-2"> إجمالي الضريبه</label>
-                <span class="bg-emerald-500 px-2 rounded-md text-3xl text-white">{{ Number(totalTaxValue).toFixed(2) }}</span>
+            <div v-if="user.role === 1" class="flex flex-wrap gap-3" dir="rtl">
+                <div v-for="(values, code) in totalsByCurrency" :key="code" class="flex flex-col rounded-md bg-emerald-500 px-3 py-2 text-white">
+                    <span class="font-bold">{{ formatMoney(values.total, code) }} إجمالي</span>
+                    <span class="text-xs">{{ formatMoney(values.net, code) }} صافي</span>
+                    <span class="text-xs">{{ formatMoney(values.tax, code) }} ضريبة</span>
+                </div>
             </div>
 
             <div class="flex flex-col" v-if="user.role === 1">
@@ -357,7 +350,10 @@
           shops: Array,
           buyers: Array,
           total: Number,
-          count: Number
+          count: Number,
+          total_price_without_tax: Number,
+          total_tax_value: Number,
+          totals_by_currency: Object
       },
       data() {
           var ordersd = []
@@ -395,6 +391,7 @@
               totalSales: this.total,
               totalPriceWithoutTax: this.total_price_without_tax,
               totalTaxValue: this.total_tax_value,
+              totalsByCurrency: this.totals_by_currency || {},
               totalCount: this.count,
               json_data: ordersd,
               currencyFormat: Currency.getFormatMethod(),
@@ -403,6 +400,12 @@
           }
       },
       methods: {
+
+          formatMoney(value, code) {
+              const currency = String(code || 'USD').toUpperCase();
+              const decimals = currency === 'SYP' ? 0 : 2;
+              return Number(value || 0).toLocaleString(undefined, { minimumFractionDigits: decimals, maximumFractionDigits: decimals }) + ' ' + currency;
+          },
 
           handleSelect(selectedItem) {
               // Extract the ID of the selected object
@@ -622,6 +625,7 @@
                   this.totalSales = response.data.total
                   this.totalPriceWithoutTax = response.data.total_price_without_tax
                   this.totalTaxValue = response.data.total_tax_value
+                  this.totalsByCurrency = response.data.totals_by_currency || {}
                   this.totalCount = response.data.count
                   this.userOrders = {
                       ...response.data.orders,
@@ -657,6 +661,7 @@
                 this.totalSales = response.data.total || 0;
                 this.totalPriceWithoutTax = response.data.total_price_without_tax || 0;
                 this.totalTaxValue = response.data.total_tax_value || 0;
+                this.totalsByCurrency = response.data.totals_by_currency || {};
                 this.totalCount = response.data.count || 0;
 
                 this.userOrders = {

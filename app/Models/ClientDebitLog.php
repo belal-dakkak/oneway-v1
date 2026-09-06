@@ -13,7 +13,8 @@ class ClientDebitLog extends Model
 
     protected $fillable = [
         'client_debit_id', 'order_id', 'client_debit_payment_id', 'client_refund_id', 'note', 'amount',
-        'request_date','qty','product_color_id','client_id','shop_id'
+        'request_date','qty','product_color_id','client_id','shop_id',
+        'currency_code', 'exchange_rate', 'base_amount'
     ];
 
     protected $appends = ['date', 'color'];

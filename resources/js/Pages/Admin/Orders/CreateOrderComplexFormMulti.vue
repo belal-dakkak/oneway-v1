@@ -37,8 +37,7 @@
                         <div class="px-4 flex justify-around">
                             <div class="">
                                 <jet-label for="retail_price" :value="__('Retail Price')" dir="rtl" />
-                                <jet-input ref="price" id="retail_price" type="number" min="0" step="0.01" class="mt-1 block w-full" v-model="product.price" autocomplete="retail_price" />
-                                <syp-equivalent :usd="product.price" />
+                                <jet-input ref="price" id="retail_price" type="number" min="0" :step="form.currency?.code === 'SYP' ? 1 : 0.01" class="mt-1 block w-full" v-model="product.price" autocomplete="retail_price" />
                                 <jet-input-error :message="form.errors.retail_price" class="mt-2" />
                             </div>
 
@@ -61,7 +60,10 @@
                     <jet-section-border />
                     <div class="w-full px-6" dir="rtl">
                         <jet-label for="currency" :value="__('Currency Type')" />
-                        <Multiselect v-model="form.currency" :options="currencies" :multiple="false" :close-on-select="true" placeholder="اختر نوع العملة التي تم بها الدفع" label="name" @tag="asyncFind" @search-change="asyncFind"
+                        <div v-if="currencies.length === 1 && currencies[0].locked" class="mt-1 rounded-md border border-teal-200 bg-teal-50 px-4 py-3 font-bold text-teal-700">
+                            {{ currencies[0].code }} — العملة محددة تلقائيًا حسب نوع الطلب
+                        </div>
+                        <Multiselect v-else v-model="form.currency" :options="currencies" :multiple="false" :close-on-select="true" placeholder="اختر نوع العملة التي تم بها الدفع" label="name" @tag="asyncFind" @search-change="asyncFind"
                              track-by="value" />
                         <jet-input-error :message="form.errors.currency" class="mt-2" />
                     </div>
@@ -94,7 +96,7 @@
 
                         <div class="w-full px-6">
                             <jet-label for="paid_price" :value="__('Paid Price')" dir="rtl" />
-                            <jet-input ref="price" id="paid_price" type="number" class="mt-1 block w-full" v-model="form.paid_price" autocomplete="paid_price" />
+                            <jet-input ref="price" id="paid_price" type="number" min="0" :step="form.currency?.code === 'SYP' ? 1 : 0.01" class="mt-1 block w-full" v-model="form.paid_price" autocomplete="paid_price" />
                             <jet-input-error :message="form.errors.paid_price" class="mt-2" />
                         </div>
                         <div class="w-full px-6" dir="rtl">
@@ -111,7 +113,7 @@
 
                         <div class="w-full px-6">
                             <jet-label for="discount" :value="__('Discount')" dir="rtl" />
-                            <jet-input ref="discount" id="discount" type="number" class="mt-1 block w-full" v-model="form.discount" autocomplete="discount" />
+                            <jet-input ref="discount" id="discount" type="number" min="0" :step="form.currency?.code === 'SYP' ? 1 : 0.01" class="mt-1 block w-full" v-model="form.discount" autocomplete="discount" />
                             <jet-input-error :message="form.errors.discount" class="mt-2" />
                         </div>
 

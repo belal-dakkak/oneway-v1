@@ -15,10 +15,11 @@ use App\Models\Setting;
 use App\Models\ShippingDetails;
 use App\Models\User;
 use App\Models\UserProduct;
-use App\Models\Wallet;
 use App\Repositories\OrderRepository;
+use App\Services\ClientAccountService;
 use App\Services\CurrencyService;
 use App\Services\InvoiceDataService;
+use App\Services\SalesCurrencyPolicy;
 use App\Support\Country;
 use App\Mail\OrderStatusChangeEmail;
 use Carbon\Carbon;
@@ -42,16 +43,22 @@ class OrderController extends Controller
     private $orderRepository;
     private $currencyService;
     private $invoiceDataService;
+    private $salesCurrencyPolicy;
+    private $clientAccounts;
 
     public function __construct(
         OrderRepository $orderRepository,
         CurrencyService $currencyService,
-        InvoiceDataService $invoiceDataService
+        InvoiceDataService $invoiceDataService,
+        SalesCurrencyPolicy $salesCurrencyPolicy,
+        ClientAccountService $clientAccounts
     )
     {
         $this->orderRepository = $orderRepository;
         $this->currencyService = $currencyService;
         $this->invoiceDataService = $invoiceDataService;
+        $this->salesCurrencyPolicy = $salesCurrencyPolicy;
+        $this->clientAccounts = $clientAccounts;
     }
 
     /**
@@ -87,6 +94,7 @@ class OrderController extends Controller
             'count'   => $orders['count'],
             'total_price_without_tax'   => $orders['total_price_without_tax'],
             'total_tax_value'   => $orders['total_tax_value'],
+            'totals_by_currency' => $orders['totals_by_currency'] ?? [],
             'shops'   => $shops,
             'buyers'  => $buyers,
 
@@ -170,16 +178,7 @@ class OrderController extends Controller
     {
 
 
-        $orders = $this->orderRepository->getMonthlyOrders($request);
-
-         $newArr = [
-            'orders'  => $orders,
-            'total'   => array_sum(array_column($orders,'total')),
-            'count'   => array_sum(array_column($orders,'count')),
-            'total_price_without_tax'   => array_sum(array_column($orders,'total_price_without_tax')),
-            'total_tax_value'   => array_sum(array_column($orders,'total_tax_value')),
-            'totalRefunds'   => array_sum(array_column($orders,'totalRefunds')),
-        ];
+        $report = $this->orderRepository->getMonthlyOrders($request);
 
        // dd($newArr);
 
@@ -202,7 +201,14 @@ class OrderController extends Controller
 
         // // dd('ok',$orders,$all_orders,$all_orders['orders']->toArray());
 
-        $pdf = PDF::loadView('includes.monthly_orders_template',array('seller'=>$seller,'orders'=>$orders,'all_orders'=>$newArr['orders'],'settings'=>$settings,'startDate'=>$startDate,'endDate'=>$endDate));
+        $pdf = PDF::loadView('includes.monthly_orders_template', [
+            'seller' => $seller,
+            'orders' => $report['orders'],
+            'all_orders' => $report,
+            'settings' => $settings,
+            'startDate' => $startDate,
+            'endDate' => $endDate,
+        ]);
         return $pdf->download('Orders '.config('app.name').' Date '.now()->format('Y_m_d').'.pdf');
     }
 
@@ -393,12 +399,17 @@ class OrderController extends Controller
         return Inertia::render('Admin/Orders/Create');
     }
 
-    public function simpleCreate(): Response
+    public function simpleCreate()
     {
         $allProducts = UserProduct::query()->where('user_id', auth()->id())->sum('stock');
         $country = auth()->user()->country_id;
-        $currencies = $this->currencyService->optionsForCountry($country);
-        $rate = $currencies[0]['rate'] ?? 1;
+        try {
+            $currency = $this->salesCurrencyPolicy->orderOption($country, 'simple');
+        } catch (\InvalidArgumentException $exception) {
+            return Redirect::route('dashboard')->with('error', 'يجب ضبط سعر صرف عملة المبيعات قبل إنشاء الطلبية.');
+        }
+        $currencies = [$currency];
+        $rate = $currency['rate'];
 
         return Inertia::render('Admin/Orders/CreateOrderSimpleForm', [
             'currencies'   => $currencies,
@@ -410,14 +421,19 @@ class OrderController extends Controller
         ]);
     }
 
-    public function complexCreate(): Response
+    public function complexCreate()
     {
         $users = User::query()->where('role_id', User::ROLE_CLIENT)->where('country_id',auth()->user()->country_id)->get();
         $shippers = User::query()->where('role_id', User::ROLE_SHIPPER)->where('country_id',auth()->user()->country_id)->get();
         $allProducts = UserProduct::query()->where('user_id', auth()->id())->sum('stock');
         $country = auth()->user()->country_id;
-        $currencies = $this->currencyService->optionsForCountry($country);
-        $rate = $currencies[0]['rate'] ?? 1;
+        try {
+            $currency = $this->salesCurrencyPolicy->orderOption($country, 'complex');
+        } catch (\InvalidArgumentException $exception) {
+            return Redirect::route('dashboard')->with('error', 'يجب ضبط سعر صرف عملة المبيعات قبل إنشاء الطلبية.');
+        }
+        $currencies = [$currency];
+        $rate = $currency['rate'];
 
         return Inertia::render('Admin/Orders/CreateOrderComplexForm', [
             'users'        => $users,
@@ -437,8 +453,9 @@ class OrderController extends Controller
         $shippers = User::query()->where('role_id', User::ROLE_SHIPPER)->where('country_id',auth()->user()->country_id)->get();
         $allProducts = UserProduct::query()->where('user_id', auth()->id())->sum('stock');
         $country = auth()->user()->country_id;
-        $currencies = $this->currencyService->optionsForCountry($country);
-        $rate = $currencies[0]['rate'] ?? 1;
+        $currency = $this->salesCurrencyPolicy->orderOption($country, 'complex_from_multi');
+        $currencies = [$currency];
+        $rate = $currency['rate'];
 
         return Inertia::render('Admin/Orders/CreateOrderComplexFormMulti', [
             'users'        => $users,
@@ -460,18 +477,22 @@ class OrderController extends Controller
             'selected_products.*.product_id' => 'required|integer|exists:user_products,id',
             'selected_products.*.qty' => 'required|numeric|min:1',
             'selected_products.*.price' => 'required|numeric|min:0',
-            'currency.value' => 'required|string',
+            'currency.value' => 'nullable|string',
         ]);
 
-        $currencyCode = strtoupper($request->input('currency.code', $request->input('currency.value')));
-        $currencyCode = $this->currencyService->validateForCountry($currencyCode, auth()->user()->country_id);
-        $request->merge(['currency' => [
-            'name' => $currencyCode,
-            'label' => $currencyCode,
-            'value' => strtolower($currencyCode),
-            'code' => $currencyCode,
-            'rate' => $this->currencyService->rate($currencyCode),
-        ]]);
+        $requestedCurrency = $request->input('currency.code', $request->input('currency.value'));
+        try {
+            $currency = $this->salesCurrencyPolicy->orderOption(
+                (int) auth()->user()->country_id,
+                $request->order_type,
+                $requestedCurrency
+            );
+        } catch (\InvalidArgumentException $exception) {
+            return Redirect::back()->withErrors([
+                'currency' => 'يجب ضبط سعر صرف عملة الطلب قبل حفظ الفاتورة.',
+            ]);
+        }
+        $request->merge(['currency' => $currency]);
 
         //DB::beginTransaction();
 
@@ -568,45 +589,21 @@ class OrderController extends Controller
     public function addPayment(Request $request)
     {
         try {
-            DB::beginTransaction();
-
-            $order = Order::query()->findOrFail($request->get('order'));
-            $amount = $request->get('amount');
-
-            if ($amount > $order->remain_price){
-                return response()->json([
-                    'error' => 'المبلغ اكبر من القيمة المستحقة'
-                ]);
-            }
-
-            $order->payments()->create([
-                'pay_amount' => $amount
+            $request->validate([
+                'order' => 'required|integer',
+                'amount' => 'required|numeric|min:0.0001',
             ]);
-
-            $user = User::query()->find(auth()->id());
-            $oldCredit = $user->wallet ? $user->wallet->credit : 0;
-            Wallet::query()->updateOrCreate([
-                'user_id' => auth()->id()
-            ],[
-                'credit' => $oldCredit + $amount,
-                'user_id' => auth()->id()
-            ]);
-
-            $oldPaidPrice = $order->paid_price;
-            $oldRemainPrice = $order->remain_price;
-            $order->update([
-                'paid_price' => $oldPaidPrice + $amount,
-                'remain_price' => $oldRemainPrice - $amount
-            ]);
-
-
+            $order = Order::query()
+                ->whereHas('seller', function ($query) {
+                    $query->where('country_id', auth()->user()->country_id);
+                })
+                ->findOrFail($request->get('order'));
+            $this->clientAccounts->payOrder($order, (float) $request->get('amount'));
         }catch (Exception $exception){
-            DB::rollBack();
             return response()->json([
                 'error' => $exception->getMessage()
-            ]);
+            ], 422);
         }
-        DB::commit();
 
         return response()->json([
             'success' => true
@@ -642,6 +639,7 @@ class OrderController extends Controller
             'count'   => $orders['count'],
             'total_price_without_tax'   => $orders['total_price_without_tax'],
             'total_tax_value'   => $orders['total_tax_value'],
+            'totals_by_currency' => $orders['totals_by_currency'] ?? [],
             'shops'   => $shops,
             'buyers'  => $buyers,
             'filters' => $request->all(['search', 'field', 'direction', 'start_date', 'end_date', 'date', 'buyer'])

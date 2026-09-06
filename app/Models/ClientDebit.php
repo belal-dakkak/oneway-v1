@@ -11,7 +11,9 @@ class ClientDebit extends Model
 {
     use HasFactory;
 
-    protected $fillable = ['creditor_id', 'debtor_id', 'amount'];
+    protected $fillable = ['creditor_id', 'debtor_id', 'amount', 'currency_code'];
+
+    protected $casts = ['amount' => 'float'];
 
     public function payments(): HasMany
     {

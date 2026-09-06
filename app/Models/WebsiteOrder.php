@@ -23,7 +23,7 @@ class WebsiteOrder extends Model
         'address', 'city', 'building_name', 'flat_number',
         'total_price_before_discount', 'discount', 'total_price', 
         'shipping_fee', 'cod_fee', 'status', 'payment_type', 'curr_type', 'invoice', 
-        'notes', 'country_id', 'paid_price', 'remain_price', 'curr_rate', 'display_currency', 'display_rate',
+        'notes', 'country_id', 'pricing_mode', 'paid_price', 'remain_price', 'curr_rate', 'display_currency', 'display_rate',
         'stock_reserved_at', 'stock_released_at', 'payment_captured_at', 'notifications_sent_at'
     ];
 

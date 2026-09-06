@@ -12,14 +12,14 @@
                   {{ creditor.name }}
             </span>
             <span class="lab-email text-center text-2xl font-bold py-2">
-                  {{ debit.amount }}
+                  {{ formatMoney(debit.amount) }}
             </span>
 
             <div class="flex flex-row justify-around mt-4" dir="rtl" v-for="payment in payments">
                 <div class="basis-1/2 rounded-2xl text-pcr p-8 pcr-shadow text-left">
                     <div class="flex justify-between py-4 border-b">
                         <p class="font-bold">الكمية المدفوعة</p>
-                        <p>{{ payment.amount }}</p>
+                        <p>{{ formatMoney(payment.amount) }}</p>
                     </div>
                     <div class="flex justify-between py-4 border-b">
                         <p class="font-bold">التاريخ</p>
@@ -57,6 +57,16 @@ export default defineComponent({
         debit: Object,
         debtor: Object,
         creditor: Object,
+    },
+    methods: {
+        formatMoney(value) {
+            const code = String(this.debit.currency_code || 'USD').toUpperCase();
+            const decimals = code === 'SYP' ? 0 : 2;
+            return Number(value || 0).toLocaleString(undefined, {
+                minimumFractionDigits: decimals,
+                maximumFractionDigits: decimals
+            }) + ' ' + code;
+        }
     }
 })
 </script>

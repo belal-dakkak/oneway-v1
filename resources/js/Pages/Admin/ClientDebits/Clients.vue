@@ -2,7 +2,12 @@
   <app-layout title="Products Management">
       <div class="mt-8 flex justify-around space-x-4">
 
-          <h3 class="text-2xl mt-4 font-bold capitalize text-primary"><span class="bg-emerald-500 px-2 py-0 text-6xl rounded-md text-white">{{ currencyExchange(debitsSum, rate, true) }} </span> ديون للزبائن</h3>
+          <div class="flex flex-wrap gap-3" dir="rtl">
+              <h3 v-for="(total, code) in debitsSum" :key="code" class="text-xl mt-4 font-bold text-primary">
+                  <span class="bg-emerald-500 px-3 py-2 rounded-md text-white">{{ formatMoney(total, code) }}</span>
+                  حسابات الزبائن
+              </h3>
+          </div>
           <div class="max-w-xs text-right">
               <label>رقم الهاتف</label>
               <input dir="rtl" type="search" v-model="params.searchPhone" placeholder="بحث..." class="block w-full rounded-md border-gray-300 shadow-sm focus:ring-primary-500 focus:border-primary-500 sm:text-sm">
@@ -75,25 +80,25 @@
                 </td>
                 <td class="mx-auto max-w-sm p-6 text-sm leading-6 sm:text-base sm:leading-7">
                     <div class="ml-4">
-                        <div class="text-sm font-medium">{{ Math.round(item.amount* rate).toFixed(2) }}</div>
+                        <div class="text-sm font-medium">{{ formatMoney(item.amount, item.currency_code) }}</div>
                     </div>
                 </td>
                 <td class="mx-auto max-w-sm p-6 text-sm leading-6 sm:text-base sm:leading-7">
                     <div class="ml-4">
-                        <div class="text-sm font-medium text-white bg-emerald-500 p-2 rounded-md my-4 text-center">{{ Math.round(item.debtor.wallet.credit * rate).toFixed(2) }} الرصيد</div>
-                        <div class="text-sm font-medium text-white bg-rose-500 p-2 rounded-md my-4 text-center">{{ Math.round(item.debtor.wallet.debit * rate).toFixed(2) }} الدين</div>
+                        <div v-if="Number(item.amount) < 0" class="text-sm font-medium text-white bg-emerald-500 p-2 rounded-md my-4 text-center">{{ formatMoney(Math.abs(item.amount), item.currency_code) }} رصيد للزبون</div>
+                        <div v-else class="text-sm font-medium text-white bg-rose-500 p-2 rounded-md my-4 text-center">{{ formatMoney(item.amount, item.currency_code) }} دين</div>
                     </div>
                 </td>
                 <td class="flex flex-wrap mx-auto max-w-sm p-6 text-sm leading-6 sm:text-base sm:leading-7">
 
-                    <div class="m-4">
+                    <div v-if="Number(item.amount) > 0" class="m-4">
                         <button @click="addPayment(item.id)" class="w-full flex justify-between rounded-md text-white bg-teal-400 hover:bg-teal-600 hover:text-white">
                             <p class="m-1 p-1">تسديد</p>
                             <vue-feather class="m-2 mt-3" :type="'credit-card'" stroke-width="2"></vue-feather>
                         </button>
                     </div>
 
-                    <div class="m-4">
+                    <div v-if="Number(item.amount) < 0" class="m-4">
                         <button @click="addWithdraw(item.id)" class="w-full flex justify-between rounded-md text-white bg-fuchsia-600 hover:bg-fuchsia-800 hover:text-white">
                             <p class="m-1 p-1">سحب</p>
                             <vue-feather class="m-2 mt-3" :type="'credit-card'" stroke-width="2"></vue-feather>
@@ -224,7 +229,7 @@ export default {
         filters: Object,
         shops: Array,
         rate: Number,
-        sum: String
+        sum: [Object, Array]
     },
     data() {
         return {
@@ -257,6 +262,14 @@ export default {
         }
     },
     methods: {
+        formatMoney(value, code) {
+            const currency = String(code || 'USD').toUpperCase();
+            const decimals = currency === 'SYP' ? 0 : 2;
+            return Number(value || 0).toLocaleString(undefined, {
+                minimumFractionDigits: decimals,
+                maximumFractionDigits: decimals
+            }) + ' ' + currency;
+        },
         controlProduct(event){
             let model = event.target.value
             let element = event.target;

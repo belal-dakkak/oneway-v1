@@ -110,9 +110,9 @@
               </div>
           </div>
 
-          <div class="flex flex-col" v-if="admin.role === 1">
+          <div class="flex gap-2" v-if="admin.role === 1">
               <label dir="rtl" class="pr-2"> إجمالي المرتجعات</label>
-              <span class="bg-emerald-500 px-2 rounded-md text-3xl text-white">{{ currencyExchange(totalRefunds, rate, true) }}</span>
+              <span v-for="(amount, code) in totalsByCurrency" :key="code" class="bg-emerald-500 px-2 rounded-md text-3xl text-white">{{ money(amount, code) }}</span>
           </div>
 
           <div class="flex justify-between block bg-white text-black-500 hover:text-white hover:bg-gray-800 rounded-lg p-6 ring-1 ring-black-400">
@@ -194,7 +194,7 @@
                 </td>
                 <td class="mx-auto max-w-sm p-6 text-sm leading-6 sm:text-base sm:leading-7">
                     <div class="ml-4">
-                        <div class="text-sm font-medium">{{ currencyExchange(item.item_price, rate) }}</div>
+                        <div class="text-sm font-medium">{{ money(item.transaction_item_price, item.currency_code) }}</div>
                     </div>
                 </td>
                 <td class="mx-auto max-w-sm p-6 text-sm leading-6 sm:text-base sm:leading-7">
@@ -204,7 +204,7 @@
                 </td>
                 <td class="mx-auto max-w-sm p-6 text-sm leading-6 sm:text-base sm:leading-7">
                     <div class="ml-4">
-                        <div class="text-sm font-medium">{{ currencyExchange(item.total_price, rate) }}</div>
+                        <div class="text-sm font-medium">{{ money(item.transaction_total_price, item.currency_code) }}</div>
                     </div>
                 </td>
                 <td class="mx-auto max-w-sm p-6 text-sm leading-6 sm:text-base sm:leading-7">
@@ -248,6 +248,7 @@ export default {
         shops: Array,
         buyers: Array,
         total: Number,
+        totals_by_currency: { type: Object, default: () => ({}) },
     },
     data() {
         return {
@@ -263,10 +264,15 @@ export default {
             },
             userRefunds: this.refunds,
             totalRefunds: this.total,
+            totalsByCurrency: this.totals_by_currency,
             currencyExchange: Currency.getExchangeMethod(),
         }
     },
     methods: {
+        money(value, code) {
+            const currency = code || 'USD'
+            return `${Currency.formatAmount(value, currency)} ${currency}`
+        },
         sort(field) {
             this.params.field = field;
             this.params.direction = this.params.direction === 'asc' ? 'desc' : 'asc';
@@ -306,6 +312,7 @@ export default {
 
             axios.get(this.route('refunds.index', this.params)).then(response => {
                 this.totalSales = response.data.total
+                this.totalsByCurrency = response.data.totals_by_currency || {}
                 this.userRefunds = {
                     ...response.data.orders,
                     data: [...response.data.orders.data]
@@ -328,6 +335,7 @@ export default {
                         data: [...response.data.refunds.data]
                     }
                     this.totalRefunds = response.data.total;
+                    this.totalsByCurrency = response.data.totals_by_currency || {};
                 });
                 // this.$inertia.get(this.route('refunds.index'), this.params, { replace: true, preserveState: true});
             }),

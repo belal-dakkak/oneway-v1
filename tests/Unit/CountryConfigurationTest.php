@@ -15,13 +15,13 @@ class CountryConfigurationTest extends TestCase
         $this->assertSame(3, Country::globalProductId());
     }
 
-    public function test_syria_uses_usd_for_transactions_and_syp_for_display_only(): void
+    public function test_syria_uses_usd_for_operations_and_exposes_syp_to_the_storefront(): void
     {
         $this->assertSame('USD', Country::defaultCurrency(Country::SYRIA));
         $this->assertSame('USD', Country::baseCurrency(Country::SYRIA));
         $this->assertSame('SYP', Country::displayCurrency(Country::SYRIA));
         $this->assertSame(['USD'], Country::currencyCodes(Country::SYRIA));
-        $this->assertSame(['USD'], Country::currencyCodes(Country::SYRIA, true));
+        $this->assertSame(['SYP', 'USD'], Country::currencyCodes(Country::SYRIA, true));
         $this->assertSame('Asia/Damascus', Country::timezone(Country::SYRIA));
     }
 

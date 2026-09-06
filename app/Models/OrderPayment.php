@@ -11,7 +11,7 @@ class OrderPayment extends Model
 {
     use HasFactory;
 
-    protected $fillable = ['order_id', 'pay_amount'];
+    protected $fillable = ['order_id', 'pay_amount', 'exchange_rate', 'base_amount'];
 
     protected $appends = ['date'];
 

@@ -206,15 +206,20 @@
 
                     @foreach($all_orders['orders'] as $item)
 
+                            @php
+                                $rowCurrency = strtoupper($item['currency'] ?? ($all_orders['currency'] ?? 'USD'));
+                                $rowDecimals = $rowCurrency === 'SYP' ? 0 : 2;
+                            @endphp
+
                             <tr class=" ">
                                 <td class="td-med"> {{ $item['shop_name'] }} </td>
                                 <td class="td-med"> {{ $item['date'] }} </td>
-                                <td class="td-med"> {{ $item['total_refund'] ? $item['total_refund'] : 0 }} </td>
+                                <td class="td-med"> {{ number_format($item['total_refund'] ?: 0, $rowDecimals) }} </td>
                                 <td class="td-med"> {{ $item['count'] ? $item['count'] : 0 }} </td>
-                                <td class="td-med"> {{ $item['price_without_tax'] ? $item['price_without_tax'] : 0 }} </td>
-                                <td class="td-med"> {{ $item['tax_value'] ? $item['tax_value'] : 0 }} </td>
-                                <td class="td-med"> {{ $item['total_price'] ? $item['total_price'] : 0 }} </td>
-                                <td class="td-med"> {{ $all_orders['currency'] ?? 'USD' }} </td>
+                                <td class="td-med"> {{ number_format($item['price_without_tax'] ?: 0, $rowDecimals) }} </td>
+                                <td class="td-med"> {{ number_format($item['tax_value'] ?: 0, $rowDecimals) }} </td>
+                                <td class="td-med"> {{ number_format($item['total_price'] ?: 0, $rowDecimals) }} </td>
+                                <td class="td-med"> {{ $rowCurrency }} </td>
                             </tr>
 
                     @endforeach
@@ -238,6 +243,19 @@
 
                 </tr>
 
+                @if(!empty($all_orders['totals_by_currency']))
+                    @foreach($all_orders['totals_by_currency'] as $currencyCode => $summary)
+                    @php($moneyDecimals = $currencyCode === 'SYP' ? 0 : 2)
+                    <tr class=" ">
+                        <td colspan="3" style="width: 23% !important" class="td-med">{{ $currencyCode }}</td>
+                        <td class="td-med">{{ number_format($summary['refunds'], $moneyDecimals) }}</td>
+                        <td class="td-med">{{ number_format($summary['count'], 0) }}</td>
+                        <td class="td-med">{{ number_format($summary['net'], $moneyDecimals) }}</td>
+                        <td class="td-med">{{ number_format($summary['tax'], $moneyDecimals) }}</td>
+                        <td class="td-med">{{ number_format($summary['total'], $moneyDecimals) }}</td>
+                    </tr>
+                    @endforeach
+                @else
                 <tr class=" ">
                     <td colspan="3" style="width: 23% !important" class="td-med"></td>
                     <td class="td-med"> {{ $all_orders != null && array_key_exists('totalRefunds',$all_orders) ? number_format($all_orders['totalRefunds'],2) : 0 }} </td>
@@ -247,6 +265,7 @@
                     <td class="td-med"> {{ $all_orders != null && array_key_exists('total',$all_orders) ? number_format($all_orders['total'],2) : 0 }} </td>
 
                 </tr>
+                @endif
             </table>
         </div>
 

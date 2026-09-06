@@ -16,6 +16,7 @@ use App\Jobs\NotificationOrderJob;
 use App\Mail\NewOrderAdminEmail;
 use App\Mail\OrderConfirmationEmail;
 use App\Services\CurrencyService;
+use App\Services\SalesCurrencyPolicy;
 use App\Support\Country;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Session;
@@ -32,17 +33,20 @@ class OrderController extends Controller
     private $tapService;
     private $currencyService;
     private $stockService;
+    private $salesCurrencyPolicy;
 
     public function __construct(
         OrderRepository $orderRepository,
         TapPaymentService $tapService,
         CurrencyService $currencyService,
-        WebsiteOrderStockService $stockService
+        WebsiteOrderStockService $stockService,
+        SalesCurrencyPolicy $salesCurrencyPolicy
     ) {
         $this->orderRepository = $orderRepository;
         $this->tapService = $tapService;
         $this->currencyService = $currencyService;
         $this->stockService = $stockService;
+        $this->salesCurrencyPolicy = $salesCurrencyPolicy;
     }
 
     public function cart(): Response
@@ -102,12 +106,14 @@ class OrderController extends Controller
             'building_name' => 'required|string',
             'flat_number' => 'required|string',
             'payment_method' => 'required|in:cod,card',
-            'currency' => 'required|string',
+            'currency' => 'nullable|string',
         ]);
 
         $countryId = Country::id();
         try {
-            $currencyCode = $this->currencyService->validateForCountry($request->currency, $countryId, true);
+            $currencyCode = $this->salesCurrencyPolicy
+                ->websiteOption($countryId, (bool) Session::get('is_merchant'), $request->currency)
+                ['code'];
         } catch (InvalidArgumentException $exception) {
             return back()->withErrors(['currency' => 'العملة المختارة غير متاحة لهذا البلد.']);
         }
@@ -143,6 +149,7 @@ class OrderController extends Controller
             'items' => $items,
             'payment' => ['name' => $request->payment_method],
             'currency' => $currencyCode,
+            'pricing_mode' => Session::get('is_merchant') ? 'wholesale' : 'retail',
             'shipping_details_id' => null, // We could store address separately if needed
             'first_name' => $request->first_name,
             'last_name' => $request->last_name,
@@ -157,6 +164,11 @@ class OrderController extends Controller
         // We need to set auth user if they are logged in, or use a guest user?
         // Guest user management: Find or create user by email
         $user = User::where('email', $request->email)->first();
+        if ($user && (int) $user->country_id !== (int) $countryId) {
+            return back()->withErrors([
+                'email' => 'هذا البريد الإلكتروني مرتبط بحساب في فرع آخر.',
+            ]);
+        }
         if (!$user) {
             $user = User::create([
                 'name' => $request->first_name . ' ' . $request->last_name,
@@ -168,7 +180,7 @@ class OrderController extends Controller
             ]);
 
             // Initial wallet for new user
-            $user->wallet()->create(['credit' => 0, 'debit' => 0]);
+            $user->wallet()->firstOrCreate([], ['credit' => 0, 'debit' => 0]);
         }
         auth()->login($user);
 

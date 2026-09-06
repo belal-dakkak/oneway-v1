@@ -92,22 +92,32 @@
                 </div>
             </div>
 
-            <div class="flex flex-col" v-if="user.role === 1">
+            <div v-if="user.role === 1 && Object.keys(totalsByCurrency).length" class="flex gap-3">
+                <div v-for="(summary, code) in totalsByCurrency" :key="code" class="rounded-md bg-emerald-500 px-3 py-2 text-white">
+                    <div class="text-lg font-bold">{{ code }}</div>
+                    <div>المبيعات: {{ money(summary.total, code) }}</div>
+                    <div>الصافي: {{ money(summary.net, code) }}</div>
+                    <div>الضريبة: {{ money(summary.tax, code) }}</div>
+                    <div>المرتجعات: {{ money(summary.refunds, code) }}</div>
+                </div>
+            </div>
+
+            <div class="flex flex-col" v-if="user.role === 1 && !Object.keys(totalsByCurrency).length">
                 <label dir="rtl" class="pr-2"> إجمالي المبيع</label>
                 <span class="bg-emerald-500 px-2 rounded-md text-3xl text-white">{{ money(totalSales) }}</span>
             </div>
 
-            <div class="flex flex-col" v-if="user.role === 1">
+            <div class="flex flex-col" v-if="user.role === 1 && !Object.keys(totalsByCurrency).length">
                 <label dir="rtl" class="pr-2">  الإجمالي غير  ش.ض</label>
                 <span class="bg-emerald-500 px-2 rounded-md text-3xl text-white">{{ money(totalPriceWithoutTax) }}</span>
             </div>
 
-            <div class="flex flex-col" v-if="user.role === 1">
+            <div class="flex flex-col" v-if="user.role === 1 && !Object.keys(totalsByCurrency).length">
                 <label dir="rtl" class="pr-2"> إجمالي الضريبه</label>
                 <span class="bg-emerald-500 px-2 rounded-md text-3xl text-white">{{ money(totalTaxValue) }}</span>
             </div>
 
-            <div class="flex flex-col" v-if="user.role === 1">
+            <div class="flex flex-col" v-if="user.role === 1 && !Object.keys(totalsByCurrency).length">
                 <label dir="rtl" class="pr-2"> إجمالي المرتجعات</label>
                 <span class="bg-emerald-500 px-2 rounded-md text-3xl text-white">{{ money(totalRefunds) }}</span>
             </div>
@@ -178,7 +188,7 @@
 
                   <td class="mx-auto max-w-sm p-6 text-sm leading-6 sm:text-base sm:leading-7">
                       <div class="ml-4">
-                          <div class="text-sm font-medium">{{ item.total_refund != null ? item.total_refund : 0 }}</div>
+                          <div class="text-sm font-medium">{{ money(item.total_refund != null ? item.total_refund : 0, item.currency || currency) }}</div>
                       </div>
                   </td>
 
@@ -190,26 +200,26 @@
 
                   <td class="mx-auto max-w-sm p-6 text-sm leading-6 sm:text-base sm:leading-7">
                       <div class="ml-4">
-                          <div class="text-sm font-medium">{{ money(item.price_without_tax) }}</div>
+                          <div class="text-sm font-medium">{{ money(item.price_without_tax, item.currency || currency) }}</div>
                       </div>
                   </td>
 
                   <td class="mx-auto max-w-sm p-6 text-sm leading-6 sm:text-base sm:leading-7">
                       <div class="ml-4">
-                          <div class="text-sm font-medium">{{ money(item.tax_value != null ? item.tax_value : 0) }}</div>
+                          <div class="text-sm font-medium">{{ money(item.tax_value != null ? item.tax_value : 0, item.currency || currency) }}</div>
                       </div>
                   </td>
 
                   <td class="mx-auto max-w-sm p-6 text-sm leading-6 sm:text-base sm:leading-7">
                       <div class="ml-4">
-                          <div class="text-sm font-medium">{{ money(item.total_price) }}</div>
+                          <div class="text-sm font-medium">{{ money(item.total_price, item.currency || currency) }}</div>
                       </div>
                   </td>
 
 
                   <td class="mx-auto max-w-sm p-6 text-sm leading-6 sm:text-base sm:leading-7">
                       <div class="ml-4">
-                          <div class="text-sm font-medium">{{ currency }}</div>
+                          <div class="text-sm font-medium">{{ item.currency || currency }}</div>
                       </div>
                   </td>
 
@@ -266,7 +276,8 @@
           count: Number,
           total_refund: Number,
           shop_name: String,
-          currency: { type: String, default: 'USD' }
+          currency: { type: String, default: 'USD' },
+          totals_by_currency: { type: Object, default: () => ({}) }
       },
       data() {
           var ordersd = []
@@ -280,6 +291,7 @@
                   'price_without_tax': order.price_without_tax,
                   'tax_value': order.tax_value,
                   'total_price': order.total_price,
+                  'currency': order.currency || this.currency,
               })
           });
 
@@ -306,6 +318,7 @@
               totalPriceWithoutTax: this.total_price_without_tax,
               totalTaxValue: this.total_tax_value,
               totalCount: this.count,
+              totalsByCurrency: this.totals_by_currency,
               json_data: ordersd,
               currencyFormat: Currency.getFormatMethod(),
               page: 2,
@@ -314,8 +327,9 @@
       },
       methods: {
 
-          money(value) {
-              return `${Currency.formatAmount(value, this.currency)} ${this.currency}`;
+          money(value, code = null) {
+              const currencyCode = code || this.currency || 'USD';
+              return `${Currency.formatAmount(value, currencyCode)} ${currencyCode}`;
           },
 
           handleSelect(selectedItem) {
@@ -432,6 +446,7 @@
                   this.totalPriceWithoutTax = response.data.total_price_without_tax
                   this.totalTaxValue = response.data.total_tax_value
                   this.totalCount = response.data.count
+                  this.totalsByCurrency = response.data.totals_by_currency || {}
 
                   this.userOrders = {
                       ...response.data.orders,
@@ -448,6 +463,7 @@
                         'price_without_tax': order.price_without_tax,
                         'tax_value': order.tax_value,
                         'total_price': order.total_price,
+                        'currency': order.currency || this.currency,
                       })
                   });
               });
@@ -466,6 +482,7 @@
                     this.totalPriceWithoutTax = response.data.total_price_without_tax
                     this.totalTaxValue = response.data.total_tax_value
                     this.totalCount = response.data.count
+                    this.totalsByCurrency = response.data.totals_by_currency || {}
                     this.userOrders = {
                         ...response.data.orders,
                         data: [...this.userOrders, ...response.data.orders]
@@ -480,6 +497,7 @@
                             'price_without_tax': order.price_without_tax,
                             'tax_value': order.tax_value,
                             'total_price': order.total_price,
+                            'currency': order.currency || this.currency,
                         })
                     });
                 });

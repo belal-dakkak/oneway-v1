@@ -11,7 +11,7 @@ class ClientDebitPayment extends Model
 {
     use HasFactory;
 
-    protected $fillable = ['client_debit_id', 'amount'];
+    protected $fillable = ['client_debit_id', 'amount', 'exchange_rate', 'base_amount'];
 
     public function clientDebit(): BelongsTo
     {

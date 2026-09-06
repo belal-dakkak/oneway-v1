@@ -12,7 +12,10 @@ class Refund extends Model
 {
     use HasFactory;
     protected $fillable = ['order_item_id', 'qty', 'item_price', 'total_price','total_price_paid', 'item_barcode', 'order_barcode'];
-    protected $appends = ['date', 'item_name', 'item_image', 'client_name', 'shop_name'];
+    protected $appends = [
+        'date', 'item_name', 'item_image', 'client_name', 'shop_name',
+        'currency_code', 'transaction_item_price', 'transaction_total_price',
+    ];
 
     public function orderItem(): BelongsTo
     {
@@ -43,5 +46,28 @@ class Refund extends Model
     public function getItemImageAttribute()
     {
         return $this->orderItem->product->productColor->photo_url;
+    }
+
+    public function getCurrencyCodeAttribute(): string
+    {
+        return strtoupper((string) (optional(optional($this->orderItem)->order)->curr_type ?: 'USD'));
+    }
+
+    public function getTransactionTotalPriceAttribute(): float
+    {
+        $stored = (float) ($this->attributes['total_price_paid'] ?? 0);
+        if ($stored != 0.0) {
+            return $stored;
+        }
+
+        $rate = (float) (optional(optional($this->orderItem)->order)->curr_rate ?: 1);
+        return (float) $this->total_price * $rate;
+    }
+
+    public function getTransactionItemPriceAttribute(): float
+    {
+        return $this->qty > 0
+            ? $this->transaction_total_price / (int) $this->qty
+            : 0.0;
     }
 }

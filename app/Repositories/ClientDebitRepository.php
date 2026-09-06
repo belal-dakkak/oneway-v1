@@ -33,6 +33,9 @@ class ClientDebitRepository
         if ($creditor = $request->get('creditor_id'))
             $clients->where('creditor_id', $creditor);
 
+        if ($currency = $request->get('currency_code'))
+            $clients->where('currency_code', strtoupper($currency));
+
         if (is_string($search))
             $clients->whereRelation('debtor', 'name', 'LIKE', "%$search%");
 
@@ -81,7 +84,14 @@ class ClientDebitRepository
         if (is_string($searchPhone))
             $clients->whereRelation('debtor', 'phone', 'LIKE', "%$searchPhone%");
 
-        return $clients->sum('amount');
+        if ($currency = $request->get('currency_code'))
+            $clients->where('currency_code', strtoupper($currency));
+
+        return $clients
+            ->selectRaw("COALESCE(currency_code, 'USD') as currency_code, SUM(amount) as total")
+            ->groupBy('currency_code')
+            ->pluck('total', 'currency_code')
+            ->toArray();
 
     }
 

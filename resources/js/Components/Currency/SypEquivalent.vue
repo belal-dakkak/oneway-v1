@@ -3,7 +3,7 @@
         ≈ {{ formattedAmount }} {{ resolvedCurrency.code }} (للعرض فقط)
     </small>
     <small v-else-if="missingSyriaRate" class="block mt-1 text-xs font-medium text-rose-600" dir="rtl">
-        سعر عرض الليرة السورية غير محدد. يبقى السعر الرسمي بالدولار.
+        سعر صرف الليرة السورية غير محدد. يبقى السعر الرسمي بالدولار.
     </small>
 </template>
 
@@ -20,9 +20,16 @@ export default {
         resolvedCurrency() {
             return this.displayCurrency || this.$page?.props?.display_currency || null
         },
+        isPrimaryStorefrontCurrency() {
+            const isAdminPage = String(this.$page?.component || '').startsWith('Admin/')
+            return !this.displayCurrency
+                && !isAdminPage
+                && String(this.$page?.props?.default_currency || '').toUpperCase() === 'SYP'
+        },
         visible() {
             return this.resolvedCurrency?.code === 'SYP'
                 && Number(this.resolvedCurrency?.rate) > 0
+                && !this.isPrimaryStorefrontCurrency
                 && this.usd !== null
                 && this.usd !== ''
                 && Number.isFinite(Currency.number(this.usd))

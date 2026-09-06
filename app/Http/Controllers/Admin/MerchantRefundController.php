@@ -13,6 +13,7 @@ use App\Models\User;
 use App\Models\UserProduct;
 use App\Models\UserProductLog;
 use App\Notifications\ShopNotification;
+use App\Services\ClientAccountService;
 use Carbon\Carbon;
 use Exception;
 use Illuminate\Http\JsonResponse;
@@ -22,8 +23,19 @@ use Jenssegers\Date\Date;
 
 class MerchantRefundController extends Controller
 {
+    private $clientAccounts;
+
+    public function __construct(ClientAccountService $clientAccounts)
+    {
+        $this->clientAccounts = $clientAccounts;
+    }
+
     public function store(Request $request): JsonResponse
     {
+        $request->validate([
+            'user_products' => ['required', 'string'],
+        ]);
+
         $userProduct = null;
         $userProductsArr = [];
         $note = null;
@@ -38,7 +50,10 @@ class MerchantRefundController extends Controller
         $logsArr = [];
         $logsArr2 = [];
 
-        $products = json_decode($request->get('user_products'),true);
+        $products = json_decode($request->get('user_products'), true);
+        if (! is_array($products) || empty($products)) {
+            return response()->json(['error' => 'بيانات المنتجات المرتجعة غير صالحة.'], 422);
+        }
 
         $productColorsArr = [];
 
@@ -306,7 +321,17 @@ class MerchantRefundController extends Controller
 
     public function clientRefund(Request $request)
     {
-        $products = json_decode($request->get('user_products'),true);
+        $request->validate([
+            'user_products' => ['required', 'string'],
+            'client_id' => ['required', 'integer'],
+        ]);
+
+        $products = json_decode($request->get('user_products'), true);
+        if (! is_array($products) || empty($products)) {
+            return response()->json(['error' => 'بيانات المنتجات المرتجعة غير صالحة.'], 422);
+        }
+
+        DB::beginTransaction();
 
         foreach ($products as $key => $product) {
             try {
@@ -318,6 +343,25 @@ class MerchantRefundController extends Controller
                 $orderItemId = $product['order_item_id'];
 
                 $orderItem = OrderItem::query()->findOrFail($orderItemId);
+                if ((int) $qty <= 0 || (int) $qty > (int) $orderItem->qty) {
+                    throw new Exception('كمية المرتجع غير صالحة.');
+                }
+                if ((int) optional($orderItem->order->seller)->country_id !== (int) auth()->user()->country_id) {
+                    abort(403);
+                }
+                $order = $orderItem->order;
+                if (! $order->buyer_id) {
+                    throw new Exception('لا يوجد زبون مرتبط بهذه الطلبية.');
+                }
+                $currency = strtoupper((string) ($order->curr_type ?: 'USD'));
+                $rate = (float) ($order->curr_rate ?: 1);
+                $decimals = $currency === 'SYP' ? 0 : 2;
+                $calc_new_total = round((float) $orderItem->item_price * $qty * $rate, $decimals);
+                $account = $this->clientAccounts->account(
+                    (int) $order->seller_id,
+                    (int) $order->buyer_id,
+                    $currency
+                );
                 $itemBarcode = $orderItem->product->productColor->barcode;
                 $orderBarcode = $orderItem->order->barcode;
 
@@ -332,22 +376,29 @@ class MerchantRefundController extends Controller
                 $refund->save();
 
 				// new code
-				$calc_new_total = round($orderItem->item_price * $qty * $orderItem->order->curr_rate);
-
-				// new code
-				$orderItem->order->update([
-					'paid_price' => $orderItem->order->paid_price + $calc_new_total,
-					'remain_price' => $orderItem->order->remain_price - $calc_new_total
-				]);
+				// The account and order are adjusted below in their original transaction currency.
 
 
-                $orderItem->qty = $orderItem->qty - $qty;
-                $orderItem->save();
+                $remainingQty = max(0, (int) $orderItem->qty - (int) $qty);
+                $orderItem->update([
+                    'qty' => $remainingQty,
+                    'total_price' => (float) $orderItem->item_price * $remainingQty,
+                    'total_price_paid' => (float) $orderItem->item_price * $remainingQty * $rate,
+                ]);
 
                 $clientRefund = ClientRefund::query()->create([
                     'refund_id' => $refund->id,
                     'client_id' => $request->get('client_id'),
-                    'client_debit_id' => $request->get('client_debit_id')
+                    'client_debit_id' => $account->id
+                ]);
+
+                $this->clientAccounts->refundToAccount($order, $calc_new_total, $clientRefund->id);
+                $newTotal = max(0, (float) $order->total_price - $calc_new_total);
+                $newRemain = max(0, (float) $order->remain_price - $calc_new_total);
+                $order->update([
+                    'total_price' => $newTotal,
+                    'paid_price' => max(0, $newTotal - $newRemain),
+                    'remain_price' => $newRemain,
                 ]);
 
                 $userProduct = $orderItem->product;
@@ -363,6 +414,7 @@ class MerchantRefundController extends Controller
                 $newStock = $userProduct->stock + $qty;
                 $userProduct->update(['stock' => $newStock]);
 
+                if (false) {
                 $wallet = $client->wallet;
 
                 if ($wallet->debit >= $amount){
@@ -419,9 +471,12 @@ class MerchantRefundController extends Controller
                         'qty' => $qty
                     ]);
                 }
+                }
 
             }catch (Exception $exception){
-                DB::rollBack();
+                while (DB::transactionLevel() > 0) {
+                    DB::rollBack();
+                }
                 return response()->json([
                     'error' => $exception->getMessage(),
                 ]);
@@ -429,6 +484,7 @@ class MerchantRefundController extends Controller
 
             DB::commit();
         }
+        DB::commit();
         return response()->json([
             'success' => true,
             'msg' => 'تم إنشاء المرتجعات بنجاح'

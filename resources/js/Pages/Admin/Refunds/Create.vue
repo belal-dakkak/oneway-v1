@@ -37,8 +37,8 @@
                         <div class="px-4 flex justify-around">
                             <div class="">
                                 <jet-label for="retail_price" value="سعر المبيع" dir="rtl" />
-                                <jet-input ref="price" id="retail_price" type="number" min="0" step="0.01" class="mt-1 block w-full" v-model="product.price" autocomplete="retail_price" />
-                                <syp-equivalent :usd="product.price" />
+                                <jet-input ref="price" id="retail_price" type="number" min="0" :step="product.currency_code === 'SYP' ? 1 : 0.01" class="mt-1 block w-full" v-model="product.price" autocomplete="retail_price" readonly />
+                                <span class="text-xs text-gray-500">{{ product.currency_code || 'USD' }}</span>
                                 <jet-input-error :message="form.errors.retail_price" class="mt-2" />
                             </div>
 
@@ -105,7 +105,7 @@ export default defineComponent({
                 total_price: 0,
                 total_qty: 0,
             }),
-            products: [{barcode: '', qty: '', price: '', product_id: '', name: '', image: ''}]
+            products: [{barcode: '', qty: '', price: '', product_id: '', name: '', image: '', currency_code: 'USD'}]
         }
     },
     mounted() {
@@ -121,18 +121,15 @@ export default defineComponent({
 
             this.form.post(route('refunds.store'), {
                 errorBag: 'createRefundSimple',
-                preserveScroll: true
+                preserveScroll: true,
+                onSuccess: () => {
+                    this.products = [{barcode: '', qty: '', price: '', product_id: '', name: '', image: '', currency_code: 'USD'}]
+                    this.form.total_price = 0
+                    this.form.total_qty = 0
+                    this.$nextTick(() => this.$refs.product[0].$el.focus())
+                    this.showSuccessMessage('تم إنشاء المرتجع بنجاح')
+                }
             });
-
-            while(this.products.length > 0) {
-                this.products.pop();
-            }
-
-            this.products = [{barcode: '', qty: '', price: '', product_id: '', name: '', image: ''}];
-
-            this.$refs.product[0].$el.focus()
-            this.form.discount = 0
-            this.showSuccessMessage('تمت إضافة المرتجع بنجاح');
         },
         showSuccessMessage(msg){
             return this.$swal.fire({
@@ -163,7 +160,7 @@ export default defineComponent({
 
                     element.value = ''
                     this.products.pop()
-                    this.products.push({ barcode: null, qty: '', price: '', product_id: '', name: '', image: '' })
+                    this.products.push({ barcode: null, qty: '', price: '', product_id: '', name: '', image: '', currency_code: 'USD' })
 
                 } else{
                     let formData = new FormData;
@@ -174,13 +171,14 @@ export default defineComponent({
                             if (response.data){
                                 let [lastItem] = this.products.slice(-1)
                                 lastItem.price = response.data.price
+                                lastItem.currency_code = response.data.currency_code || 'USD'
 
                                 lastItem.qty = response.data.stock ?? 1
                                 lastItem.product_id = response.data.id
                                 lastItem.image = response.data.product_color.photo_url
                                 lastItem.name = response.data.product_color.product_name
 
-                                this.products.push({ barcode: '', qty: '', price: '', product_id: '', name: '', image: '' })
+                                this.products.push({ barcode: '', qty: '', price: '', product_id: '', name: '', image: '', currency_code: 'USD' })
                             }
                         })
                 }

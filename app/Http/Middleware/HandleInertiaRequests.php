@@ -5,6 +5,7 @@ namespace App\Http\Middleware;
 use App\Models\CountryCommerceSetting;
 use App\Models\User;
 use App\Services\CurrencyService;
+use App\Services\SalesCurrencyPolicy;
 use App\Support\Country;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Session;
@@ -45,6 +46,24 @@ class HandleInertiaRequests extends Middleware
         $countryId = Country::id($countryCode);
         $currencyService = app(CurrencyService::class);
         $currencyOptions = $currencyService->optionsForCountry($countryId, true);
+        $defaultStorefrontCurrency = Country::defaultCurrency($countryId);
+        try {
+            $currencyService->rate('SYP');
+            $syriaRetailAvailable = true;
+        } catch (\InvalidArgumentException $exception) {
+            $syriaRetailAvailable = false;
+        }
+        if ($countryId === Country::SYRIA) {
+            try {
+                $currency = app(SalesCurrencyPolicy::class)
+                    ->websiteOption($countryId, (bool) Session::get('is_merchant'));
+                $currencyOptions = [$currency];
+                $defaultStorefrontCurrency = $currency['code'];
+            } catch (\InvalidArgumentException $exception) {
+                $currencyOptions = [];
+                $syriaRetailAvailable = (bool) Session::get('is_merchant');
+            }
+        }
         $displayCurrency = $currencyService->displayForCountry($countryId);
         $commerce = CountryCommerceSetting::query()->where('country_id', $countryId)->first();
 
@@ -104,11 +123,13 @@ class HandleInertiaRequests extends Middleware
             'country_availability' => [
                 'LB' => true,
                 'AE' => true,
-                'SY' => true,
+                // Retail needs a valid SYP rate. An already verified merchant can
+                // still enter Syria because wholesale checkout is always in USD.
+                'SY' => $syriaRetailAvailable || (bool) Session::get('is_merchant'),
                 'TR' => false,
             ],
             'currency_options' => $currencyOptions,
-            'default_currency' => Country::defaultCurrency($countryId),
+            'default_currency' => $defaultStorefrontCurrency,
             'base_currency' => Country::baseCurrency($countryId),
             'display_currency' => $displayCurrency,
             'commerce' => $commerce ? $commerce->toArray() : [
