@@ -153,7 +153,13 @@
                                 <span class="bg-purple-100 p-1 rounded text-center">إجمالي المنتجات: {{ formatMoney(item.total_price - (item.shipping_fee || 0) - (item.cod_fee || 0), item) }}</span>
                                 <span class="bg-fuchsia-100 p-1 rounded text-center">
                                     إجمالي: {{ formatMoney(item.total_price, item) }}
-                                    <syp-equivalent v-if="item.display_currency && Number(item.display_rate) > 0" :usd="item.total_price" :display-currency="orderDisplayCurrency(item)" />
+                                    <money-equivalent
+                                        v-if="item.display_currency && Number(item.display_rate) > 0"
+                                        :amount="item.total_price"
+                                        :currency="item.curr_type"
+                                        :exchange-rate="item.display_rate"
+                                        :display-currency="orderDisplayCurrency(item)"
+                                    />
                                 </span>
                                 <span v-if="item.shipping_fee > 0" class="bg-blue-50 p-1 rounded text-center text-[10px]">توصيل: {{ formatMoney(item.shipping_fee, item) }}</span>
                                 <span v-if="item.cod_fee > 0" class="bg-orange-50 p-1 rounded text-center text-[10px]">رسوم دفع: {{ formatMoney(item.cod_fee, item) }}</span>
@@ -195,16 +201,16 @@
                         </td>
                         <td class="text-center p-4 text-xs">{{ item.date }}</td>
                         <td class="text-center p-4 flex justify-center gap-1">
-                            <inertia-link v-show="false" :href="route('app.invoice.show', item.id)" class="p-2 bg-purple-500 text-white rounded hover:bg-purple-600 flex items-center justify-center" title="تفاصيل الطلبية">
+                            <inertia-link :href="route('invoice.typed.show', { source: 'website', id: item.id })" class="p-2 bg-purple-500 text-white rounded hover:bg-purple-600 flex items-center justify-center" title="تفاصيل الطلبية">
                                 <vue-feather :type="'eye'" class="w-4 h-4"></vue-feather>
                             </inertia-link>
-                            <a target="_blank" v-show="false" :href="route('download.invoice.typed', { source: 'website', id: item.id })" class="p-2 bg-teal-500 text-white rounded hover:bg-teal-600 flex items-center justify-center" title="تحميل فاتورة PDF">
+                            <a target="_blank" :href="route('download.invoice.typed', { source: 'website', id: item.id })" class="p-2 bg-teal-500 text-white rounded hover:bg-teal-600 flex items-center justify-center" title="تحميل فاتورة PDF">
                                 <vue-feather :type="'share'" class="w-4 h-4"></vue-feather>
                             </a>
-                            <a target="_blank" v-show="false" :href="route('invoice.typed.show', { source: 'website', id: item.id })" class="p-2 bg-teal-500 text-white rounded hover:bg-teal-600 flex items-center justify-center" title="عرض الفاتورة">
+                            <a target="_blank" :href="route('invoice.typed.show', { source: 'website', id: item.id })" class="p-2 bg-teal-500 text-white rounded hover:bg-teal-600 flex items-center justify-center" title="عرض الفاتورة">
                                 <vue-feather :type="'cast'" class="w-4 h-4"></vue-feather>
                             </a>
-                            <a target="_blank" v-show="false" :href="route('invoice.typed.printv2', { source: 'website', id: item.id })" class="p-2 bg-teal-500 text-white rounded hover:bg-teal-600 flex items-center justify-center" title="طباعة الفاتورة">
+                            <a target="_blank" :href="route('invoice.typed.printv2', { source: 'website', id: item.id })" class="p-2 bg-teal-500 text-white rounded hover:bg-teal-600 flex items-center justify-center" title="طباعة الفاتورة">
                                 <vue-feather :type="'printer'" class="w-4 h-4"></vue-feather>
                             </a>
                             <button @click="changeStatusTo(item, 2)" class="p-2 bg-blue-500 text-white rounded hover:bg-blue-600" title="توصيل">
@@ -380,7 +386,7 @@ export default {
             if (!order?.display_currency || Number(order?.display_rate) <= 0) return null;
             return {
                 code: order.display_currency,
-                rate: Number(order.display_rate),
+                rate: order.display_currency === 'USD' ? 1 : Number(order.display_rate),
                 decimals: order.display_currency === 'SYP' ? 0 : 2,
                 approximate: true,
             };

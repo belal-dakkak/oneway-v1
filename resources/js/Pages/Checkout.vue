@@ -65,7 +65,7 @@
                 </div>
               </label>
 
-              <label v-if="store.country !== 'SY'" class="relative flex items-center p-6 bg-secondary rounded-xl border-2 cursor-pointer transition-all" :class="form.payment_method === 'card' ? 'border-primary ring-2 ring-primary/20' : 'border-transparent'">
+              <label v-if="store.country !== 'SY' || store.commerce.card_available" class="relative flex items-center p-6 bg-secondary rounded-xl border-2 cursor-pointer transition-all" :class="form.payment_method === 'card' ? 'border-primary ring-2 ring-primary/20' : 'border-transparent'">
                 <input v-model="form.payment_method" type="radio" value="card" class="sr-only">
                 <div class="w-6 h-6 rounded-full text-white border-2 flex items-center justify-center rtl:ml-4 ltr:mr-4" :class="form.payment_method === 'card' ? 'border-white' : 'border-muted-foreground'">
                   <div v-if="form.payment_method === 'card'" class="w-3 h-3 bg-white rounded-full"></div>
@@ -151,7 +151,6 @@
                 </div>
                 <span class="font-bold">
                   {{ store.formatPrice(store.getItemPrice(item) * item.quantity) }}
-                  <syp-equivalent :usd="store.getItemPrice(item) * item.quantity" />
                 </span>
               </div>
             </div>
@@ -159,16 +158,16 @@
             <div class="space-y-4 mb-8 pt-4 border-t">
               <div class="flex justify-between text-muted-foreground">
                 <span>{{ store.t('subtotal') }}</span>
-                <span>{{ store.formatPrice(store.getCartTotal) }}</span>
+                <span>{{ formatOfficial(subtotal) }}</span>
               </div>
               <div class="flex justify-between text-muted-foreground">
                 <span>{{ store.t('shipping') }}</span>
                 <span v-if="shippingFee === 0" class="text-green-600 font-medium">{{ store.t('free') }}</span>
-                <span v-else class="font-medium">{{ store.formatPrice(shippingFee) }}</span>
+                <span v-else class="font-medium">{{ formatOfficial(shippingFee) }}</span>
               </div>
               <div v-if="codFeeValue > 0" class="flex justify-between text-muted-foreground">
                 <span>{{ store.t('codFee') }}</span>
-                <span class="font-medium">{{ store.formatPrice(codFeeValue) }}</span>
+                <span class="font-medium">{{ formatOfficial(codFeeValue) }}</span>
               </div>
               <div v-if="shippingFee > 0 && form.payment_method === 'cod'" class="text-[10px] text-muted-foreground rtl:text-left ltr:text-right mt-[-8px]">
                 {{ shippingMessage }}
@@ -176,11 +175,22 @@
               <div class="flex justify-between text-xl font-extrabold pt-4 border-t border-dashed">
                 <span>{{ store.t('total') }}</span>
                 <span class="text-primary">
-                  {{ store.formatPrice(totalWithShipping) }}
-                  <syp-equivalent :usd="totalWithShipping" />
+                  {{ formatOfficial(totalWithShipping) }}
+                  <small v-if="quote && quote.display" class="block text-xs text-muted-foreground font-normal">
+                    ≈ {{ formatMoney(quote.display.amount, quote.display.currency) }}
+                  </small>
                 </span>
               </div>
+              <div v-if="quote?.gateway" class="rounded-lg bg-blue-50 border border-blue-100 p-3 text-sm font-bold text-blue-800">
+                {{ store.isRTL ? 'المبلغ النهائي الذي ستخصمه بوابة الدفع' : 'Final amount charged by the payment gateway' }}:
+                {{ formatMoney(quote.gateway.amount, quote.gateway.currency) }}
+              </div>
             </div>
+
+            <p v-if="store.country === 'SY'" class="mb-4 text-xs text-amber-700 rtl:text-right">
+              {{ store.isRTL ? `عملة الفاتورة والدفع الرسمية: ${officialCurrency}. تبديل العملة في المتجر للعرض فقط.` : `Official invoice currency: ${officialCurrency}. The store currency switch is display-only.` }}
+            </p>
+            <p v-if="quoteError" class="mb-4 text-sm text-red-600 rtl:text-right">{{ quoteError }}</p>
 
             <!-- COD Promotion Message -->
             <div class="mt-6 p-4 bg-primary/5 rounded-xl border border-primary/10">
@@ -191,7 +201,7 @@
 
             <button
               @click="submitOrder"
-              :disabled="loading"
+              :disabled="loading || quoteLoading || !quote"
               class="w-full bg-primary text-primary-foreground font-bold py-4 rounded-xl hover:bg-primary/90 transition-all shadow-xl disabled:opacity-50 disabled:cursor-not-allowed"
             >
               <span v-if="loading" class="flex text-white items-center justify-center">
@@ -222,6 +232,7 @@ import FloatingButtons from '../Components/Website/FloatingButtons.vue'
 import { ref, reactive, computed, onMounted, watch } from 'vue'
 import { useStore } from '@/stores/store'
 import { Inertia } from '@inertiajs/inertia'
+import axios from 'axios'
 
 export default {
   components: {
@@ -236,6 +247,10 @@ export default {
   setup() {
     const store = useStore()
     const loading = ref(false)
+    const quoteLoading = ref(false)
+    const quoteError = ref('')
+    const quote = ref(null)
+    let quoteTimer = null
     const countryOptions = [
       { code: '+971', name: 'UAE', flag: '🇦🇪' },
       { code: '+961', name: 'Lebanon', flag: '🇱🇧' },
@@ -274,12 +289,18 @@ export default {
       }
       form.country_code = store.country === 'SY' ? '+963' : (store.country === 'LB' ? '+961' : '+971')
       if (store.country === 'SY') form.payment_method = 'cod'
+      refreshQuote()
     })
 
     watch(() => store.country, (country) => {
       form.country_code = country === 'SY' ? '+963' : (country === 'LB' ? '+961' : '+971')
       if (country === 'SY') form.payment_method = 'cod'
     })
+
+    watch([() => store.cart, () => form.payment_method], () => {
+      clearTimeout(quoteTimer)
+      quoteTimer = setTimeout(refreshQuote, 150)
+    }, { deep: true })
 
     watch(() => {
       const { first_name, last_name, email, phone, country_code, address, city, building_name, flat_number } = form
@@ -289,6 +310,7 @@ export default {
     }, { deep: true })
 
     const shippingFee = computed(() => {
+      if (quote.value) return Number(quote.value.shipping_fee || 0)
       let cartTotal = store.getCartTotal
       
       if (isNaN(cartTotal) || cartTotal === null || cartTotal === undefined) {
@@ -301,6 +323,7 @@ export default {
     })
 
     const codFeeValue = computed(() => {
+      if (quote.value) return Number(quote.value.cod_fee || 0)
       if (form.payment_method === 'cod') {
         let cartTotal = store.getCartTotal
         if (isNaN(cartTotal) || cartTotal === null || cartTotal === undefined) {
@@ -313,6 +336,7 @@ export default {
     })
 
     const totalWithShipping = computed(() => {
+      if (quote.value) return Number(quote.value.total || 0)
       let cartTotal = store.getCartTotal
       if (isNaN(cartTotal) || cartTotal === null || cartTotal === undefined) {
         cartTotal = 0
@@ -326,6 +350,41 @@ export default {
         ? `تُطبّق رسوم الشحن للطلبات الأقل من ${store.formatPrice(threshold)}.`
         : `Shipping applies to orders below ${store.formatPrice(threshold)}.`
     })
+
+    const subtotal = computed(() => quote.value ? Number(quote.value.subtotal || 0) : 0)
+    const officialCurrency = computed(() => quote.value?.currency || store.transactionCurrency)
+
+    const formatMoney = (value, currency) => {
+      const code = String(currency || 'USD').toUpperCase()
+      const decimals = code === 'SYP' ? 0 : 2
+      return `${Number(value || 0).toLocaleString(undefined, { minimumFractionDigits: decimals, maximumFractionDigits: decimals })} ${code}`
+    }
+    const formatOfficial = value => formatMoney(value, officialCurrency.value)
+
+    async function refreshQuote() {
+      if (!store.cart.length) {
+        quote.value = null
+        quoteError.value = store.isRTL ? 'السلة فارغة.' : 'Your cart is empty.'
+        return
+      }
+      quoteLoading.value = true
+      quoteError.value = ''
+      try {
+        const response = await axios.post('/checkout/quote', {
+          items: store.cart,
+          payment_method: form.payment_method,
+        })
+        quote.value = response.data
+      } catch (error) {
+        quote.value = null
+        const validationErrors = error.response?.data?.errors || {}
+        quoteError.value = Object.values(validationErrors).flat()[0]
+          || error.response?.data?.message
+          || (store.isRTL ? 'تعذر تسعير الطلب.' : 'Unable to price this order.')
+      } finally {
+        quoteLoading.value = false
+      }
+    }
 
     const submitOrder = () => {
       if (!form.first_name || !form.last_name || !form.phone || !form.email || !form.address || !form.city || !form.building_name || !form.flat_number) {
@@ -362,21 +421,22 @@ export default {
 
       loading.value = true
       // Send the full phone number to the backend
-      const submissionForm = { ...form, items: store.cart, phone: fullPhone, currency: store.currency }
+      const submissionForm = { ...form, items: store.cart, phone: fullPhone }
 
       Inertia.post('/checkout', submissionForm, {
         onSuccess: () => {
           // Cart will be cleared on OrderSuccess page
         },
         onError: (errors) => {
-          loading.value = false
           console.error(errors)
-          alert('Failed to place order. Please try again.')
-        }
+          const message = Object.values(errors || {})[0] || 'Failed to place order. Please try again.'
+          quoteError.value = message
+        },
+        onFinish: () => { loading.value = false }
       })
     }
 
-    return { store, form, loading, submitOrder, shippingFee, codFeeValue, totalWithShipping, shippingMessage, countryOptions }
+    return { store, form, loading, quoteLoading, quoteError, quote, submitOrder, shippingFee, codFeeValue, subtotal, totalWithShipping, shippingMessage, countryOptions, officialCurrency, formatMoney, formatOfficial }
   }
 }
 </script>

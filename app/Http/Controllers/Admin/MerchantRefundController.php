@@ -14,6 +14,7 @@ use App\Models\UserProduct;
 use App\Models\UserProductLog;
 use App\Notifications\ShopNotification;
 use App\Services\ClientAccountService;
+use App\Services\CashboxService;
 use Carbon\Carbon;
 use Exception;
 use Illuminate\Http\JsonResponse;
@@ -24,10 +25,12 @@ use Jenssegers\Date\Date;
 class MerchantRefundController extends Controller
 {
     private $clientAccounts;
+    private $cashboxes;
 
-    public function __construct(ClientAccountService $clientAccounts)
+    public function __construct(ClientAccountService $clientAccounts, CashboxService $cashboxes)
     {
         $this->clientAccounts = $clientAccounts;
+        $this->cashboxes = $cashboxes;
     }
 
     public function store(Request $request): JsonResponse
@@ -134,13 +137,27 @@ class MerchantRefundController extends Controller
                     'stock' => DB::raw("stock - $qty")
                 ]);
 
-                $shop->wallet->update([
-                'debit' =>  DB::raw("debit - $amount")
-                ]);
-
-                $merchant->wallet->update([
-                    'credit' =>  DB::raw("credit - $amount")
-                ]);
+                $cashboxContext = [
+                    'exchange_rate' => 1,
+                    'payment_method' => 'merchant_refund',
+                    'source_type' => MerchantRefund::class,
+                    'source_id' => $merchantRefund->id,
+                    'note' => $note,
+                ];
+                $this->cashboxes->credit(
+                    (int) $shop->id,
+                    (float) $amount,
+                    'USD',
+                    "merchant-refund:{$merchantRefund->id}:shop",
+                    $cashboxContext
+                );
+                $this->cashboxes->debit(
+                    (int) $merchant->id,
+                    (float) $amount,
+                    'USD',
+                    "merchant-refund:{$merchantRefund->id}:merchant",
+                    $cashboxContext
+                );
 
                 $merchantRefund->merchantDebit->update([
                     'amount' =>  DB::raw("amount - $amount")

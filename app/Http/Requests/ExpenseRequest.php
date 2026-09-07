@@ -3,6 +3,8 @@
 namespace App\Http\Requests;
 
 use App\Models\Wallet;
+use App\Services\CurrencyService;
+use App\Support\Country;
 use Illuminate\Foundation\Http\FormRequest;
 
 class ExpenseRequest extends FormRequest
@@ -26,10 +28,16 @@ class ExpenseRequest extends FormRequest
     {
         switch($this->method()) {
             case 'POST':
-                $userCredit = Wallet::query()->firstOrCreate(['user_id' => auth()->id()])->credit;
+                $wallet = Wallet::query()->firstOrCreate(
+                    ['user_id' => auth()->id(), 'currency_code' => 'USD'],
+                    ['credit' => 0, 'debit' => 0]
+                );
+                $currency = Country::defaultCurrency((int) auth()->user()->country_id);
+                $rate = app(CurrencyService::class)->rate($currency);
+                $userCredit = max(0, (float) $wallet->credit - (float) $wallet->debit) * $rate;
                 return [
                     'description' => 'required',
-                    'amount' => 'required|numeric|max:'.$userCredit
+                    'amount' => 'required|numeric|min:0.0001|max:'.$userCredit
                 ];
             case 'PUT':
             case 'PATCH':

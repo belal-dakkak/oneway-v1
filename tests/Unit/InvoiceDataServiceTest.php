@@ -126,6 +126,24 @@ class InvoiceDataServiceTest extends TestCase
         $this->assertNull($data['displayTotal']);
     }
 
+    public function test_syp_invoice_uses_its_frozen_rate_for_the_usd_display_value(): void
+    {
+        $order = new WebsiteOrder([
+            'curr_type' => 'SYP',
+            'curr_rate' => 13000,
+            'total_price' => 260000,
+            'display_currency' => 'USD',
+            'display_rate' => 13000,
+        ]);
+        $order->setRelation('items', new Collection());
+
+        $data = (new InvoiceDataService())->forOrder($order);
+
+        $this->assertSame('SYP', $data['currency']);
+        $this->assertSame('USD', $data['displayCurrency']);
+        $this->assertSame(20.0, $data['displayTotal']);
+    }
+
     private function orderItem(Product $product, int $colorId, int $qty, float $unit, float $total, float $net, float $tax): OrderItem
     {
         $color = new ProductColor();

@@ -60,7 +60,6 @@
                   </span>
                   <div class="text-lg font-bold text-primary">
                     {{ store.formatPrice(store.getItemPrice(item) * item.quantity) }}
-                    <syp-equivalent :usd="store.getItemPrice(item) * item.quantity" />
                   </div>
                 </div>
               </div>
@@ -97,7 +96,6 @@
                     <span>{{ store.t('total') }}</span>
                     <span class="text-primary">
                       {{ store.formatPrice(totalWithShipping) }}
-                      <syp-equivalent :usd="totalWithShipping" />
                     </span>
                 </div>
             </div>

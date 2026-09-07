@@ -15,7 +15,7 @@ $(function($) {
     $(document).ready(function() {
         let id = '{{$id}}';
         let number = '{{$number}}';
-        let url = encodeURIComponent('{{route('invoice.show', $id)}}');
+        let url = encodeURIComponent(@json($invoiceUrl));
         window.location.href = `https://wa.me/${number}/?text=${url}`;
     });
 })(jQuery);

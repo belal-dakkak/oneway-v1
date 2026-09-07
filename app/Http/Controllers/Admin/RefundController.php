@@ -9,7 +9,6 @@ use App\Models\OrderItem;
 use App\Models\Refund;
 use App\Models\User;
 use App\Models\UserProduct;
-use App\Models\Wallet;
 use App\Repositories\RefundRepository;
 use App\Services\CurrencyService;
 use App\Support\Country;

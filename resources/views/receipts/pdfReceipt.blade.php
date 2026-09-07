@@ -139,8 +139,8 @@
                             <br>
                             <br>
                             <br>
-                            {{$settings['title']}}<br />
-                            <span dir="ltr">Tel / الهاتف: {{$settings['phone']}}</span><br />
+                            {{$settings['title'] ?? config('app.name')}}<br />
+                            <span dir="ltr">Tel / الهاتف: {{$settings['phone'] ?? ''}}</span><br />
 
                         </td>
                     </tr>

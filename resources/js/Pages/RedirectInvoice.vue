@@ -16,9 +16,10 @@ export default {
     components,
     props: {
         id: Number,
+        invoice_url: String,
     },
     mounted() {
-        let url = route('download.invoice.show', this.id);
+        let url = this.invoice_url || route('download.invoice.typed', { source: 'order', id: this.id });
         window.open(url, '_blank').focus();
         window.location.replace(route('orders.complex'))
     }

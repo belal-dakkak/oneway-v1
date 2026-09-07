@@ -127,10 +127,10 @@
                     </div>
                 </td>
                 <td class="flex flex-wrap" dir="ltr">
-                    <a target="_blank" :href="route('invoice.show', item.id)" class="p-2 m-1 pb-1 rounded-md text-white btn-ghost bg-teal-400 hover:bg-teal-600 hover:text-white">
+                    <a target="_blank" :href="route('invoice.typed.show', { source: 'order', id: item.id })" class="p-2 m-1 pb-1 rounded-md text-white btn-ghost bg-teal-400 hover:bg-teal-600 hover:text-white">
                         <vue-feather :type="'cast'" stroke-width="2"></vue-feather>
                     </a>
-                    <a v-if="item.buyer" target="_blank" :href="encodeUrlWhatsApp(item.id, item.buyer?.phone)" data-action="share/whatsapp/share" class="p-2 m-1 pb-1 rounded-md text-white btn-ghost bg-teal-400 hover:bg-teal-600 hover:text-white">
+                    <a v-if="item.buyer" target="_blank" :href="encodeUrlWhatsApp(item, item.buyer?.phone)" data-action="share/whatsapp/share" class="p-2 m-1 pb-1 rounded-md text-white btn-ghost bg-teal-400 hover:bg-teal-600 hover:text-white">
                         <vue-feather :type="'send'" stroke-width="2"></vue-feather>
                     </a>
                     <a @click="printItem(item.id)" class="p-2 m-1 pb-1 rounded-md text-white btn-ghost bg-teal-400 hover:bg-teal-600 hover:text-white cursor-pointer">
@@ -242,8 +242,8 @@ export default {
                 this.showErrorMessage('فشل عملية الطباعة, حاول لاحقاً رجاءً')
             })
         },
-        encodeUrlWhatsApp(id, number){
-            let url = encodeURIComponent(route('invoice.show', id));
+        encodeUrlWhatsApp(item, number){
+            let url = encodeURIComponent(item.invoice_links?.download || route('download.invoice.typed', { source: 'order', id: item.id }));
             return `https://wa.me/${number}/?text=${url}`;
         },
         getShopName(id){

@@ -5,13 +5,15 @@ namespace App\Http\Controllers\Admin;
 use App\Http\Controllers\Controller;
 use App\Http\Requests\UserRequest;
 use App\Models\User;
-use App\Models\Wallet;
 use App\Repositories\UserRepository;
+use App\Services\CashboxService;
 use App\Services\CurrencyService;
 use App\Support\Country;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Redirect;
+use Illuminate\Support\Str;
 use Inertia\Inertia;
 use Inertia\Response;
 
@@ -20,10 +22,12 @@ class UserController extends Controller
 {
 
     private $userRepository;
+    private $cashboxes;
 
-    public function __construct(UserRepository $userRepository)
+    public function __construct(UserRepository $userRepository, CashboxService $cashboxes)
     {
         $this->userRepository = $userRepository;
+        $this->cashboxes = $cashboxes;
     }
 
     /**
@@ -86,23 +90,61 @@ class UserController extends Controller
 
     public function closeWallet($id): RedirectResponse
     {
-        $user = User::query()->findOrFail($id);
-        $amount = $user->wallet->credit;
-        Wallet::query()->updateOrCreate([
-            'user_id' => $id
-        ],[
-           'credit' => 0,
-            'user_id' => $id
-        ]);
+        $receiverId = (int) auth()->id();
 
-        $warehouse = User::query()->findOrFail(auth()->id());
-        $oldAmount = $warehouse->wallet?$warehouse->wallet->credit:0;
-        Wallet::query()->updateOrCreate([
-            'user_id' => auth()->id()
-        ],[
-           'credit' => $amount + $oldAmount,
-            'user_id' => auth()->id()
-        ]);
+        DB::transaction(function () use ($id, $receiverId) {
+            abort_if((int) $id === $receiverId, 422, 'The source and destination cashboxes must be different.');
+
+            // Lock in a deterministic order so two simultaneous closures cannot deadlock.
+            $users = User::query()
+                ->whereIn('id', [(int) $id, $receiverId])
+                ->orderBy('id')
+                ->lockForUpdate()
+                ->get()
+                ->keyBy('id');
+            $source = $users->get((int) $id);
+            $receiver = $users->get($receiverId);
+            abort_unless($source && $receiver, 404);
+
+            abort_unless(
+                (int) $source->country_id === (int) $receiver->country_id &&
+                in_array((int) $source->role_id, [User::ROLE_SHOP, User::ROLE_WAREHOUSE], true),
+                403
+            );
+
+            $wallets = $source->wallets()->lockForUpdate()->get();
+            $group = (string) Str::uuid();
+            foreach ($wallets as $wallet) {
+                $amount = round((float) $wallet->credit - (float) $wallet->debit, 4);
+                if ($amount <= 0) {
+                    continue;
+                }
+
+                $currency = strtoupper((string) $wallet->currency_code);
+                $context = [
+                    'payment_method' => 'sales_closure',
+                    'source_type' => User::class,
+                    'source_id' => (int) $source->id,
+                    'exchange_group' => $group,
+                    'note' => "Sales closure from {$source->name} to {$receiver->name}",
+                ];
+                $this->cashboxes->debit(
+                    (int) $source->id,
+                    $amount,
+                    $currency,
+                    "sales-close:{$group}:{$currency}:source",
+                    $context
+                );
+                $this->cashboxes->credit(
+                    (int) $receiver->id,
+                    $amount,
+                    $currency,
+                    "sales-close:{$group}:{$currency}:receiver",
+                    $context
+                );
+            }
+        }, 3);
+
         return Redirect::route('users.index', ['type' => User::ROLE_SHOP]);
     }
 	

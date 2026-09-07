@@ -8,6 +8,7 @@ use App\Models\Order;
 use App\Models\WebsiteOrder;
 use App\Models\Setting;
 use App\Models\User;
+use App\Models\CountryCommerceSetting;
 use App\Rules\ValidPhone;
 use App\Repositories\OrderRepository;
 use App\Services\Payment\TapPaymentService;
@@ -17,6 +18,7 @@ use App\Mail\NewOrderAdminEmail;
 use App\Mail\OrderConfirmationEmail;
 use App\Services\CurrencyService;
 use App\Services\SalesCurrencyPolicy;
+use App\Services\WebsitePricingService;
 use App\Support\Country;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Session;
@@ -24,6 +26,7 @@ use Illuminate\Support\Facades\Mail;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Str;
 use InvalidArgumentException;
+use Throwable;
 use Inertia\Inertia;
 use Inertia\Response;
 
@@ -34,19 +37,22 @@ class OrderController extends Controller
     private $currencyService;
     private $stockService;
     private $salesCurrencyPolicy;
+    private $websitePricing;
 
     public function __construct(
         OrderRepository $orderRepository,
         TapPaymentService $tapService,
         CurrencyService $currencyService,
         WebsiteOrderStockService $stockService,
-        SalesCurrencyPolicy $salesCurrencyPolicy
+        SalesCurrencyPolicy $salesCurrencyPolicy,
+        WebsitePricingService $websitePricing
     ) {
         $this->orderRepository = $orderRepository;
         $this->tapService = $tapService;
         $this->currencyService = $currencyService;
         $this->stockService = $stockService;
         $this->salesCurrencyPolicy = $salesCurrencyPolicy;
+        $this->websitePricing = $websitePricing;
     }
 
     public function cart(): Response
@@ -89,6 +95,28 @@ class OrderController extends Controller
         ]);
     }
 
+    public function quote(Request $request)
+    {
+        $request->validate([
+            'items' => 'required|array|min:1',
+            'items.*.color.id' => 'required|integer',
+            'items.*.quantity' => 'required|integer|min:1',
+            'items.*.size' => 'required|string',
+            'payment_method' => 'required|in:cod,card',
+        ]);
+
+        try {
+            return response()->json($this->websitePricing->quote(
+                (array) $request->input('items'),
+                Country::id(),
+                (bool) Session::get('is_merchant'),
+                (string) $request->input('payment_method', 'cod')
+            ));
+        } catch (Throwable $exception) {
+            return response()->json(['message' => $exception->getMessage()], 422);
+        }
+    }
+
     public function placeOrder(Request $request)
     {
 
@@ -117,7 +145,10 @@ class OrderController extends Controller
         } catch (InvalidArgumentException $exception) {
             return back()->withErrors(['currency' => 'العملة المختارة غير متاحة لهذا البلد.']);
         }
-        if ($countryId === User::COUNTRY_SYRIA && $request->payment_method !== 'cod') {
+        $commerce = CountryCommerceSetting::forCountry($countryId);
+        if ($countryId === User::COUNTRY_SYRIA
+            && $request->payment_method === 'card'
+            && !$commerce->cardIsAvailable()) {
             return back()->withErrors(['payment_method' => 'الدفع الإلكتروني غير متاح لطلبات سوريا.']);
         }
 
@@ -161,33 +192,22 @@ class OrderController extends Controller
             'flat_number' => $request->flat_number,
         ];
 
-        // We need to set auth user if they are logged in, or use a guest user?
-        // Guest user management: Find or create user by email
-        $user = User::where('email', $request->email)->first();
+        // A guest order keeps its contact data on website_orders. Checkout must
+        // not create an inaccessible account or replace the current session.
+        $user = auth()->user();
         if ($user && (int) $user->country_id !== (int) $countryId) {
             return back()->withErrors([
                 'email' => 'هذا البريد الإلكتروني مرتبط بحساب في فرع آخر.',
             ]);
         }
-        if (!$user) {
-            $user = User::create([
-                'name' => $request->first_name . ' ' . $request->last_name,
-                'email' => $request->email,
-                'phone' => $request->phone,
-                'password' => Str::random(12),
-                'role_id' => User::ROLE_CLIENT,
+        try {
+            $order = $this->orderRepository->addForOnline(new Request($orderRequestData));
+        } catch (Throwable $exception) {
+            Log::warning('Website checkout failed.', [
                 'country_id' => $countryId,
+                'message' => $exception->getMessage(),
             ]);
-
-            // Initial wallet for new user
-            $user->wallet()->firstOrCreate([], ['credit' => 0, 'debit' => 0]);
-        }
-        auth()->login($user);
-
-        $order = $this->orderRepository->addForOnline(new Request($orderRequestData));
-
-        if (!$order instanceof WebsiteOrder) {
-            return back()->with('error', 'Failed to place order: ' . $order);
+            return back()->withErrors(['order' => $exception->getMessage()]);
         }
 
         if ($request->payment_method === 'card') {
@@ -197,12 +217,12 @@ class OrderController extends Controller
             $cleanPhone = ltrim($cleanPhone, '0');
             $cleanPhone = preg_replace('/\D/', '', $cleanPhone); // Remove any remaining non-digits
 
-            $amount = round((float)$order->total_price, 2);
-            $currency = $order->curr_type;
+            $amount = round((float) ($order->gateway_amount ?: $order->total_price), 2);
+            $currency = strtoupper((string) ($order->gateway_currency ?: $order->curr_type));
 
             if ($amount <= 0) {
                 $this->stockService->release($order);
-                $order->delete();
+                $order->update(['status' => WebsiteOrder::STATUS_FAILED]);
                 Log::error("Tap Payment Error: Invalid order amount ($amount $currency) for order #{$order->id}");
                 return back()->withErrors(['error' => "Invalid order amount. Please try again or contact support."]);
             }
@@ -249,16 +269,18 @@ class OrderController extends Controller
                 return Inertia::location($charge['transaction']['url']);
             }
 
-            // Cleanup order if payment initiation fails
+            // Keep the failed order for reconciliation and release its reservation once.
             $this->stockService->release($order);
-            $order->delete();
+            $order->update(['status' => WebsiteOrder::STATUS_FAILED]);
             $errorMessage = $charge['errors'][0]['description'] ?? 'Payment gateway error. Please try again.';
             return back()->withErrors(['payment' => $errorMessage]);
         }
 
-        // For COD payments, dispatch notifications immediately
-        $order->update(['notifications_sent_at' => now()]);
-        $order->dispatchNotifications();
+        // Queue notification work so SMTP latency never blocks checkout.
+        if (!$order->notifications_sent_at) {
+            $order->update(['notifications_sent_at' => now()]);
+            $order->dispatchNotifications();
+        }
         return redirect()->route('order.success', ['id' => $order->id]);
     }
 

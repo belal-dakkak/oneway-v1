@@ -203,7 +203,7 @@
             @click="store.toggleCurrency"
             class="h-8 px-1 bg-white border border-border text-[12px] font-bold rounded-lg shadow-sm active:scale-95 transition-all whitespace-nowrap"
           >
-            {{ store.t('currency') }}: {{ store.currency }}
+            {{ store.t('currency') }}: {{ store.currency }} <span v-if="store.country === 'SY'" class="opacity-60">({{ store.isRTL ? 'للعرض' : 'display' }})</span>
           </button>
           <div
             v-else
@@ -528,7 +528,7 @@ export default {
       store.isMerchant = props.value.isMerchant
     }
     if (props.value.country) {
-      store.syncContext(props.value.country, props.value.currency_options, props.value.default_currency, props.value.commerce)
+      store.syncContext(props.value.country, props.value.currency_options, props.value.default_currency, props.value.commerce, props.value.transaction_currency)
     }
 
     const isSearchOpen = ref(false)

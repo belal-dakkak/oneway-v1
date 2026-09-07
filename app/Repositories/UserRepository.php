@@ -61,7 +61,7 @@ class UserRepository
         } else {
             $countryId = User::COUNTRY_LB;
         }
-        $users = User::query()->with(['wallet'])->where('country_id', $countryId);
+        $users = User::query()->with(['wallet', 'wallets'])->where('country_id', $countryId);
 
         if ($roles = $request->get('role'))
             $users->whereIn('role_id', $roles);

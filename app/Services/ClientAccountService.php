@@ -6,17 +6,19 @@ use App\Models\ClientDebit;
 use App\Models\ClientDebitLog;
 use App\Models\ClientDebitPayment;
 use App\Models\Order;
-use App\Models\Wallet;
+use App\Models\OrderPayment;
 use Illuminate\Support\Facades\DB;
 use InvalidArgumentException;
 
 class ClientAccountService
 {
     private $currencies;
+    private $cashboxes;
 
-    public function __construct(CurrencyService $currencies)
+    public function __construct(CurrencyService $currencies, CashboxService $cashboxes)
     {
         $this->currencies = $currencies;
+        $this->cashboxes = $cashboxes;
     }
 
     public function syncOrderDebt(
@@ -52,7 +54,7 @@ class ClientAccountService
             $currency = strtoupper((string) ($order->curr_type ?: 'USD'));
             $rate = $this->paymentRate($currency);
 
-            $order->payments()->create([
+            $payment = $order->payments()->create([
                 'pay_amount' => $amount,
                 'exchange_rate' => $rate,
                 'base_amount' => $this->toBase($amount, $rate),
@@ -70,7 +72,13 @@ class ClientAccountService
                 }
             }
 
-            $this->changeWallet((int) $order->seller_id, $this->toBase($amount, $rate));
+            $this->cashboxes->credit(
+                (int) $order->seller_id,
+                $amount,
+                $currency,
+                "order-payment:{$payment->id}",
+                $this->cashboxContext($currency, $rate, OrderPayment::class, $payment->id, "Payment for order #{$order->barcode}")
+            );
         });
     }
 
@@ -112,7 +120,17 @@ class ClientAccountService
 
             $account->decrement('amount', $amount);
             $this->paymentLog($account, $amount, $rate, 'تسديد على حساب الزبون');
-            $this->changeWallet((int) $account->creditor_id, $this->toBase($amount, $rate));
+            $payment = ClientDebitPayment::query()
+                ->where('client_debit_id', $account->id)
+                ->latest('id')
+                ->firstOrFail();
+            $this->cashboxes->credit(
+                (int) $account->creditor_id,
+                $amount,
+                $currency,
+                "client-account-payment:{$payment->id}",
+                $this->cashboxContext($currency, $rate, ClientDebitPayment::class, $payment->id, 'Customer account payment')
+            );
         });
     }
 
@@ -139,7 +157,13 @@ class ClientAccountService
 
         $cashPart = max(0, $amount - max(0, (float) $order->remain_price));
         if ($cashPart > 0) {
-            $this->changeWallet((int) $order->seller_id, -$this->toBase($cashPart, $rate));
+            $this->cashboxes->debit(
+                (int) $order->seller_id,
+                $cashPart,
+                $currency,
+                "order-refund:{$order->id}:{$clientRefundId}:{$amount}",
+                $this->cashboxContext($currency, $rate, 'client_refund', $clientRefundId, "Refund for order #{$order->barcode}")
+            );
         }
 
         return $account;
@@ -154,7 +178,7 @@ class ClientAccountService
             $currency = strtoupper((string) ($account->currency_code ?: 'USD'));
             $rate = $this->paymentRate($currency);
             $account->increment('amount', $amount);
-            ClientDebitLog::query()->create([
+            $log = ClientDebitLog::query()->create([
                 'client_debit_id' => $account->id,
                 'amount' => $amount,
                 'currency_code' => $currency,
@@ -162,7 +186,13 @@ class ClientAccountService
                 'base_amount' => $this->toBase($amount, $rate),
                 'note' => 'سحب من رصيد الزبون',
             ]);
-            $this->changeWallet((int) $account->creditor_id, -$this->toBase($amount, $rate));
+            $this->cashboxes->debit(
+                (int) $account->creditor_id,
+                $amount,
+                $currency,
+                "client-credit-withdrawal:{$log->id}",
+                $this->cashboxContext($currency, $rate, ClientDebitLog::class, $log->id, 'Customer credit withdrawal')
+            );
         });
     }
 
@@ -237,13 +267,15 @@ class ClientAccountService
         ]);
     }
 
-    private function changeWallet(int $userId, float $baseDelta): void
+    private function cashboxContext(string $currency, float $rate, string $sourceType, ?int $sourceId, string $note): array
     {
-        $wallet = Wallet::query()->where('user_id', $userId)->lockForUpdate()->first();
-        if (!$wallet) {
-            $wallet = Wallet::query()->create(['user_id' => $userId, 'credit' => 0, 'debit' => 0]);
-        }
-        $wallet->increment('credit', $baseDelta);
+        return [
+            'exchange_rate' => $currency === 'USD' ? 1 : $rate,
+            'payment_method' => 'cash',
+            'source_type' => $sourceType,
+            'source_id' => $sourceId,
+            'note' => $note,
+        ];
     }
 
     private function paymentRate(string $currency): float

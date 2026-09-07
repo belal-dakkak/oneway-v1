@@ -9,9 +9,9 @@
 </head>
 <body>
     <?php
-        $admin_email  = $settings['email'];
-        $admin_mobile = $settings['phone'];
-        $shop_address = $settings['address'];
+        $admin_email  = $settings['email'] ?? '';
+        $admin_mobile = $settings['phone'] ?? '';
+        $shop_address = $settings['address'] ?? '';
     ?>
 
     <style type="text/css">
@@ -506,7 +506,7 @@
                 <div style="width: 100%;">
                     <div style="text-align:center;padding-top: 0px;">
                         <p style="display:block;margin-bottom:0">
-                            If you have any question about this invoice, please contact <br /> {{$settings['title']}}, {{$admin_mobile}}, {{$admin_email}}
+                            If you have any question about this invoice, please contact <br /> {{$settings['title'] ?? config('app.name')}}, {{$admin_mobile}}, {{$admin_email}}
                         </p>
                         <b style="display:block">Thank You For Your Business!</b>
                     </div>

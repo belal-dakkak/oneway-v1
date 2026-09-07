@@ -11,7 +11,7 @@ class WebsiteOrderItem extends Model
     use HasFactory;
 
     protected $fillable = [
-        'website_order_id', 'product_color_id', 'size', 'qty', 
+        'website_order_id', 'product_color_id', 'stock_user_product_id', 'size', 'qty',
         'item_price', 'item_price_before_discount', 
         'total_price', 'total_price_before_discount'
     ];
@@ -28,6 +28,11 @@ class WebsiteOrderItem extends Model
     public function product(): BelongsTo
     {
         return $this->belongsTo(ProductColor::class, 'product_color_id');
+    }
+
+    public function stockProduct(): BelongsTo
+    {
+        return $this->belongsTo(UserProduct::class, 'stock_user_product_id');
     }
 
     /**

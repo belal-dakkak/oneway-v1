@@ -23,7 +23,13 @@
           <div class="text-right rtl:text-left">
             <p class="text-sm text-muted-foreground mb-1">{{ store.t('total') }}</p>
             <p class="font-bold text-lg text-red-600">{{ formatPrice(order.total_price) }}</p>
-            <syp-equivalent v-if="orderDisplayCurrency" :usd="order.total_price" :display-currency="orderDisplayCurrency" />
+            <money-equivalent
+              v-if="orderDisplayCurrency"
+              :amount="order.total_price"
+              :currency="order.curr_type"
+              :exchange-rate="order.display_rate"
+              :display-currency="orderDisplayCurrency"
+            />
           </div>
         </div>
 
@@ -80,12 +86,11 @@ export default {
       return Number(value).toLocaleString(undefined, { minimumFractionDigits: decimals, maximumFractionDigits: decimals }) + ' ' + currency
     }
 
-    const orderDisplayCurrency = {
+    const orderDisplayCurrency = props.order.display_currency ? {
       code: props.order.display_currency,
-      rate: props.order.display_rate,
-      decimals: 0,
+      rate: props.order.display_currency === 'USD' ? 1 : props.order.display_rate,
       approximate: true,
-    }
+    } : null
 
     return { store, formatPrice, orderDisplayCurrency }
   }

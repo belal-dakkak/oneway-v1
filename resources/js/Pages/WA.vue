@@ -16,11 +16,12 @@ export default {
     components,
     props: {
         id: Number,
-        number: String
+        number: String,
+        invoice_url: String
     },
     mounted() {
         let number = this.number;
-        let url = encodeURIComponent(route('invoice.show', this.id));
+        let url = encodeURIComponent(this.invoice_url || route('download.invoice.typed', { source: 'order', id: this.id }));
         window.open(`https://wa.me/${number}/?text=${url}`, '_blank').focus();
         window.location.replace(route('orders.complex'))
     }

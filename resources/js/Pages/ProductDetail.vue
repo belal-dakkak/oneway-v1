@@ -75,7 +75,6 @@
                     {{ store.formatPrice(store.convertFromUsd(product.price_before_discount)) }}
                   </span>
                 </template>
-                <syp-equivalent :usd="$page.props.isMerchant ? product.sale_price : product.retail_price" />
               </div>
             </div>
 
@@ -211,7 +210,6 @@
                   {{ store.formatPrice(store.convertFromUsd(product.price_before_discount)) }}
                 </span>
               </template>
-              <syp-equivalent :usd="$page.props.isMerchant ? product.sale_price : product.retail_price" />
             </div>
           </div>
 

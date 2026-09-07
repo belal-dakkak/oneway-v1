@@ -4,7 +4,6 @@ namespace App\Services;
 
 use App\Models\Order;
 use App\Models\WebsiteOrder;
-use Carbon\Carbon;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Support\Collection;
 use InvalidArgumentException;
@@ -33,19 +32,20 @@ class InvoiceDataService
             throw new InvalidArgumentException('Invoices can only be generated for an order or website order.');
         }
 
-        if ($order instanceof Order && !$order->sent_at) {
-            $order->forceFill(['sent_at' => Carbon::now()])->save();
-        }
-
         $currency = strtoupper((string) ($order->curr_type ?: 'USD'));
         $decimals = $currency === 'SYP' ? 0 : 2;
         $rate = $order instanceof WebsiteOrder ? 1.0 : (float) ($order->curr_rate ?: 1);
         $displayCurrency = strtoupper((string) ($order->display_currency ?: ''));
         $displayRate = (float) ($order->display_rate ?: 0);
         $displayDecimals = $displayCurrency === 'SYP' ? 0 : 2;
-        $displayTotal = $displayCurrency !== '' && $displayRate > 0
-            ? round((float) $order->total_price * $displayRate, $displayDecimals)
-            : null;
+        $displayTotal = null;
+        if ($displayCurrency !== '' && $displayRate > 0 && $displayCurrency !== $currency) {
+            if ($currency === 'SYP' && $displayCurrency === 'USD') {
+                $displayTotal = round((float) $order->total_price / $displayRate, $displayDecimals);
+            } elseif ($currency === 'USD' && $displayCurrency === 'SYP') {
+                $displayTotal = round((float) $order->total_price * $displayRate, $displayDecimals);
+            }
+        }
 
         if ($order instanceof WebsiteOrder) {
             $order->loadMissing('items.product.product');

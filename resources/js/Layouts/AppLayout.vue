@@ -58,6 +58,10 @@
                                 {{ __('Currencies')}}
                             </JetNavLink>
 
+                            <JetNavLink :href="route('cashboxes.index')" :active="route().current('cashboxes.*')" class="hidden border border-gray-300 rounded-md shadow-md space-x-8 sm:-my-px sm:ml-10 sm:flex" v-if="user.role === 1 || user.role === 2 || user.role === 3">
+                                الصندوق
+                            </JetNavLink>
+
                             <JetNavLink :href="route('colors.index')" :active="route().current('colors.index')" class="hidden border border-gray-300 rounded-md shadow-md space-x-8 sm:-my-px sm:ml-10 sm:flex" v-if="user.role === 1 || user.role === 2">
                                 {{ __('Colors')}}
                             </JetNavLink>

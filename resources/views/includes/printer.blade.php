@@ -149,9 +149,9 @@
 
 
     <?php
-        $admin_email  = $settings['email'];
-        $admin_mobile = $settings['phone'];
-        $shop_address = $settings['address'];
+        $admin_email  = $settings['email'] ?? '';
+        $admin_mobile = $settings['phone'] ?? '';
+        $shop_address = $settings['address'] ?? '';
     ?>
 
     <div id="bodyContent" style="margin-bottom: 20px;">

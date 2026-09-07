@@ -8,6 +8,7 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Database\Eloquent\Relations\HasOne;
 use Jenssegers\Date\Date;
+use Illuminate\Support\Facades\URL;
 
 class Order extends Model
 {
@@ -34,7 +35,17 @@ class Order extends Model
 
     protected $casts = ['curr_rate' => 'float', 'display_rate' => 'float'];
 
-    protected $appends = ['date', 'sent_date','payment_label'];
+    protected $appends = ['date', 'sent_date','payment_label', 'invoice_links'];
+
+    public function getInvoiceLinksAttribute(): array
+    {
+        return [
+            'view' => URL::signedRoute('invoice.typed.show', ['source' => 'order', 'id' => $this->id]),
+            'download' => URL::signedRoute('download.invoice.typed', ['source' => 'order', 'id' => $this->id]),
+            'print' => URL::signedRoute('invoice.typed.printv2', ['source' => 'order', 'id' => $this->id]),
+            'shipper' => URL::signedRoute('invoice.shipper.show', ['id' => $this->id]),
+        ];
+    }
 
     public function getPaymentLabelAttribute()
     {

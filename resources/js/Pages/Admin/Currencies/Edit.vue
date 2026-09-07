@@ -8,7 +8,7 @@
 
         <div>
             <div class="max-w-full mx-auto py-10 sm:px-6 lg:px-8">
-                <edit-setting-information-form :lp="lp" :aed="aed" :syp="syp" :commerce-settings="commerceSettings"/>
+                <edit-setting-information-form :lp="lp" :aed="aed" :syp="syp" :commerce-settings="commerceSettings" :cashbox-users="cashboxUsers"/>
                 <jet-section-border />
             </div>
         </div>
@@ -39,6 +39,7 @@ export default defineComponent({
             aed: String,
             syp: [String, Number],
             commerceSettings: Object,
+            cashboxUsers: Object,
     },
 })
 </script>

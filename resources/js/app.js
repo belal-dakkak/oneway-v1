@@ -9,7 +9,7 @@ import 'sweetalert2/dist/sweetalert2.min.css';
 import Vue3ColorPicker from "vue3-colorpicker";
 import "vue3-colorpicker/style.css";
 import { createPinia } from 'pinia';
-import SypEquivalent from './Components/Currency/SypEquivalent.vue';
+import MoneyEquivalent from './Components/Currency/MoneyEquivalent.vue';
 
 const appName = window.document.getElementsByTagName('title')[0]?.innerText || 'Laravel';
 const pinia = createPinia();
@@ -63,7 +63,8 @@ createInertiaApp({
             .use(Vue3ColorPicker)
             .component(VueFeather.name, VueFeather)
             .component('inertia-link', Link)
-            .component('syp-equivalent', SypEquivalent)
+            .component('money-equivalent', MoneyEquivalent)
+            .component('syp-equivalent', MoneyEquivalent)
             .mixin({ methods: { route } })
             .mixin(require('./base'))
             .mount(el);

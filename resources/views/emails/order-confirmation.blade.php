@@ -193,6 +193,7 @@
             Phone: {{ $order->phone }}</p>
 
             <p>We will notify you once your order status changes. You can track your order status by contacting our support team.</p>
+            <p><a href="{{ $order->invoice_links['download'] }}">Download your invoice</a></p>
 
             <p>If you have any questions, please don't hesitate to contact us.</p>
             

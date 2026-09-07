@@ -41,8 +41,27 @@ class RefundCurrencySafetyTest extends TestCase
         Schema::create('wallets', function (Blueprint $table) {
             $table->id();
             $table->unsignedBigInteger('user_id');
+            $table->string('currency_code', 3)->default('USD');
             $table->decimal('credit', 20, 4)->default(0);
             $table->decimal('debit', 20, 4)->default(0);
+            $table->timestamps();
+        });
+        Schema::create('wallet_movements', function (Blueprint $table) {
+            $table->id();
+            $table->unsignedBigInteger('wallet_id');
+            $table->unsignedBigInteger('user_id');
+            $table->string('currency_code', 3);
+            $table->string('direction', 8);
+            $table->decimal('amount', 24, 4);
+            $table->decimal('exchange_rate', 20, 6);
+            $table->decimal('base_amount', 24, 4);
+            $table->decimal('balance_after', 24, 4);
+            $table->string('payment_method')->nullable();
+            $table->string('source_type')->nullable();
+            $table->unsignedBigInteger('source_id')->nullable();
+            $table->uuid('exchange_group')->nullable();
+            $table->string('idempotency_key')->unique();
+            $table->text('note')->nullable();
             $table->timestamps();
         });
         Schema::create('product_colors', function (Blueprint $table) {
@@ -177,6 +196,9 @@ class RefundCurrencySafetyTest extends TestCase
         $this->assertSame(2.5, (float) $item->fresh()->tax_value);
         $this->assertSame(52.5, (float) $item->fresh()->total_price);
         $this->assertSame(1, (int) $stock->fresh()->stock);
-        $this->assertSame(47.5, (float) $seller->wallet->fresh()->credit);
+        $wallet = $seller->wallet->fresh();
+        $this->assertSame(100.0, (float) $wallet->credit);
+        $this->assertSame(52.5, (float) $wallet->debit);
+        $this->assertSame(47.5, (float) $wallet->credit - (float) $wallet->debit);
     }
 }

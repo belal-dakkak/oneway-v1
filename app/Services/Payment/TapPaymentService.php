@@ -53,7 +53,10 @@ class TapPaymentService
                 return $response->json();
             }
 
-            Log::error('Tap Payment Error (Status ' . $response->status() . '): ' . $response->body());
+            Log::error('Tap charge request was rejected.', [
+                'status' => $response->status(),
+                'code' => data_get($response->json(), 'errors.0.code'),
+            ]);
             return $response->json(); // Return json even on error so we can parse the description
         } catch (\Exception $e) {
             Log::error('Tap Payment Exception: ' . $e->getMessage());
@@ -83,7 +86,10 @@ class TapPaymentService
                 return $response->json();
             }
 
-            Log::error('Tap Retrieve Charge Error: ' . $response->body());
+            Log::error('Tap charge verification request was rejected.', [
+                'status' => $response->status(),
+                'code' => data_get($response->json(), 'errors.0.code'),
+            ]);
             return null;
         } catch (\Exception $e) {
             Log::error('Tap Retrieve Charge Exception: ' . $e->getMessage());

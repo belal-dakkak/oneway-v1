@@ -249,19 +249,19 @@
                       </div>
                   </td>
                   <td class="flex flex-wrap" dir="ltr">
-                      <a target="_blank" :href="route('download.invoice.show', item.id)" class="p-2 m-1 pb-1 rounded-md text-white btn-ghost bg-teal-400 hover:bg-teal-600 hover:text-white">
+                      <a target="_blank" :href="route('download.invoice.typed', { source: 'order', id: item.id })" class="p-2 m-1 pb-1 rounded-md text-white btn-ghost bg-teal-400 hover:bg-teal-600 hover:text-white">
                           <vue-feather :type="'share'" stroke-width="2"></vue-feather>
                       </a>
-                      <a target="_blank" :href="route('invoice.show', item.id)" class="p-2 m-1 pb-1 rounded-md text-white btn-ghost bg-teal-400 hover:bg-teal-600 hover:text-white">
+                      <a target="_blank" :href="route('invoice.typed.show', { source: 'order', id: item.id })" class="p-2 m-1 pb-1 rounded-md text-white btn-ghost bg-teal-400 hover:bg-teal-600 hover:text-white">
                           <vue-feather :type="'cast'" stroke-width="2"></vue-feather>
                       </a>
-                      <a target="_blank" :href=" ('/invoice/print-v2/'+item.id) " class="p-2 m-1 pb-1 rounded-md text-white btn-ghost bg-teal-400 hover:bg-teal-600 hover:text-white">
+                      <a target="_blank" :href="route('invoice.typed.printv2', { source: 'order', id: item.id })" class="p-2 m-1 pb-1 rounded-md text-white btn-ghost bg-teal-400 hover:bg-teal-600 hover:text-white">
                         <vue-feather :type="'printer'" stroke-width="2"></vue-feather>
                       </a>
-                      <a v-if="item.buyer" target="_blank" :href="encodeUrlWhatsApp(item.id, item.buyer?.phone)" data-action="share/whatsapp/share" class="p-2 m-1 pb-1 rounded-md text-white btn-ghost bg-teal-400 hover:bg-teal-600 hover:text-white">
+                      <a v-if="item.buyer" target="_blank" :href="encodeUrlWhatsApp(item, item.buyer?.phone)" data-action="share/whatsapp/share" class="p-2 m-1 pb-1 rounded-md text-white btn-ghost bg-teal-400 hover:bg-teal-600 hover:text-white">
                           <vue-feather :type="'send'" stroke-width="2"></vue-feather>
                       </a>
-                      <a v-if="item.shipper" target="_blank" :href="encodeUrlWhatsApp(item.id, item.shipper?.phone, true)" data-action="share/whatsapp/share" class="p-2 m-1 pb-1 rounded-md text-white btn-ghost bg-teal-400 hover:bg-teal-600 hover:text-white">
+                      <a v-if="item.shipper" target="_blank" :href="encodeUrlWhatsApp(item, item.shipper?.phone, true)" data-action="share/whatsapp/share" class="p-2 m-1 pb-1 rounded-md text-white btn-ghost bg-teal-400 hover:bg-teal-600 hover:text-white">
                           <vue-feather :type="'truck'" stroke-width="2"></vue-feather>
                       </a>
                       <!--  <button-->
@@ -443,12 +443,12 @@
           exportPDF(){
               window.location.href = this.route('exportpdf', this.params)
           },
-          encodeUrlWhatsApp(id, number, ship = false){
+          encodeUrlWhatsApp(item, number, ship = false){
               let url;
               if (ship)
-                  url = encodeURIComponent(route('invoice.shipper.show', id));
+                  url = encodeURIComponent(item.invoice_links?.shipper || route('invoice.shipper.show', item.id));
               else
-                  url = encodeURIComponent("*قم بفتح هذا الرابط للاطلاع على فاتورتك من محلات وان واي*\n"+"*Open this link to view your bill from One Way stores*\n"+route('download.invoice.show', id));
+                  url = encodeURIComponent("*قم بفتح هذا الرابط للاطلاع على فاتورتك من محلات وان واي*\n"+"*Open this link to view your bill from One Way stores*\n"+(item.invoice_links?.download || route('download.invoice.typed', { source: 'order', id: item.id })));
                   // url = encodeURIComponent(route('invoice.show', id));
 
               return `https://wa.me/${number}/?text=${url}`;

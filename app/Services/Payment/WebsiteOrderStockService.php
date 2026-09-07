@@ -4,6 +4,7 @@ namespace App\Services\Payment;
 
 use App\Models\UserProduct;
 use App\Models\WebsiteOrder;
+use App\Models\CountryCommerceSetting;
 use Exception;
 use Illuminate\Support\Facades\DB;
 
@@ -77,6 +78,7 @@ class WebsiteOrderStockService
             if (!isset($quantities[$key])) {
                 $quantities[$key] = [
                     'product_color_id' => (int) $item->product_color_id,
+                    'stock_user_product_id' => $item->stock_user_product_id ? (int) $item->stock_user_product_id : null,
                     'size' => $item->size,
                     'qty' => 0,
                 ];
@@ -85,14 +87,25 @@ class WebsiteOrderStockService
         }
 
         ksort($quantities);
+        $cashboxUserId = CountryCommerceSetting::forCountry((int) $order->country_id)
+            ->website_cashbox_user_id;
         $stocks = [];
         foreach ($quantities as $quantity) {
-            $stock = UserProduct::query()
+            $stockQuery = UserProduct::query()
+                ->when($quantity['stock_user_product_id'], function ($query) use ($quantity) {
+                    $query->whereKey($quantity['stock_user_product_id']);
+                }, function ($query) use ($quantity, $cashboxUserId) {
+                    $query->where('product_color_id', $quantity['product_color_id'])
+                        ->when($cashboxUserId, function ($stockQuery) use ($cashboxUserId) {
+                            $stockQuery->where('user_id', $cashboxUserId);
+                        });
+                })
                 ->where('product_color_id', $quantity['product_color_id'])
                 ->where('country_id', $order->country_id)
                 ->where('size', $quantity['size'])
-                ->lockForUpdate()
-                ->first();
+                ->orderBy('id')
+                ->lockForUpdate();
+            $stock = $stockQuery->first();
 
             if (!$stock) {
                 throw new Exception('The requested product stock record could not be found for this country.');

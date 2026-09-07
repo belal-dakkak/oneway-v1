@@ -7,6 +7,7 @@ use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 use Jenssegers\Date\Date;
+use Illuminate\Support\Facades\URL;
 
 class WebsiteOrder extends Model
 {
@@ -24,7 +25,8 @@ class WebsiteOrder extends Model
         'total_price_before_discount', 'discount', 'total_price', 
         'shipping_fee', 'cod_fee', 'status', 'payment_type', 'curr_type', 'invoice', 
         'notes', 'country_id', 'pricing_mode', 'paid_price', 'remain_price', 'curr_rate', 'display_currency', 'display_rate',
-        'stock_reserved_at', 'stock_released_at', 'payment_captured_at', 'notifications_sent_at'
+        'stock_reserved_at', 'stock_released_at', 'payment_captured_at', 'notifications_sent_at',
+        'gateway_provider', 'gateway_currency', 'gateway_amount', 'gateway_rate', 'cashbox_posted_at'
     ];
 
     protected $casts = [
@@ -32,11 +34,23 @@ class WebsiteOrder extends Model
         'stock_released_at' => 'datetime',
         'payment_captured_at' => 'datetime',
         'notifications_sent_at' => 'datetime',
+        'cashbox_posted_at' => 'datetime',
         'curr_rate' => 'float',
         'display_rate' => 'float',
+        'gateway_amount' => 'float',
+        'gateway_rate' => 'float',
     ];
 
-    protected $appends = ['date', 'payment_label', 'status_label', 'is_paid'];
+    protected $appends = ['date', 'payment_label', 'status_label', 'is_paid', 'invoice_links'];
+
+    public function getInvoiceLinksAttribute(): array
+    {
+        return [
+            'view' => URL::signedRoute('invoice.typed.show', ['source' => 'website', 'id' => $this->id]),
+            'download' => URL::signedRoute('download.invoice.typed', ['source' => 'website', 'id' => $this->id]),
+            'print' => URL::signedRoute('invoice.typed.printv2', ['source' => 'website', 'id' => $this->id]),
+        ];
+    }
 
     public function buyer(): BelongsTo
     {
@@ -71,10 +85,9 @@ class WebsiteOrder extends Model
     public function getIsPaidAttribute(): bool
     {
         if ($this->payment_type === 'card' || $this->payment_type === 'pay_by_card') {
-            return $this->status !== self::STATUS_UNPAID && $this->status !== self::STATUS_FAILED;
+            return $this->payment_captured_at !== null;
         }
-        // COD orders are considered paid when remain_price reaches 0
-        return $this->remain_price <= 0 && $this->total_price > 0;
+        return $this->cashbox_posted_at !== null;
     }
 
     public function getStatusLabelAttribute()
@@ -98,7 +111,15 @@ class WebsiteOrder extends Model
     /**
      * Dispatch order notifications and emails to admin and client.
      */
-    public function dispatchNotifications()
+    public function dispatchNotifications(): void
+    {
+        // Even when a server accidentally uses the sync queue driver, defer the
+        // SMTP/notification work until after the HTTP response is sent.
+        \App\Jobs\DispatchWebsiteOrderNotifications::dispatchAfterResponse($this->id)
+            ->onQueue('notify');
+    }
+
+    public function sendNotificationsNow(): void
     {
         // Get all users with admin dashboard access (Admin, Warehouse, Shop)
         $adminUsers = User::query()

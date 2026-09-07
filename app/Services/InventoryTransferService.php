@@ -9,7 +9,6 @@ use App\Models\ProductColor;
 use App\Models\User;
 use App\Models\UserProduct;
 use App\Models\UserProductLog;
-use App\Models\Wallet;
 use App\Notifications\ShopNotification;
 use App\Support\Country;
 use Illuminate\Support\Facades\Cache;
@@ -24,10 +23,12 @@ class InventoryTransferService
     public const SOURCE_INVENTORY = 'inventory';
 
     private $currency;
+    private $cashboxes;
 
-    public function __construct(CurrencyService $currency)
+    public function __construct(CurrencyService $currency, CashboxService $cashboxes)
     {
         $this->currency = $currency;
+        $this->cashboxes = $cashboxes;
     }
 
     public function destinationsFor(User $sender, string $sourceType = self::SOURCE_INVENTORY): Collection
@@ -184,7 +185,8 @@ class InventoryTransferService
                     $productColor,
                     end($savedProducts),
                     $totalQuantity,
-                    round($totalMerchantAmount, 2)
+                    round($totalMerchantAmount, 2),
+                    (int) end($logs)['user_product_log_id']
                 );
             }
 
@@ -338,7 +340,8 @@ class InventoryTransferService
         ProductColor $productColor,
         UserProduct $lastProduct,
         int $quantity,
-        float $amount
+        float $amount,
+        int $transferLogId
     ): void {
         $merchantDebit = MerchantDebit::query()->firstOrCreate([
             'creditor_id' => $merchant->id,
@@ -346,14 +349,27 @@ class InventoryTransferService
         ], ['amount' => 0]);
         $merchantDebit->increment('amount', $amount);
 
-        Wallet::query()->firstOrCreate(
-            ['user_id' => $destination->id],
-            ['credit' => 0, 'debit' => 0]
-        )->increment('debit', $amount);
-        Wallet::query()->firstOrCreate(
-            ['user_id' => $merchant->id],
-            ['credit' => 0, 'debit' => 0]
-        )->increment('credit', $amount);
+        $movementContext = [
+            'exchange_rate' => 1,
+            'payment_method' => 'inventory',
+            'source_type' => UserProductLog::class,
+            'source_id' => $transferLogId,
+            'note' => "Inventory merchant balance for product #{$productColor->id}",
+        ];
+        $this->cashboxes->debit(
+            (int) $destination->id,
+            $amount,
+            'USD',
+            "inventory-transfer:{$transferLogId}:destination",
+            $movementContext
+        );
+        $this->cashboxes->credit(
+            (int) $merchant->id,
+            $amount,
+            'USD',
+            "inventory-transfer:{$transferLogId}:merchant",
+            $movementContext
+        );
 
         $today = now()->toDateString();
         $debitLog = DebitLog::query()

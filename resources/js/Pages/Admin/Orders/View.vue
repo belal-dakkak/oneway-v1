@@ -110,15 +110,15 @@
                 <div class="bg-white-800 p-4 mt-4">
                     <h3 class="text-lg font-semibold mb-4">{{ __('Print / PDF Actions') }}</h3>
                     <div class="flex gap-2">
-                        <a target="_blank" :href="route('download.invoice.show', order.id)" class="p-2 bg-teal-500 text-white rounded hover:bg-teal-600 flex items-center gap-2 shadow-sm">
+                        <a target="_blank" :href="route('download.invoice.typed', { source: 'order', id: order.id })" class="p-2 bg-teal-500 text-white rounded hover:bg-teal-600 flex items-center gap-2 shadow-sm">
                             <vue-feather :type="'share'" class="w-4 h-4"></vue-feather>
                             <span>{{ __('Download PDF') }}</span>
                         </a>
-                        <a target="_blank" :href="route('invoice.show', order.id)" class="p-2 bg-teal-500 text-white rounded hover:bg-teal-600 flex items-center gap-2 shadow-sm">
+                        <a target="_blank" :href="route('invoice.typed.show', { source: 'order', id: order.id })" class="p-2 bg-teal-500 text-white rounded hover:bg-teal-600 flex items-center gap-2 shadow-sm">
                             <vue-feather :type="'cast'" class="w-4 h-4"></vue-feather>
                             <span>{{ __('View Invoice') }}</span>
                         </a>
-                        <a target="_blank" :href=" ('/invoice/print-v2/'+order.id) " class="p-2 bg-teal-500 text-white rounded hover:bg-teal-600 flex items-center gap-2 shadow-sm">
+                        <a target="_blank" :href="route('invoice.typed.printv2', { source: 'order', id: order.id })" class="p-2 bg-teal-500 text-white rounded hover:bg-teal-600 flex items-center gap-2 shadow-sm">
                             <vue-feather :type="'printer'" class="w-4 h-4"></vue-feather>
                             <span>{{ __('Print Invoice') }}</span>
                         </a>

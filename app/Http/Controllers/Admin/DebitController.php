@@ -10,8 +10,8 @@ use App\Models\MerchantDebit;
 use App\Models\Order;
 use App\Models\Setting;
 use App\Models\User;
-use App\Models\Wallet;
 use App\Repositories\DebitRepository;
+use App\Services\CashboxService;
 use App\Services\CurrencyService;
 use App\Support\Country;
 use Carbon\Carbon;
@@ -30,10 +30,12 @@ class DebitController extends Controller
 {
 
     private $debitRepository;
+    private $cashboxes;
 
-    public function __construct(DebitRepository $debitRepository)
+    public function __construct(DebitRepository $debitRepository, CashboxService $cashboxes)
     {
         $this->debitRepository = $debitRepository;
+        $this->cashboxes = $cashboxes;
     }
 
     /**
@@ -59,11 +61,24 @@ class DebitController extends Controller
 
     public function pay($id)
     {
-        $debit = Debit::query()->findOrFail($id);
-        $debit->update(['paid_at' => Carbon::now()]);
-        $amount = $debit->amount;
-        $debit->creditor->wallet->update(['credit' => DB::raw("credit - $amount")]);
-        $debit->debtor->wallet->update(['debit' => DB::raw("debit - $amount")]);
+        DB::transaction(function () use ($id) {
+            $debit = Debit::query()->lockForUpdate()->findOrFail($id);
+            if ($debit->paid_at) {
+                return;
+            }
+
+            $amount = (float) $debit->amount;
+            $debit->update(['paid_at' => Carbon::now()]);
+            $context = [
+                'exchange_rate' => 1,
+                'payment_method' => 'merchant_debt',
+                'source_type' => Debit::class,
+                'source_id' => $debit->id,
+                'note' => "Merchant debt settlement #{$debit->id}",
+            ];
+            $this->cashboxes->debit((int) $debit->creditor_id, $amount, 'USD', "merchant-debit:{$debit->id}:creditor-settled", $context);
+            $this->cashboxes->credit((int) $debit->debtor_id, $amount, 'USD', "merchant-debit:{$debit->id}:debtor-settled", $context);
+        }, 3);
 
         return Redirect::route('debits.index');
     }
@@ -86,21 +101,20 @@ class DebitController extends Controller
 
     public function addPayment(Request $request)
     {
+        $request->validate([
+            'debit' => 'required|integer|exists:merchant_debits,id',
+            'amount' => 'required|numeric|min:0.01',
+        ]);
         try {
             DB::beginTransaction();
 
-            $debit = MerchantDebit::query()->findOrFail($request->get('debit'));
-            $amount = $request->get('amount');
+            $debit = MerchantDebit::query()->lockForUpdate()->findOrFail($request->get('debit'));
+            // Merchant balances are operational USD balances, even for Syria.
+            $amount = (float) $request->get('amount');
             $originalAmount = number_format((float)$amount, 2, '.', '');
-            $rate = app(CurrencyService::class)->rate(Country::defaultCurrency(auth()->user()->country_id));
-            if ($rate != 1.0) {
-                $amount = $amount / $rate;
-            }
 
             if ($amount > $debit->amount){
-                return response()->json([
-                    'error' => 'المبلغ اكبر من القيمة المستحقة'
-                ]);
+                throw new \InvalidArgumentException('The payment is greater than the outstanding merchant balance.');
             }
 
             $debit->update(['amount' => DB::raw("amount - $amount")]);
@@ -120,14 +134,15 @@ class DebitController extends Controller
                 'note' => $note
             ]);
 
-            if (auth()->user()->role_id != User::ROLE_ADMIN){
-                $debit->creditor->wallet->update(['credit' => DB::raw("credit - $amount")]);
-
-                $debit->debtor->wallet->update([
-                    'debit' => DB::raw("debit - $amount"),
-                    'credit' => DB::raw("credit - $amount")
-                ]);
-            }
+            $context = [
+                'exchange_rate' => 1,
+                'payment_method' => 'merchant_debt',
+                'source_type' => DebitPayment::class,
+                'source_id' => $debitPayment->id,
+                'note' => $note,
+            ];
+            $this->cashboxes->debit((int) $debit->creditor_id, $amount, 'USD', "merchant-payment:{$debitPayment->id}:creditor", $context);
+            $this->cashboxes->credit((int) $debit->debtor_id, $amount, 'USD', "merchant-payment:{$debitPayment->id}:debtor", $context);
 
 
         }catch (Exception $exception){

@@ -3,6 +3,8 @@
 namespace App\Services\Payment;
 
 use App\Models\WebsiteOrder;
+use App\Models\CountryCommerceSetting;
+use App\Services\CashboxService;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
 use Throwable;
@@ -14,10 +16,12 @@ class TapPaymentFinalizer
     ];
 
     private $stockService;
+    private $cashboxes;
 
-    public function __construct(WebsiteOrderStockService $stockService)
+    public function __construct(WebsiteOrderStockService $stockService, CashboxService $cashboxes)
     {
         $this->stockService = $stockService;
+        $this->cashboxes = $cashboxes;
     }
 
     public function finalize(array $charge): TapPaymentResult
@@ -75,14 +79,18 @@ class TapPaymentFinalizer
                     $order->forceFill([
                         'status' => WebsiteOrder::STATUS_PENDING,
                         'payment_captured_at' => now(),
+                        'paid_price' => $order->total_price,
+                        'remain_price' => 0,
                     ]);
 
                     if ($wasAwaitingPayment && !$order->notifications_sent_at) {
                         $order->notifications_sent_at = now();
                         $shouldNotify = true;
                     }
-                    $order->save();
                 }
+
+                $this->postCapturedCashbox($order, $chargeId);
+                $order->save();
 
                 return new TapPaymentResult(TapPaymentResult::CAPTURED, $order->fresh());
             }
@@ -107,6 +115,45 @@ class TapPaymentFinalizer
         return $result;
     }
 
+    private function postCapturedCashbox(WebsiteOrder $order, string $chargeId): void
+    {
+        if ($order->cashbox_posted_at) {
+            return;
+        }
+
+        $commerce = CountryCommerceSetting::forCountry((int) $order->country_id);
+        if (!$commerce->website_cashbox_user_id) {
+            return;
+        }
+
+        try {
+            $currency = strtoupper((string) ($order->gateway_currency ?: $order->curr_type));
+            $this->cashboxes->credit(
+                (int) $commerce->website_cashbox_user_id,
+                (float) ($order->gateway_amount ?: $order->total_price),
+                $currency,
+                "website-order:{$order->id}:card-captured",
+                [
+                    'exchange_rate' => $currency === 'USD' ? 1 : (float) ($order->gateway_rate ?: 1),
+                    'payment_method' => 'card',
+                    'source_type' => WebsiteOrder::class,
+                    'source_id' => $order->id,
+                    'note' => "Tap payment for website order #{$order->barcode}",
+                ]
+            );
+            $order->cashbox_posted_at = now();
+        } catch (Throwable $exception) {
+            // A real captured payment must never be reverted merely because its
+            // internal cashbox is temporarily unavailable. The next verified
+            // callback/webhook will retry this idempotent posting.
+            Log::critical('Captured Tap payment needs cashbox reconciliation.', [
+                'order_id' => $order->id,
+                'charge_id' => $chargeId,
+                'error' => $exception->getMessage(),
+            ]);
+        }
+    }
+
     private function validateCharge(WebsiteOrder $order, array $charge, string $chargeId): ?string
     {
         if ($order->invoice && !hash_equals((string) $order->invoice, $chargeId)) {
@@ -114,7 +161,8 @@ class TapPaymentFinalizer
         }
 
         $currency = strtoupper((string) ($charge['currency'] ?? ''));
-        if ($currency === '' || $currency !== strtoupper((string) $order->curr_type)) {
+        $expectedCurrency = strtoupper((string) ($order->gateway_currency ?: $order->curr_type));
+        if ($currency === '' || $currency !== $expectedCurrency) {
             return 'Tap charge currency does not match the order currency.';
         }
 
@@ -123,7 +171,7 @@ class TapPaymentFinalizer
         }
 
         $decimals = $currency === 'SYP' ? 0 : 2;
-        $expected = round((float) $order->total_price, $decimals);
+        $expected = round((float) ($order->gateway_amount ?: $order->total_price), $decimals);
         $actual = round((float) $charge['amount'], $decimals);
         $tolerance = $decimals === 0 ? 0.5 : 0.005;
         if (abs($expected - $actual) >= $tolerance) {

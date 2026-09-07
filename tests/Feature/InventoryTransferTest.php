@@ -35,8 +35,28 @@ class InventoryTransferTest extends TestCase
         Schema::create('wallets', function (Blueprint $table) {
             $table->id();
             $table->unsignedBigInteger('user_id');
+            $table->string('currency_code', 3)->default('USD');
             $table->decimal('credit', 20, 4)->default(0);
             $table->decimal('debit', 20, 4)->default(0);
+            $table->timestamps();
+            $table->unique(['user_id', 'currency_code']);
+        });
+        Schema::create('wallet_movements', function (Blueprint $table) {
+            $table->id();
+            $table->unsignedBigInteger('wallet_id');
+            $table->unsignedBigInteger('user_id');
+            $table->string('currency_code', 3);
+            $table->string('direction', 8);
+            $table->decimal('amount', 24, 4);
+            $table->decimal('exchange_rate', 20, 6)->default(1);
+            $table->decimal('base_amount', 24, 4);
+            $table->decimal('balance_after', 24, 4);
+            $table->string('payment_method', 32)->nullable();
+            $table->string('source_type', 64)->nullable();
+            $table->unsignedBigInteger('source_id')->nullable();
+            $table->string('exchange_group')->nullable();
+            $table->string('idempotency_key')->unique();
+            $table->text('note')->nullable();
             $table->timestamps();
         });
         Schema::create('users', function (Blueprint $table) {
@@ -104,6 +124,41 @@ class InventoryTransferTest extends TestCase
             $table->unsignedBigInteger('user_product_id');
             $table->text('note');
             $table->boolean('approved')->default(false);
+            $table->timestamps();
+        });
+        Schema::create('merchant_debits', function (Blueprint $table) {
+            $table->id();
+            $table->unsignedBigInteger('creditor_id');
+            $table->unsignedBigInteger('debtor_id');
+            $table->decimal('amount', 24, 4)->default(0);
+            $table->timestamps();
+        });
+        Schema::create('debits', function (Blueprint $table) {
+            $table->id();
+            $table->unsignedBigInteger('creditor_id');
+            $table->unsignedBigInteger('debtor_id');
+            $table->boolean('type')->default(0);
+            $table->decimal('amount', 24, 4);
+            $table->unsignedBigInteger('order_id')->nullable();
+            $table->unsignedBigInteger('user_product_id')->nullable();
+            $table->unsignedBigInteger('user_product_log_id')->nullable();
+            $table->dateTime('paid_at')->nullable();
+            $table->timestamps();
+        });
+        Schema::create('debit_logs', function (Blueprint $table) {
+            $table->id();
+            $table->unsignedBigInteger('merchant_debit_id');
+            $table->unsignedBigInteger('user_product_id')->nullable();
+            $table->unsignedBigInteger('debit_payment_id')->nullable();
+            $table->unsignedBigInteger('merchant_refund_id')->nullable();
+            $table->unsignedBigInteger('product_color_id')->nullable();
+            $table->unsignedBigInteger('shop_id')->nullable();
+            $table->unsignedBigInteger('merchant_id')->nullable();
+            $table->date('request_date')->nullable();
+            $table->integer('qty')->nullable();
+            $table->string('type')->nullable();
+            $table->text('note');
+            $table->decimal('amount', 24, 4);
             $table->timestamps();
         });
         Schema::create('currencies', function (Blueprint $table) {
@@ -181,6 +236,49 @@ class InventoryTransferTest extends TestCase
         $this->assertSame(3, $destination->fresh()->stock);
         $this->assertEquals(100, $destination->fresh()->retail_price);
         $this->assertEquals(50, $destination->fresh()->wholesale_price);
+    }
+
+    public function test_transfer_with_merchant_posts_audited_usd_cashbox_movements(): void
+    {
+        $admin = $this->user(User::ROLE_ADMIN, 4, 'merchant-transfer-admin@example.test');
+        $shop = $this->user(User::ROLE_SHOP, 4, 'merchant-transfer-shop@example.test');
+        $merchant = $this->user(User::ROLE_MERCHANT, 4, 'merchant-transfer-creditor@example.test');
+        $productColor = $this->productColor(4, [
+            ['size' => 'M', 'barcode' => 'MERCHANT-M', 'stock' => 0],
+        ]);
+
+        $this->actingAs($admin)->postJson(route('userProducts.store'), [
+            'source_type' => InventoryTransferService::SOURCE_CATALOG,
+            'destination_user_id' => $shop->id,
+            'merchant_id' => $merchant->id,
+            'product_color_id' => $productColor->id,
+            'currency_code' => 'USD',
+            'retail_price' => 20,
+            'wholesale_price' => 10,
+            'items' => [
+                ['size' => 'M', 'barcode' => 'MERCHANT-M', 'quantity' => 3],
+            ],
+        ])->assertOk();
+
+        $this->assertDatabaseHas('merchant_debits', [
+            'creditor_id' => $merchant->id,
+            'debtor_id' => $shop->id,
+            'amount' => 30,
+        ]);
+        $this->assertDatabaseHas('wallets', [
+            'user_id' => $shop->id,
+            'currency_code' => 'USD',
+            'debit' => 30,
+        ]);
+        $this->assertDatabaseHas('wallets', [
+            'user_id' => $merchant->id,
+            'currency_code' => 'USD',
+            'credit' => 30,
+        ]);
+        $this->assertSame(2, DB::table('wallet_movements')
+            ->where('payment_method', 'inventory')
+            ->where('currency_code', 'USD')
+            ->count());
     }
 
     public function test_transfer_destinations_follow_catalog_and_inventory_source_rules(): void

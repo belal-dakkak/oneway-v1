@@ -19,6 +19,7 @@ export const useStore = defineStore('main', () => {
   const currency = ref(localStorage.getItem(`currency_${initialCountry}`) || 'AED')
   const currencyOptions = ref([])
   const commerce = ref({ shipping_fee_usd: 0, free_shipping_threshold_usd: null, cod_fee_percent: 0 })
+  const transactionCurrency = ref('USD')
   const selectedProduct = ref(null)
   const isProductModalOpen = ref(false)
   const isMerchant = ref(false)
@@ -272,10 +273,11 @@ export const useStore = defineStore('main', () => {
     })
   }
 
-  const syncContext = (countryCode, options = [], defaultCurrency = 'USD', commerceSettings = null) => {
+  const syncContext = (countryCode, options = [], defaultCurrency = 'USD', commerceSettings = null, officialCurrency = null) => {
     country.value = countryCode
     currencyOptions.value = Array.isArray(options) ? options : []
     if (commerceSettings) commerce.value = commerceSettings
+    transactionCurrency.value = officialCurrency || defaultCurrency
     const scopedCartKey = cartKey(countryCode, isMerchant.value)
     const legacyCart = !isMerchant.value ? localStorage.getItem(`cart_${countryCode}`) : null
     cart.value = JSON.parse(localStorage.getItem(scopedCartKey) || legacyCart || '[]')
@@ -303,6 +305,7 @@ export const useStore = defineStore('main', () => {
     exchangeRate,
     currencyOptions,
     commerce,
+    transactionCurrency,
     selectedProduct,
     isProductModalOpen,
     isMerchant,

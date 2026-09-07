@@ -6,13 +6,14 @@ use App\Http\Controllers\Controller;
 use App\Http\Requests\ExpenseRequest;
 use App\Models\Expense;
 use App\Models\User;
-use App\Models\Wallet;
 use App\Repositories\ExpenseRepository;
 use App\Services\CurrencyService;
+use App\Services\CashboxService;
 use App\Support\Country;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Redirect;
+use Illuminate\Support\Facades\DB;
 use Inertia\Inertia;
 use Inertia\Response;
 
@@ -21,10 +22,12 @@ class ExpenseController extends Controller
 {
 
     private $expenseRepository;
+    private $cashboxes;
 
-    public function __construct(ExpenseRepository $expenseRepository)
+    public function __construct(ExpenseRepository $expenseRepository, CashboxService $cashboxes)
     {
         $this->expenseRepository = $expenseRepository;
+        $this->cashboxes = $cashboxes;
     }
 
     /**
@@ -59,15 +62,27 @@ class ExpenseController extends Controller
 
     public function store(ExpenseRequest $request): RedirectResponse
     {
-        $oldCredit = auth()->user()->wallet->credit;
-        $rate = app(CurrencyService::class)->rate(Country::defaultCurrency(auth()->user()->country_id));
-        $amount = $request->get('amount') / $rate;
-        Wallet::query()->updateOrCreate(
-            ['user_id' => auth()->id()],
-            ['credit' => $oldCredit - $amount, 'user_id' => auth()->id()]
-        );
-
-        $this->expenseRepository->add($request);
+        DB::transaction(function () use ($request) {
+            $expense = $this->expenseRepository->add($request);
+            $localCurrency = Country::defaultCurrency((int) auth()->user()->country_id);
+            $rate = app(CurrencyService::class)->rate($localCurrency);
+            $cashboxAmount = $localCurrency === 'USD'
+                ? (float) $request->get('amount')
+                : app(CurrencyService::class)->toUsdAtRate((float) $request->get('amount'), $rate);
+            $this->cashboxes->debit(
+                (int) auth()->id(),
+                $cashboxAmount,
+                'USD',
+                "expense:{$expense->id}",
+                [
+                    'exchange_rate' => 1,
+                    'payment_method' => 'cash',
+                    'source_type' => Expense::class,
+                    'source_id' => $expense->id,
+                    'note' => $expense->description,
+                ]
+            );
+        }, 3);
         $request->session()->flash('success', 'تم إنشاء الدفعة بنجاح');
         return Redirect::route('expenses.index');
     }

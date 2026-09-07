@@ -1,0 +1,32 @@
+<?php
+
+namespace App\Jobs;
+
+use App\Models\WebsiteOrder;
+use Illuminate\Bus\Queueable;
+use Illuminate\Contracts\Queue\ShouldQueue;
+use Illuminate\Foundation\Bus\Dispatchable;
+use Illuminate\Queue\InteractsWithQueue;
+use Illuminate\Queue\SerializesModels;
+
+class DispatchWebsiteOrderNotifications implements ShouldQueue
+{
+    use Dispatchable, InteractsWithQueue, Queueable, SerializesModels;
+
+    public $afterCommit = true;
+    public $tries = 3;
+    private $orderId;
+
+    public function __construct(int $orderId)
+    {
+        $this->orderId = $orderId;
+    }
+
+    public function handle(): void
+    {
+        $order = WebsiteOrder::query()->find($this->orderId);
+        if ($order) {
+            $order->sendNotificationsNow();
+        }
+    }
+}

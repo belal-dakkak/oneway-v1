@@ -138,7 +138,11 @@
                             <h3 class="p-2 text-2xl font-bold">{{ __('Sales Fund')}}</h3>
                         </div>
                         <p class="p-2 text-4xl font-bold">
-                            {{ admin.credit }}
+                            <template v-if="Number(admin.country_id) === 4">
+                                <span class="block text-xl">{{ Number(admin.cashboxes?.USD?.balance || 0).toFixed(2) }} USD</span>
+                                <span class="block text-xl">{{ Number(admin.cashboxes?.SYP?.balance || 0).toLocaleString(undefined, { maximumFractionDigits: 0 }) }} SYP</span>
+                            </template>
+                            <template v-else>{{ admin.credit }}</template>
                         </p>
                     </div>
                     <div>
@@ -322,7 +326,7 @@ export default defineComponent({
 						{
 							const id = queryParams['order_id'];
 
-                            window.location.href = '/invoice/print-v2/'+id; //Will take you to Google.
+                            window.location.href = route('invoice.typed.printv2', { source: 'order', id });
 
                             /*
 							axios.get(this.route('orders.print-info', id))

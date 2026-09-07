@@ -14,6 +14,7 @@ use App\Http\Controllers\Admin\ProductController;
 use App\Http\Controllers\Admin\RefundController;
 use App\Http\Controllers\Admin\UserController;
 use App\Http\Controllers\Admin\UserProductController;
+use App\Http\Controllers\Admin\CashboxController;
 use App\Http\Controllers\Admin\MobileSliderController;
 use App\Http\Controllers\Website\ArabicHomeController;
 use App\Http\Controllers\Website\FavoriteController;
@@ -60,6 +61,7 @@ Route::post('/country', [HomeController::class, 'setCountry'])->name('country.se
 
     Route::get('/cart', [WebsiteOrderController::class, 'cart'])->name('cart');
     Route::get('/checkout', [WebsiteOrderController::class, 'checkout'])->name('checkout');
+    Route::post('/checkout/quote', [WebsiteOrderController::class, 'quote'])->name('checkout.quote');
     Route::post('/checkout', [WebsiteOrderController::class, 'placeOrder'])->name('order.place');
     Route::get('/order-success/{id}', [WebsiteOrderController::class, 'success'])->name('order.success');
     Route::get('/payment-failed/{id}', [WebsiteOrderController::class, 'paymentFailed'])->name('payment.failed');
@@ -87,19 +89,6 @@ Route::post('/country', [HomeController::class, 'setCountry'])->name('country.se
 Route::get('/payment/callback', [PaymentController::class, 'callback'])->name('payment.callback');
 Route::post('/payment/webhook', [PaymentController::class, 'webhook'])->name('payment.webhook');
 
-Route::get('testorder/{id}', function ($id) {
-    $user = User::where('email', 'mouhabshalabi@gmail.com')->where('deleted', 0)->first();
-    /* return response()->json($user); */
-
-    $order        = Order::find($id);
-    $invoice_date = date('jS F Y', strtotime($order->invoice_date));
-    $language     = 'en';
-    $country      = \App\Support\Country::id();
-    $settings     = Setting::where('country', $country)->where('language', $language)->pluck('value', 'name')->toArray();
-    $items        = $order->items();
-
-    return view('includes.invoice_template', compact('order', 'settings', 'items'));
-});
 Route::middleware([
     'auth:sanctum',
     config('jetstream.auth_session'),
@@ -143,7 +132,7 @@ Route::middleware(['auth:sanctum'])
         ->middleware(['guard:admin|warehouse'])
         ->group(function () {
             Route::resource('/', '\App\Http\Controllers\Admin\UserController', ['parameters' => ['' => 'user']]);
-            Route::get('/wallet/close/{id}', [UserController::class, 'closeWallet'])->name('wallet.close');
+            Route::post('/wallet/close/{id}', [UserController::class, 'closeWallet'])->name('wallet.close');
         });
 
     Route::name('categories.')
@@ -188,6 +177,11 @@ Route::middleware(['auth:sanctum'])
         ->group(function () {
             Route::resource('/', '\App\Http\Controllers\Admin\ExpenseController', ['parameters' => ['' => 'expense']]);
         });
+
+    Route::prefix('/cashboxes')->name('cashboxes.')->middleware(['guard:admin|warehouse|shop'])->group(function () {
+        Route::get('/', [CashboxController::class, 'index'])->name('index');
+        Route::post('/exchange', [CashboxController::class, 'exchange'])->name('exchange');
+    });
 
     Route::name('cuts.')
         ->prefix('/cuts')
@@ -362,8 +356,12 @@ Route::get('/invoice/shipper/{id}', [OrderController::class, 'invoiceShipper'])-
 Route::get('/merchant/account/{id}', [DebitController::class, 'merchantAccountLog'])->name('merchant.account.log');
 Route::get('/client/account/{id}', [ClientDebitController::class, 'clientAccountLog'])->name('client.account.log');
 Route::get('/send/message/{id}/{number}', function ($id, $number) {
-    return view('wa', compact('id', 'number'));
-});
+    $invoiceUrl = \Illuminate\Support\Facades\URL::signedRoute('download.invoice.typed', [
+        'source' => 'order',
+        'id' => (int) $id,
+    ]);
+    return view('wa', compact('id', 'number', 'invoiceUrl'));
+})->middleware('auth:sanctum');
 Route::middleware(['guard:admin'])->group(function () {
     Route::get('/export', [OrderController::class, 'createPDF'])->name('exportpdf');
     Route::get('/export2', [OrderController::class, 'createPDF2'])->name('exportpdf2');

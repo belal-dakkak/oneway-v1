@@ -57,10 +57,11 @@ class HandleInertiaRequests extends Middleware
             try {
                 $currency = app(SalesCurrencyPolicy::class)
                     ->websiteOption($countryId, (bool) Session::get('is_merchant'));
-                $currencyOptions = [$currency];
                 $defaultStorefrontCurrency = $currency['code'];
             } catch (\InvalidArgumentException $exception) {
-                $currencyOptions = [];
+                $currencyOptions = array_values(array_filter($currencyOptions, function ($option) {
+                    return ($option['code'] ?? null) === 'USD';
+                }));
                 $syriaRetailAvailable = (bool) Session::get('is_merchant');
             }
         }
@@ -75,12 +76,24 @@ class HandleInertiaRequests extends Middleware
                 if($user){
                     $credit  = $user->wallet?$user->wallet->credit:0;
                     $debit   = $user->wallet?$user->wallet->debit:0;
+                    $cashboxes = $user->wallets()
+                        ->get()
+                        ->mapWithKeys(function ($wallet) {
+                            $code = strtoupper((string) ($wallet->currency_code ?: 'USD'));
+                            return [$code => [
+                                'currency' => $code,
+                                'credit' => (float) $wallet->credit,
+                                'debit' => (float) $wallet->debit,
+                                'balance' => (float) $wallet->credit - (float) $wallet->debit,
+                            ]];
+                        });
                     // Some historical users do not have a country assigned. Keep
                     // their dashboard usable by falling back to the active country.
                     $country = (int) ($user->country_id ?: Country::id());
                 }else{
                     $credit = 0;
                     $debit  = 0;
+                    $cashboxes = collect();
                 }
                 // $country   = Session::get('country') == 'LB'?User::COUNTRY_LB:User::COUNTRY_UAE;
 
@@ -102,6 +115,7 @@ class HandleInertiaRequests extends Middleware
                             'country_id' => $user->country_id,
                             'credit' => round($credit, $country === Country::SYRIA ? 2 : 0),
                             'debit' => round($debit, $country === Country::SYRIA ? 2 : 0),
+                            'cashboxes' => $cashboxes,
                             'notifications' => $user->notifications()->orderByDesc('created_at')->limit(5)->get(),
                             'notifications_count' => $user->unreadNotifications()->count(),
                         ]
@@ -130,12 +144,16 @@ class HandleInertiaRequests extends Middleware
             ],
             'currency_options' => $currencyOptions,
             'default_currency' => $defaultStorefrontCurrency,
+            'transaction_currency' => $defaultStorefrontCurrency,
             'base_currency' => Country::baseCurrency($countryId),
             'display_currency' => $displayCurrency,
-            'commerce' => $commerce ? $commerce->toArray() : [
+            'commerce' => $commerce ? array_merge($commerce->toArray(), [
+                'card_available' => $countryId === Country::SYRIA ? $commerce->cardIsAvailable() : true,
+            ]) : [
                 'shipping_fee_usd' => 0,
                 'free_shipping_threshold_usd' => null,
                 'cod_fee_percent' => 0,
+                'card_available' => $countryId !== Country::SYRIA,
             ],
             'isMerchant' => (boolean) Session::get('is_merchant'),
             'locale' => function () {

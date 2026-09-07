@@ -6,7 +6,7 @@ use App\Models\OrderItem;
 use App\Models\Refund;
 use App\Models\User;
 use App\Models\UserProduct;
-use App\Models\Wallet;
+use App\Services\CashboxService;
 use Illuminate\Contracts\Pagination\LengthAwarePaginator;
 use Illuminate\Http\Request;
 use Carbon\Carbon;
@@ -14,6 +14,13 @@ use Illuminate\Validation\ValidationException;
 
 class RefundRepository
 {
+    private $cashboxes;
+
+    public function __construct(CashboxService $cashboxes)
+    {
+        $this->cashboxes = $cashboxes;
+    }
+
     public function add(Request $request): Refund
     {
 
@@ -41,7 +48,7 @@ class RefundRepository
 
 			//dd($orderItem);
 
-			if($orderItem) {
+            if($orderItem) {
                 $refundQty = (int) $product['qty'];
                 if ($refundQty <= 0 || $refundQty > (int) $orderItem->qty) {
                     throw ValidationException::withMessages([
@@ -56,6 +63,11 @@ class RefundRepository
                 if (auth()->user()->role_id !== User::ROLE_ADMIN
                     && (int) $orderItem->order->seller_id !== (int) auth()->id()) {
                     abort(403);
+                }
+                if ($orderItem->order->buyer_id) {
+                    throw ValidationException::withMessages([
+                        'selected_products' => 'Use the customer return workflow for invoices linked to a customer account.',
+                    ]);
                 }
 
 				$itemBarcode = $orderItem->product->productColor->barcode;
@@ -97,6 +109,21 @@ class RefundRepository
 				]);
 				$refund->save();
 				$total += $productPrice * $refundQty;
+
+                $currency = strtoupper((string) ($orderItem->order->curr_type ?: 'USD'));
+                $this->cashboxes->debit(
+                    (int) $orderItem->order->seller_id,
+                    (float) $refund->total_price_paid,
+                    $currency,
+                    "refund:{$refund->id}",
+                    [
+                        'exchange_rate' => $currency === 'USD' ? 1 : $rateAux,
+                        'payment_method' => 'refund',
+                        'source_type' => Refund::class,
+                        'source_id' => $refund->id,
+                        'note' => "Refund for order #{$orderBarcode}",
+                    ]
+                );
 				
 				/////////////////////////////////////////////////////////////
                 /////////////////////////////////////////////////////////////
@@ -134,6 +161,21 @@ class RefundRepository
                     $feesToRefundBase = $feesToRefund / $rate;
                     $total += $feesToRefundBase;
 
+                    $feeCurrency = strtoupper((string) ($touchedOrder->curr_type ?: 'USD'));
+                    $this->cashboxes->debit(
+                        (int) $touchedOrder->seller_id,
+                        $feesToRefund,
+                        $feeCurrency,
+                        "order:{$touchedOrder->id}:fees-refund",
+                        [
+                            'exchange_rate' => $feeCurrency === 'USD' ? 1 : (float) $rate,
+                            'payment_method' => 'refund',
+                            'source_type' => \App\Models\Order::class,
+                            'source_id' => $touchedOrder->id,
+                            'note' => "Shipping and COD refund for order #{$touchedOrder->barcode}",
+                        ]
+                    );
+
                     // Zero out fees on the order to prevent double-refunding
                     $touchedOrder->update([
                         'shipping_fee' => 0,
@@ -142,16 +184,6 @@ class RefundRepository
                 }
             }
         }
-
-        $wallet = Wallet::query()->where('user_id', auth()->id())->lockForUpdate()->first();
-        if (! $wallet) {
-            $wallet = Wallet::query()->create([
-                'user_id' => auth()->id(),
-                'credit' => 0,
-                'debit' => 0,
-            ]);
-        }
-        $wallet->decrement('credit', $total);
 
         return $refund;
     }

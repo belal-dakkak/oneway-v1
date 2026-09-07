@@ -39,8 +39,27 @@ class MultiCurrencyClientAccountTest extends TestCase
         Schema::create('wallets', function (Blueprint $table) {
             $table->id();
             $table->unsignedBigInteger('user_id');
+            $table->string('currency_code', 3)->default('USD');
             $table->decimal('credit', 20, 4)->default(0);
             $table->decimal('debit', 20, 4)->default(0);
+            $table->timestamps();
+        });
+        Schema::create('wallet_movements', function (Blueprint $table) {
+            $table->id();
+            $table->unsignedBigInteger('wallet_id');
+            $table->unsignedBigInteger('user_id');
+            $table->string('currency_code', 3);
+            $table->string('direction', 8);
+            $table->decimal('amount', 24, 4);
+            $table->decimal('exchange_rate', 20, 6);
+            $table->decimal('base_amount', 24, 4);
+            $table->decimal('balance_after', 24, 4);
+            $table->string('payment_method')->nullable();
+            $table->string('source_type')->nullable();
+            $table->unsignedBigInteger('source_id')->nullable();
+            $table->uuid('exchange_group')->nullable();
+            $table->string('idempotency_key')->unique();
+            $table->text('note')->nullable();
             $table->timestamps();
         });
         Schema::create('currencies', function (Blueprint $table) {
@@ -109,7 +128,7 @@ class MultiCurrencyClientAccountTest extends TestCase
         app(CurrencyService::class)->clearRateCache();
     }
 
-    public function test_customer_has_separate_syp_and_usd_accounts_and_syp_payments_enter_wallet_in_usd(): void
+    public function test_customer_has_separate_syp_and_usd_accounts_and_payments_enter_the_matching_cashbox(): void
     {
         $seller = User::query()->create([
             'name' => 'Syrian shop', 'email' => 'shop@example.test', 'password' => 'x',
@@ -150,7 +169,8 @@ class MultiCurrencyClientAccountTest extends TestCase
         $this->assertSame(20.0, (float) $usdAccount->fresh()->amount);
         $this->assertSame(130000.0, (float) $sypOrder->fresh()->remain_price);
         $this->assertSame(20.0, (float) $usdOrder->fresh()->remain_price);
-        $this->assertSame(10.0, (float) $seller->wallet->fresh()->credit);
+        $this->assertSame(0.0, (float) $seller->wallet->fresh()->credit);
+        $this->assertSame(130000.0, (float) $seller->wallets()->where('currency_code', 'SYP')->firstOrFail()->credit);
         $this->assertDatabaseHas('client_debit_payments', [
             'client_debit_id' => $sypAccount->id,
             'amount' => 130000,
@@ -162,7 +182,8 @@ class MultiCurrencyClientAccountTest extends TestCase
         app(CurrencyService::class)->clearRateCache();
         $service->payAccount($sypAccount->fresh(), 130000);
 
-        $this->assertSame(23.0, (float) $seller->wallet->fresh()->credit);
+        $this->assertSame(0.0, (float) $seller->wallet->fresh()->credit);
+        $this->assertSame(260000.0, (float) $seller->wallets()->where('currency_code', 'SYP')->firstOrFail()->credit);
         $this->assertSame(0.0, (float) $sypOrder->fresh()->remain_price);
         $this->assertSame(20.0, (float) $usdOrder->fresh()->remain_price);
     }

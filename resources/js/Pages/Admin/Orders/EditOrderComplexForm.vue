@@ -32,8 +32,7 @@
                         <div class="px-4 flex justify-around">
                             <div class="">
                                 <jet-label for="retail_price" value="سعر المبيع" dir="rtl" />
-                                <jet-input ref="price" id="retail_price" type="number" min="0" step="0.01" class="mt-1 block w-full" v-model="product.price" autocomplete="retail_price" />
-                                <syp-equivalent :usd="product.price" />
+                                <jet-input ref="price" id="retail_price" type="number" min="0" :step="order.curr_type === 'SYP' ? 1 : 0.01" class="mt-1 block w-full" v-model="product.price" autocomplete="retail_price" />
                                 <jet-input-error :message="form.errors.retail_price" class="mt-2" />
                             </div>
 
@@ -123,7 +122,11 @@
                             <h3 class="p-2 text-2xl font-bold">الصندوق</h3>
                         </div>
                         <p class="p-2 text-4xl font-bold">
-                            {{ admin.credit }}
+                            <template v-if="Number(admin.country_id) === 4">
+                                <span class="block text-xl">{{ Number(admin.cashboxes?.USD?.balance || 0).toFixed(2) }} USD</span>
+                                <span class="block text-xl">{{ Number(admin.cashboxes?.SYP?.balance || 0).toLocaleString(undefined, { maximumFractionDigits: 0 }) }} SYP</span>
+                            </template>
+                            <template v-else>{{ admin.credit }}</template>
                         </p>
                     </div>
                     <div>

@@ -16,12 +16,13 @@ export default {
     components,
     props: {
         id: Number,
-        number: String
+        number: String,
+        invoice_url: String
     },
     mounted() {
         let number = this.number;
         //let url = encodeURIComponent(route('invoice.show', this.id));
-        let url = encodeURIComponent("*قم بفتح هذا الرابط للاطلاع على فاتورتك من محلات وان واي*\n"+"*Open this link to view your bill from One Way stores*\n"+route('download.invoice.show', this.id));
+        let url = encodeURIComponent("*قم بفتح هذا الرابط للاطلاع على فاتورتك من محلات وان واي*\n"+"*Open this link to view your bill from One Way stores*\n"+this.invoice_url);
         window.open(`https://wa.me/${number}/?text=${url}`, '_blank').focus();
         window.location.replace(route('orders.complex'))
     }

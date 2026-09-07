@@ -79,7 +79,12 @@
                   </td>
                   <td class="mx-auto max-w-sm p-6 text-sm leading-6 sm:text-base sm:leading-7" v-if="user.role_id === 3 || user.role_id === 2 || user.role_id === 5">
                       <div class="ml-4">
-                          <div class="text-sm font-medium">{{ parseInt(user.wallet?.credit * rate) }}</div>
+                          <template v-if="admin.country_id === 4">
+                              <div v-for="code in ['SYP', 'USD']" :key="code" class="text-sm font-medium" dir="ltr">
+                                  {{ formatCashboxBalance(user, code) }} {{ code }}
+                              </div>
+                          </template>
+                          <div v-else class="text-sm font-medium">{{ parseInt(user.wallet?.credit * rate) }}</div>
                       </div>
                   </td>
                   <td class="mx-auto max-w-sm p-6 text-sm leading-6 sm:text-base sm:leading-7" v-if="user.role_id === 2 || user.role_id === 3">
@@ -148,6 +153,14 @@
           }
       },
       methods: {
+          formatCashboxBalance(user, code) {
+              const wallet = (user.wallets || []).find(item => String(item.currency_code || 'USD').toUpperCase() === code)
+              const balance = Number(wallet?.credit || 0) - Number(wallet?.debit || 0)
+              return balance.toLocaleString(undefined, {
+                  minimumFractionDigits: code === 'SYP' ? 0 : 2,
+                  maximumFractionDigits: code === 'SYP' ? 0 : 2,
+              })
+          },
           getSingleName(type){
               switch (type) {
                   case '2':
@@ -210,7 +223,7 @@
                           timerProgressBar: true,
                           },
                       )
-                      this.$inertia.get(route('users.wallet.close', id))
+                      this.$inertia.post(route('users.wallet.close', id))
                   }
               })
 

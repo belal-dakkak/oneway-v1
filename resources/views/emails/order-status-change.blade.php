@@ -145,6 +145,7 @@
             <p>Your order has been delivered successfully. We hope you enjoy your purchase!</p>
             @endif
 
+            <p><a href="{{ $order->invoice_links['download'] }}">Download your invoice</a></p>
             <p>If you have any questions about your order, please don't hesitate to contact us.</p>
             
             <p>Thank you for shopping with OneWay!</p>

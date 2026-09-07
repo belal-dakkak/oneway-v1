@@ -22,6 +22,8 @@ use App\Services\TaxCalculator;
 use App\Services\CurrencyService;
 use App\Services\ClientAccountService;
 use App\Services\SalesCurrencyPolicy;
+use App\Services\WebsitePricingService;
+use App\Services\CashboxService;
 use App\Services\Payment\WebsiteOrderStockService;
 use App\Support\Country;
 use App\Models\CountryCommerceSetting;
@@ -43,13 +45,17 @@ class OrderRepository
     private $websiteOrderStockService;
     private $clientAccounts;
     private $salesCurrencyPolicy;
+    private $websitePricing;
+    private $cashboxes;
 
     public function __construct(
         TaxCalculator $taxCalculator,
         CurrencyService $currencyService,
         WebsiteOrderStockService $websiteOrderStockService,
         ClientAccountService $clientAccounts,
-        SalesCurrencyPolicy $salesCurrencyPolicy
+        SalesCurrencyPolicy $salesCurrencyPolicy,
+        WebsitePricingService $websitePricing,
+        CashboxService $cashboxes
     )
     {
         $this->taxCalculator = $taxCalculator;
@@ -57,6 +63,8 @@ class OrderRepository
         $this->websiteOrderStockService = $websiteOrderStockService;
         $this->clientAccounts = $clientAccounts;
         $this->salesCurrencyPolicy = $salesCurrencyPolicy;
+        $this->websitePricing = $websitePricing;
+        $this->cashboxes = $cashboxes;
     }
 
     private function clearHomeCache()
@@ -409,12 +417,21 @@ class OrderRepository
             }
 
 
-            Wallet::query()->updateOrCreate([
-                'user_id' => auth()->id()
-            ],[
-                'credit' => auth()->user()->wallet->credit + ($paidPrice/$request->get('currency')['rate']),
-                'user_id' => auth()->id()
-            ]);
+            if ($paidPrice > 0) {
+                $this->cashboxes->credit(
+                    (int) auth()->id(),
+                    (float) $paidPrice,
+                    $currencyCode,
+                    "order:{$order->id}:initial-payment",
+                    [
+                        'exchange_rate' => (float) $order->curr_rate,
+                        'payment_method' => (string) $order->payment_type,
+                        'source_type' => Order::class,
+                        'source_id' => $order->id,
+                        'note' => "Initial payment for order #{$order->barcode}",
+                    ]
+                );
+            }
         }catch (Exception $exception){
             DB::rollBack();
             Log::error($exception->getLine().'-'.$exception->getMessage());
@@ -429,39 +446,28 @@ class OrderRepository
 
     public function addForOnline(Request $request)
     {
-        try {
-            DB::beginTransaction();
+        $userId = $request->is('api/*')
+            ? (int) $request->input('authenticated_user_id')
+            : (auth()->check() ? (int) auth()->id() : null);
+        $countryId = $request->is('api/*')
+            ? (int) $request->input('country_id', optional(auth()->user())->country_id ?: Country::id())
+            : Country::id();
+        $paymentType = (string) data_get($request->get('payment'), 'name', 'cod');
+        $isMerchant = $request->input('pricing_mode') === 'wholesale';
 
-            generate:
-            $barcode = generateRandomNumber(10);
-            if (WebsiteOrder::query()->where('barcode', $barcode)->exists())
-                goto generate;
+        $order = DB::transaction(function () use ($request, $userId, $countryId, $paymentType, $isMerchant) {
+            do {
+                $barcode = generateRandomNumber(10);
+            } while (WebsiteOrder::query()->where('barcode', $barcode)->exists());
 
-
-            $userId = $request->is('api/*')
-                ? (int) $request->input('authenticated_user_id')
-                : auth()->id();
-            $countryId = $request->is('api/*')
-                ? (int) $request->input('country_id', optional(auth()->user())->country_id ?: Country::id())
-                : Country::id();
-            $countryCode = Country::codeFromId($countryId);
-            $paymentType = $request->get('payment')['name'];
-            $isMerchant = (bool) Session::get('is_merchant');
-            $currency = $this->salesCurrencyPolicy->websiteOption(
+            $quote = $this->websitePricing->quote(
+                (array) $request->get('items'),
                 $countryId,
                 $isMerchant,
-                (string) $request->get('currency', Country::defaultCurrency($countryId))
+                $paymentType,
+                true
             );
-            $currencyCode = $currency['code'];
-            if ($countryCode === 'SY' && $paymentType !== 'cod') {
-                throw new Exception('Card payment is not available for Syria.');
-            }
-            $currencyRate = $currency['rate'];
-            $displayCurrency = $countryId === Country::SYRIA
-                ? null
-                : $this->currencyService->displayForCountry($countryId);
-
-            $order = new WebsiteOrder([
+            $order = WebsiteOrder::query()->create([
                 'notes' => $request->get('notes'),
                 'barcode' => $barcode,
                 'buyer_id' => $userId,
@@ -473,102 +479,47 @@ class OrderRepository
                 'city' => $request->get('city'),
                 'building_name' => $request->get('building_name'),
                 'flat_number' => $request->get('flat_number'),
-                'total_price_before_discount' => 0,
-                'discount' => 0,
-                'invoice' => $request->get('tap_id'),
-                'payment_type' => $request->get('payment')['name'],
-                'curr_type' => $currencyCode,
-                'curr_rate' => $currencyRate,
-                'display_currency' => $displayCurrency['code'] ?? null,
-                'display_rate' => $displayCurrency['rate'] ?? null,
+                'total_price_before_discount' => $quote['total_price_before_discount'],
+                'discount' => $quote['discount'],
+                'total_price' => $quote['total'],
+                'paid_price' => 0,
+                'remain_price' => $quote['total'],
+                'shipping_fee' => $quote['shipping_fee'],
+                'cod_fee' => $quote['cod_fee'],
+                'payment_type' => $paymentType,
+                'curr_type' => $quote['currency'],
+                'curr_rate' => $quote['rate'],
+                'display_currency' => $quote['display']['currency'] ?? null,
+                'display_rate' => $quote['display']['rate'] ?? null,
                 'country_id' => $countryId,
-                'pricing_mode' => $isMerchant ? 'wholesale' : 'retail',
-                'status' => $request->get('payment')['name'] === 'card' ? WebsiteOrder::STATUS_UNPAID : WebsiteOrder::STATUS_PENDING,
+                'pricing_mode' => $quote['pricing_mode'],
+                'status' => $paymentType === 'card' ? WebsiteOrder::STATUS_UNPAID : WebsiteOrder::STATUS_PENDING,
+                'gateway_provider' => $quote['gateway']['provider'] ?? null,
+                'gateway_currency' => $quote['gateway']['currency'] ?? null,
+                'gateway_amount' => $quote['gateway']['amount'] ?? null,
+                'gateway_rate' => $quote['gateway']['rate'] ?? null,
             ]);
 
-            $order->save();
-
-            $totalPrice = 0;
-            $totalPriceBeforeDiscount = 0;
-            $decimals = $currencyCode === 'SYP' ? 0 : 2;
-            foreach ($request->get('items') as $product){
-                $productObj = ProductColor::query()
-                    ->with('product')
-                    ->where('id', $product['product_id'])
-                    ->whereHas('product', function ($query) use ($countryId) {
-                        $query->whereIn('country_id', [$countryId, Country::globalProductId()]);
-                    })
-                    ->firstOrFail();
-
-                $stock = UserProduct::query()
-                    ->where('product_color_id', $productObj->id)
-                    ->where('country_id', $countryId)
-                    ->where('size', $product['size'] ?? null)
-                    ->lockForUpdate()
-                    ->first();
-                if (!$stock || $stock->stock < (int) $product['qty']) {
-                    throw new Exception('The requested product quantity is not available in this country.');
-                }
-
-                $basePrice = $isMerchant ? $productObj->product->sale_price : $productObj->product->retail_price;
-                $itemPrice = round($basePrice * $currencyRate, $decimals);
-                $oldPrice = round($productObj->product->price_before_discount * $currencyRate, $decimals);
-                $itemTotalPrice = round($itemPrice * $product['qty'], $decimals);
-                $itemTotalPriceBeforeDiscount = round($oldPrice * $product['qty'], $decimals);
-
+            foreach ($quote['items'] as $line) {
                 $order->items()->create([
-                    'product_color_id' => $productObj->id,
-                    'qty' => $product['qty'],
-                    'item_price' => $itemPrice,
-                    'total_price' => $itemTotalPrice,
-                    'item_price_before_discount' => $oldPrice,
-                    'total_price_before_discount' => $itemTotalPriceBeforeDiscount,
-                    'size' => $product['size']??null
+                    'product_color_id' => $line['product_color_id'],
+                    'stock_user_product_id' => $line['stock_user_product_id'],
+                    'qty' => $line['qty'],
+                    'item_price' => $line['item_price'],
+                    'total_price' => $line['total_price'],
+                    'item_price_before_discount' => $line['item_price_before_discount'],
+                    'total_price_before_discount' => $line['total_price_before_discount'],
+                    'size' => $line['size'],
                 ]);
-
-                $totalPrice += $itemTotalPrice;
-                $totalPriceBeforeDiscount += $itemTotalPriceBeforeDiscount;
             }
-
-            $discount = round($totalPriceBeforeDiscount - $totalPrice, $decimals);
-
-            $commerce = CountryCommerceSetting::forCountry($countryId);
-            $shippingFeeUsd = (float) $commerce->shipping_fee_usd;
-            $thresholdUsd = $commerce->free_shipping_threshold_usd;
-            $totalUsd = $totalPrice / $currencyRate;
-            $shippingFee = $thresholdUsd !== null && $totalUsd >= (float) $thresholdUsd
-                ? 0
-                : round($shippingFeeUsd * $currencyRate, $decimals);
-            $codFee = $paymentType === 'cod'
-                ? round($totalPrice * ((float) $commerce->cod_fee_percent / 100), $decimals)
-                : 0;
-
-            $finalTotal = $totalPrice + $shippingFee + $codFee;
-
-            $order->update([
-                'paid_price' => $finalTotal,
-                'total_price' => $finalTotal,
-                'remain_price' => 0,
-                'discount' => $discount,
-                'total_price_before_discount' => $totalPriceBeforeDiscount,
-                'shipping_fee' => $shippingFee,
-                'cod_fee' => $codFee,
-            ]);
 
             $this->websiteOrderStockService->reserveLocked($order);
 
+            return $order;
+        }, 3);
 
-
-        }catch (Exception $exception){
-            DB::rollBack();
-            Log::error($exception->getMessage());
-            return $exception->getMessage();
-        }
-
-        DB::commit();
         $this->clearHomeCache();
         return $order;
-
     }
 
     public function update(Request $request, Order $order)
@@ -912,20 +863,31 @@ class OrderRepository
 
             ///////////////////////////////////////////////////////////////
 
-            if ($paidPrice > $orderOldPrice)
-                Wallet::query()->updateOrCreate([
-                    'user_id' => auth()->id()
-                ],[
-                    'credit' => auth()->user()->wallet->credit + ($paidPrice - $orderOldPrice) / $rate,
-                    'user_id' => auth()->id()
-                ]);
-            else if ($paidPrice < $orderOldPrice)
-                Wallet::query()->updateOrCreate([
-                    'user_id' => auth()->id()
-                ],[
-                    'credit' => auth()->user()->wallet->credit - ($orderOldPrice - $paidPrice)/ $rate,
-                    'user_id' => auth()->id()
-                ]);
+            $adjustmentKey = "order:{$order->id}:payment-adjustment:{$order->getOriginal('updated_at')}:{$orderOldPrice}:{$paidPrice}";
+            $adjustmentContext = [
+                'exchange_rate' => (float) $order->curr_rate,
+                'payment_method' => (string) $order->payment_type,
+                'source_type' => Order::class,
+                'source_id' => $order->id,
+                'note' => "Payment adjustment for order #{$order->barcode}",
+            ];
+            if ($paidPrice > $orderOldPrice) {
+                $this->cashboxes->credit(
+                    (int) auth()->id(),
+                    (float) ($paidPrice - $orderOldPrice),
+                    $currencyCode,
+                    $adjustmentKey . ':credit',
+                    $adjustmentContext
+                );
+            } elseif ($paidPrice < $orderOldPrice) {
+                $this->cashboxes->debit(
+                    (int) auth()->id(),
+                    (float) ($orderOldPrice - $paidPrice),
+                    $currencyCode,
+                    $adjustmentKey . ':debit',
+                    $adjustmentContext
+                );
+            }
             DB::commit();
             $this->clearHomeCache();
             return $order;

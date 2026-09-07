@@ -183,7 +183,7 @@
                     <button class="px-6 py-2 bg-gray-50 hover:bg-gray-100 text-gray-700 rounded-xl font-bold transition-all">
                       {{ store.t('viewDetails') || 'View Details' }}
                     </button>
-                    <a :href="'/invoice/' + order.id" target="_blank" class="px-6 py-2 bg-white border-2 border-gray-200 hover:border-[#c20000] hover:text-[#c20000] text-gray-700 rounded-xl font-bold transition-all">
+                    <a :href="order.invoice_links?.view || route('invoice.typed.show', { source: 'website', id: order.id })" target="_blank" class="px-6 py-2 bg-white border-2 border-gray-200 hover:border-[#c20000] hover:text-[#c20000] text-gray-700 rounded-xl font-bold transition-all">
                       {{ store.t('invoice') || 'Invoice' }}
                     </a>
                   </div>

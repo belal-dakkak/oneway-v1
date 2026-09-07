@@ -8,6 +8,7 @@ use App\Http\Traits\ReceiptTrait;
 use App\Models\City;
 use App\Models\Order;
 use App\Models\WebsiteOrder;
+use App\Models\CountryCommerceSetting;
 use App\Models\OrderItem;
 use App\Models\ProductColor;
 use App\Models\ProductSize;
@@ -17,9 +18,11 @@ use App\Models\User;
 use App\Models\UserProduct;
 use App\Repositories\OrderRepository;
 use App\Services\ClientAccountService;
+use App\Services\CashboxService;
 use App\Services\CurrencyService;
 use App\Services\InvoiceDataService;
 use App\Services\SalesCurrencyPolicy;
+use App\Services\Payment\WebsiteOrderStockService;
 use App\Support\Country;
 use App\Mail\OrderStatusChangeEmail;
 use Carbon\Carbon;
@@ -31,6 +34,7 @@ use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Mail;
 use Illuminate\Support\Facades\Redirect;
+use Illuminate\Validation\ValidationException;
 use Inertia\Inertia;
 use Inertia\Response;
 use Jenssegers\Date\Date;
@@ -45,13 +49,17 @@ class OrderController extends Controller
     private $invoiceDataService;
     private $salesCurrencyPolicy;
     private $clientAccounts;
+    private $cashboxes;
+    private $websiteStock;
 
     public function __construct(
         OrderRepository $orderRepository,
         CurrencyService $currencyService,
         InvoiceDataService $invoiceDataService,
         SalesCurrencyPolicy $salesCurrencyPolicy,
-        ClientAccountService $clientAccounts
+        ClientAccountService $clientAccounts,
+        CashboxService $cashboxes,
+        WebsiteOrderStockService $websiteStock
     )
     {
         $this->orderRepository = $orderRepository;
@@ -59,6 +67,8 @@ class OrderController extends Controller
         $this->invoiceDataService = $invoiceDataService;
         $this->salesCurrencyPolicy = $salesCurrencyPolicy;
         $this->clientAccounts = $clientAccounts;
+        $this->cashboxes = $cashboxes;
+        $this->websiteStock = $websiteStock;
     }
 
     /**
@@ -318,7 +328,7 @@ class OrderController extends Controller
     	[
             'order' => $order,
             'items' => $items
-        ] = $this->getExportData($request->id);
+        ] = $this->getExportData($order->id);
 
         $rate = (float) ($order->curr_rate ?: 1);
         $Currency = strtoupper($order->curr_type ?: Country::defaultCurrency($order->seller->country_id ?? Country::UAE));
@@ -355,12 +365,9 @@ class OrderController extends Controller
         $o->products = $items;
 
         foreach($o->products as $product) {
-
-            $product->vat = $product->tax_value_paid;
-
-            $product->total_price_before_vat = $product->price_without_tax_paid . ' ' .$Currency;
-
-            $product->total_price = ($product->item_price * $product->qty). ' ' .$Currency;
+            $product->vat = $product->line_tax_value . ' ' . $Currency;
+            $product->total_price_before_vat = $product->line_price_without_tax . ' ' .$Currency;
+            $product->total_price = $product->total_price . ' ' .$Currency;
         }
 
 /*         if ($order->type == Order::TYPE_APP){ */
@@ -516,6 +523,7 @@ class OrderController extends Controller
                     return Inertia::render('WA2', [
                         'id' => $result->id,
                         'number' => $number,
+                        'invoice_url' => $result->invoice_links['download'],
                     ]);
                 }
 
@@ -529,6 +537,7 @@ class OrderController extends Controller
 
                     return Inertia::render('RedirectInvoice', [
                         'id' => $result->id,
+                        'invoice_url' => $result->invoice_links['download'],
                     ]);
                 }
             }
@@ -676,13 +685,7 @@ class OrderController extends Controller
 
     public function invoice($id)
     {
-        $data = $this->getExportData($id);
-
-        $language  = 'en';
-        $country = $data['order']->country_id ?? $data['order']->seller->country_id ?? auth()->user()->country_id;
-        $settings = Setting::where('country',$country)->where('language',$language)->pluck('value','name')->toArray();
-
-        return view('receipts.pdfReceipt', $data)->with('settings',$settings);
+        return $this->typedInvoice(InvoiceDataService::SOURCE_ORDER, (int) $id);
     }
 
     public function appInvoice($id)
@@ -742,7 +745,9 @@ class OrderController extends Controller
 
     public function invoiceShipper($id)
     {
-        $data = $this->getExportData($id);
+        $order = $this->invoiceDataService->resolve(InvoiceDataService::SOURCE_ORDER, (int) $id);
+        $this->authorizeInvoiceAccess($order);
+        $data = $this->invoiceDataService->forOrder($order);
 
         return view('receipts.pdfReceiptShipper', $data);
     }
@@ -758,26 +763,39 @@ class OrderController extends Controller
 
     public function changeWebsiteOrderStatus(Request $request, $id): JsonResponse
     {
-        $order = WebsiteOrder::query()->where('country_id', auth()->user()->country_id)->findOrFail($id);
-
         $request->validate(['status' => 'nullable|integer|in:0,1,2,3,4']);
+        $oldStatus = '';
+        $order = DB::transaction(function () use ($request, $id, &$oldStatus) {
+            $order = WebsiteOrder::query()
+                ->when((int) auth()->user()->country_id !== Country::ALL, function ($query) {
+                    $query->where('country_id', auth()->user()->country_id);
+                })
+                ->lockForUpdate()
+                ->findOrFail($id);
+            $oldStatus = $order->status_label;
 
-        $oldStatus = $order->status_label;
+            if ($request->has('status')) {
+                $order->status = $request->get('status');
+            } elseif ($order->status < WebsiteOrder::STATUS_DELIVERED) {
+                $order->status = $order->status + 1;
+            }
 
-        // If status is provided in the request, use it; otherwise increment
-        if ($request->has('status')) {
-            $order->status = $request->get('status');
-        } elseif ($order->status < WebsiteOrder::STATUS_DELIVERED) {
-            $order->status = $order->status + 1;
-        }
+            if ((int) $order->status === WebsiteOrder::STATUS_DELIVERED && $order->payment_type === 'cod') {
+                $this->postWebsiteCod($order);
+            }
+            if ((int) $order->status === WebsiteOrder::STATUS_FAILED && !$order->payment_captured_at) {
+                $this->websiteStock->releaseLocked($order);
+            }
+            $order->save();
 
-        $order->save();
+            return $order;
+        }, 3);
 
         $newStatus = $order->status_label;
 
         // Send email notification to client about status change
         try {
-            Mail::to($order->email)->send(new OrderStatusChangeEmail($order, $oldStatus, $newStatus));
+            Mail::to($order->email)->queue(new OrderStatusChangeEmail($order, $oldStatus, $newStatus));
             Log::info('Order status change email sent successfully', [
                 'order_id' => $order->id,
                 'email' => $order->email,
@@ -797,12 +815,21 @@ class OrderController extends Controller
 
     public function markWebsiteOrderPaid(Request $request, $id): JsonResponse
     {
-        $order = WebsiteOrder::query()->where('country_id', auth()->user()->country_id)->findOrFail($id);
+        $order = DB::transaction(function () use ($id) {
+            $order = WebsiteOrder::query()
+                ->when((int) auth()->user()->country_id !== Country::ALL, function ($query) {
+                    $query->where('country_id', auth()->user()->country_id);
+                })
+                ->lockForUpdate()
+                ->findOrFail($id);
+            if ($order->payment_type !== 'cod') {
+                abort(422, 'Card orders are marked paid only by the payment gateway.');
+            }
+            $this->postWebsiteCod($order);
+            $order->save();
 
-        $order->update([
-            'paid_price'   => $order->total_price,
-            'remain_price' => 0,
-        ]);
+            return $order;
+        }, 3);
 
         return response()->json([
             'id'           => $order->id,
@@ -810,6 +837,48 @@ class OrderController extends Controller
             'remain_price' => $order->remain_price,
             'is_paid'      => $order->is_paid,
         ]);
+    }
+
+    private function postWebsiteCod(WebsiteOrder $order): void
+    {
+        if ($order->cashbox_posted_at) {
+            return;
+        }
+
+        $commerce = CountryCommerceSetting::forCountry((int) $order->country_id);
+        $cashboxUserId = (int) ($commerce->website_cashbox_user_id ?: 0);
+        $operator = auth()->user();
+        if (!$cashboxUserId && (int) $order->country_id !== Country::SYRIA && $operator) {
+            // Preserve the existing Lebanon/UAE collection flow.
+            $cashboxUserId = (int) $operator->id;
+        }
+        if (!$cashboxUserId
+            && $operator
+            && (int) $operator->country_id === (int) $order->country_id
+            && in_array((int) $operator->role_id, [User::ROLE_SHOP, User::ROLE_WAREHOUSE], true)) {
+            $cashboxUserId = (int) $operator->id;
+        }
+        if (!$cashboxUserId) {
+            throw ValidationException::withMessages([
+                'cashbox' => 'Configure the website receiving cashbox before collecting this COD order.',
+            ]);
+        }
+        $this->cashboxes->credit(
+            $cashboxUserId,
+            (float) $order->total_price,
+            strtoupper((string) ($order->curr_type ?: 'USD')),
+            "website-order:{$order->id}:cod-collected",
+            [
+                'exchange_rate' => (float) ($order->curr_rate ?: 1),
+                'payment_method' => 'cod',
+                'source_type' => WebsiteOrder::class,
+                'source_id' => $order->id,
+                'note' => "COD collected for website order #{$order->barcode}",
+            ]
+        );
+        $order->paid_price = $order->total_price;
+        $order->remain_price = 0;
+        $order->cashbox_posted_at = now();
     }
 
     //public function singlePrint(Request $request)
@@ -1436,6 +1505,7 @@ class OrderController extends Controller
     private function invoicePayload(string $source, int $id): array
     {
         $order = $this->invoiceDataService->resolve($source, $id);
+        $this->authorizeInvoiceAccess($order);
         $data = $this->invoiceDataService->forOrder($order);
         $country = $order->country_id ?? optional($order->seller)->country_id ?? Country::UAE;
         $data['settings'] = Setting::where('country', $country)
@@ -1448,5 +1518,27 @@ class OrderController extends Controller
             : 'shop';
 
         return $data;
+    }
+
+    private function authorizeInvoiceAccess($order): void
+    {
+        $user = auth()->user();
+        if (!$user) {
+            abort_unless(request()->hasValidSignature(), 403);
+            return;
+        }
+
+        $countryId = $order instanceof WebsiteOrder
+            ? (int) $order->country_id
+            : (int) optional($order->seller)->country_id;
+        $hasCountryAccess = (int) $user->country_id === Country::ALL
+            || (int) $user->country_id === $countryId;
+        abort_unless($hasCountryAccess, 403);
+
+        if ($order instanceof Order
+            && !in_array((int) $user->role_id, [User::ROLE_ADMIN, User::ROLE_WAREHOUSE], true)
+            && (int) $order->seller_id !== (int) $user->id) {
+            abort(403);
+        }
     }
 }
