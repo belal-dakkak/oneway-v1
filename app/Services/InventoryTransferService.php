@@ -23,12 +23,10 @@ class InventoryTransferService
     public const SOURCE_INVENTORY = 'inventory';
 
     private $currency;
-    private $cashboxes;
 
-    public function __construct(CurrencyService $currency, CashboxService $cashboxes)
+    public function __construct(CurrencyService $currency)
     {
         $this->currency = $currency;
-        $this->cashboxes = $cashboxes;
     }
 
     public function destinationsFor(User $sender, string $sourceType = self::SOURCE_INVENTORY): Collection
@@ -348,28 +346,6 @@ class InventoryTransferService
             'debtor_id' => $destination->id,
         ], ['amount' => 0]);
         $merchantDebit->increment('amount', $amount);
-
-        $movementContext = [
-            'exchange_rate' => 1,
-            'payment_method' => 'inventory',
-            'source_type' => UserProductLog::class,
-            'source_id' => $transferLogId,
-            'note' => "Inventory merchant balance for product #{$productColor->id}",
-        ];
-        $this->cashboxes->debit(
-            (int) $destination->id,
-            $amount,
-            'USD',
-            "inventory-transfer:{$transferLogId}:destination",
-            $movementContext
-        );
-        $this->cashboxes->credit(
-            (int) $merchant->id,
-            $amount,
-            'USD',
-            "inventory-transfer:{$transferLogId}:merchant",
-            $movementContext
-        );
 
         $today = now()->toDateString();
         $debitLog = DebitLog::query()

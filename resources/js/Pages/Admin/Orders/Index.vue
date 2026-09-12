@@ -116,9 +116,10 @@
 
             <div v-if="user.role === 1" class="flex flex-wrap gap-3" dir="rtl">
                 <div v-for="(values, code) in totalsByCurrency" :key="code" class="flex flex-col rounded-md bg-emerald-500 px-3 py-2 text-white">
-                    <span class="font-bold">{{ formatMoney(values.total, code) }} إجمالي</span>
-                    <span class="text-xs">{{ formatMoney(values.net, code) }} صافي</span>
-                    <span class="text-xs">{{ formatMoney(values.tax, code) }} ضريبة</span>
+                    <span class="font-bold">{{ formatMoney(values.net_sales, code) }} صافي المبيعات</span>
+                    <span class="text-xs">إجمالي: {{ formatMoney(values.gross_sales, code) }}</span>
+                    <span class="text-xs">مرتجعات: {{ formatMoney(values.refund_total, code) }}</span>
+                    <span class="text-xs">القطع: {{ values.gross_qty }} - {{ values.refund_qty }} = {{ values.net_qty }}</span>
                 </div>
             </div>
 
@@ -204,7 +205,9 @@
                   </td>
                   <td class="mx-auto max-w-sm p-2 text-sm leading-6 sm:text-base sm:leading-7"  style="width: 150px !important">
                       <div class="ml-0">
-                          <div class="text-sm text-center font-medium font-medium bg-fuchsia-200 p-1 m-1 rounded-lg">{{ item.total_price }}</div>
+                          <div class="text-sm text-center font-medium font-medium bg-fuchsia-200 p-1 m-1 rounded-lg">{{ formatMoney(item.gross_total ?? item.total_price, item.currency_code || item.curr_type) }}</div>
+                          <div v-if="item.refund_total" class="text-sm text-center font-medium bg-amber-200 p-1 m-1 rounded-lg">- {{ formatMoney(item.refund_total, item.currency_code || item.curr_type) }}</div>
+                          <div class="text-sm text-center font-medium bg-emerald-200 p-1 m-1 rounded-lg">{{ formatMoney(item.net_total ?? item.total_price, item.currency_code || item.curr_type) }}</div>
                           <div class="text-sm text-center font-medium font-medium bg-fuchsia-200 p-1 m-1 rounded-lg">{{ item.price_without_tax }}</div>
                           <div class="text-sm text-center font-medium font-medium bg-fuchsia-200 p-1 m-1 rounded-lg">{{ item.tax_value }} - {{ Math.round(item.tax_ratio) }}%  </div>
 
@@ -240,7 +243,7 @@
                   </td>
                   <td class="mx-auto max-w-sm p-6 text-sm leading-6 sm:text-base sm:leading-7">
                       <div class="ml-4">
-                          <div class="text-sm font-medium">{{ item.curr_type }}</div>
+                          <div class="text-sm font-medium">{{ item.currency_code || item.curr_type }}</div>
                       </div>
                   </td>
                   <td class="mx-auto max-w-sm p-6 text-sm leading-6 sm:text-base sm:leading-7">

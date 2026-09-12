@@ -33,6 +33,15 @@
                     <jet-input :id="`cod_fee_percent_${country.id}`" type="number" step="0.01" min="0" max="100" class="mt-1 block w-full" v-model="form.commerce[country.id].cod_fee_percent" />
                     <jet-input-error :message="form.errors[`commerce.${country.id}.cod_fee_percent`]" class="mt-2" />
                 </div>
+                <div class="col-span-8 sm:col-span-4" dir="rtl">
+                    <jet-label :for="`website_stock_user_${country.id}`" value="موقع تجهيز مخزون طلبات الموقع" />
+                    <select :id="`website_stock_user_${country.id}`" class="mt-1 block w-full rounded-md border-gray-300" v-model="form.commerce[country.id].website_stock_user_id">
+                        <option :value="null">اختر المحل أو المستودع</option>
+                        <option v-for="user in usersForCountry(country.id)" :key="user.id" :value="user.id">{{ user.name }}</option>
+                    </select>
+                    <p class="mt-1 text-xs text-gray-500">لن يعرض الموقع مخزوناً قابلاً للشراء قبل اختيار موقع التجهيز.</p>
+                    <jet-input-error :message="form.errors[`commerce.${country.id}.website_stock_user_id`]" class="mt-2" />
+                </div>
                 <template v-if="country.id === 4">
                     <div class="col-span-8 sm:col-span-4" dir="rtl">
                         <jet-label for="syria_card_enabled" value="تفعيل الدفع بالبطاقة لسوريا" />
@@ -111,6 +120,7 @@ export default defineComponent({
                 gateway_currency: setting.gateway_currency || 'USD',
                 gateway_mode: setting.gateway_mode || 'sandbox',
                 website_cashbox_user_id: setting.website_cashbox_user_id || null,
+                website_stock_user_id: setting.website_stock_user_id || null,
             }
             return result
         }, {})

@@ -101,6 +101,8 @@ class RefundCurrencySafetyTest extends TestCase
             $table->unsignedBigInteger('order_id');
             $table->unsignedBigInteger('user_product_id');
             $table->integer('qty');
+            $table->integer('sold_qty')->nullable();
+            $table->decimal('unit_cost', 20, 4)->nullable();
             $table->decimal('item_price', 20, 4);
             $table->decimal('total_price', 20, 4);
             $table->decimal('tax_ratio', 8, 4)->default(0);
@@ -119,6 +121,10 @@ class RefundCurrencySafetyTest extends TestCase
             $table->decimal('item_price', 20, 4);
             $table->decimal('total_price', 20, 4);
             $table->decimal('total_price_paid', 20, 4)->nullable();
+            $table->string('currency_code', 3)->nullable();
+            $table->decimal('net_amount', 20, 4)->nullable();
+            $table->decimal('tax_amount', 20, 4)->nullable();
+            $table->decimal('cost_amount', 20, 4)->nullable();
             $table->string('item_barcode');
             $table->string('order_barcode');
             $table->timestamps();
@@ -156,14 +162,18 @@ class RefundCurrencySafetyTest extends TestCase
             'order_type' => 'complex_from_multi',
             'curr_type' => 'USD',
             'curr_rate' => 1,
-            'total_price' => 105,
-            'paid_price' => 105,
+            'total_price' => 120,
+            'paid_price' => 120,
             'remain_price' => 0,
+            'shipping_fee' => 10,
+            'cod_fee' => 5,
         ]);
         $item = OrderItem::query()->create([
             'order_id' => $order->id,
             'user_product_id' => $stock->id,
             'qty' => 2,
+            'sold_qty' => 2,
+            'unit_cost' => 40,
             'item_price' => 52.50,
             'total_price' => 105,
             'tax_ratio' => 5,
@@ -190,6 +200,10 @@ class RefundCurrencySafetyTest extends TestCase
         $this->assertInstanceOf(Refund::class, $refund);
         $this->assertSame(52.5, (float) $refund->item_price);
         $this->assertSame(52.5, (float) $refund->total_price_paid);
+        $this->assertSame('USD', $refund->currency_code);
+        $this->assertSame(50.0, (float) $refund->net_amount);
+        $this->assertSame(2.5, (float) $refund->tax_amount);
+        $this->assertSame(40.0, (float) $refund->cost_amount);
         $this->assertSame(1, (int) $item->fresh()->qty);
         $this->assertSame(52.5, (float) $item->fresh()->item_price);
         $this->assertSame(50.0, (float) $item->fresh()->price_without_tax);
@@ -200,5 +214,21 @@ class RefundCurrencySafetyTest extends TestCase
         $this->assertSame(100.0, (float) $wallet->credit);
         $this->assertSame(52.5, (float) $wallet->debit);
         $this->assertSame(47.5, (float) $wallet->credit - (float) $wallet->debit);
+
+        $finalRefund = DB::transaction(function () use ($item) {
+            return app(RefundRepository::class)->add(Request::create('/admin/refunds', 'POST', [
+                'selected_products' => [[
+                    'product_id' => $item->id,
+                    'qty' => 1,
+                ]],
+            ]));
+        });
+
+        $this->assertSame(67.5, (float) $finalRefund->fresh()->total_price_paid);
+        $this->assertSame(65.0, (float) $finalRefund->fresh()->net_amount);
+        $this->assertSame(120.0, (float) $order->fresh()->total_price);
+        $this->assertSame(10.0, (float) $order->fresh()->shipping_fee);
+        $this->assertSame(5.0, (float) $order->fresh()->cod_fee);
+        $this->assertSame(120.0, (float) $seller->wallet->fresh()->debit);
     }
 }

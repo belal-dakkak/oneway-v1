@@ -155,7 +155,7 @@ class OrderController extends Controller
         if ($is_website_order) {
             $all_orders = $this->orderRepository->getOrders($request, false, false, ['buyer', 'items'], false);
         } else {
-            $all_orders = $this->orderRepository->getOrders_v2($request, false, false, ['seller', 'buyer', 'items']);
+            $all_orders = $this->orderRepository->getOrders_v2($request, false, false, ['seller', 'buyer', 'items.product.productColor', 'items.refunds'], false);
         }
 
 
@@ -1029,6 +1029,7 @@ class OrderController extends Controller
         return Inertia::render('Admin/Orders/Profits', [
             'orders'  => $orders['orders'],
             'profit'  => array_key_exists('profit',$orders) ? $orders['profit'] : 0,
+            'profits_by_currency' => $orders['profits_by_currency'] ?? [],
             'shops'   => $shops,
             'buyers'  => $buyers,
             'rate'    => $rate,

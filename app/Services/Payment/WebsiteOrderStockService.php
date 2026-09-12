@@ -4,12 +4,19 @@ namespace App\Services\Payment;
 
 use App\Models\UserProduct;
 use App\Models\WebsiteOrder;
-use App\Models\CountryCommerceSetting;
+use App\Services\WebsiteInventoryService;
 use Exception;
 use Illuminate\Support\Facades\DB;
 
 class WebsiteOrderStockService
 {
+    private $inventory;
+
+    public function __construct(WebsiteInventoryService $inventory)
+    {
+        $this->inventory = $inventory;
+    }
+
     public function reserve(WebsiteOrder $order): bool
     {
         return DB::transaction(function () use ($order) {
@@ -74,7 +81,9 @@ class WebsiteOrderStockService
         $quantities = [];
 
         foreach ($order->items as $item) {
-            $key = $item->product_color_id . '|' . (string) $item->size;
+            $key = $item->stock_user_product_id
+                ? 'stock:' . $item->stock_user_product_id
+                : 'legacy:' . $item->product_color_id . '|' . (string) $item->size;
             if (!isset($quantities[$key])) {
                 $quantities[$key] = [
                     'product_color_id' => (int) $item->product_color_id,
@@ -87,18 +96,18 @@ class WebsiteOrderStockService
         }
 
         ksort($quantities);
-        $cashboxUserId = CountryCommerceSetting::forCountry((int) $order->country_id)
-            ->website_cashbox_user_id;
+        $stockUserId = null;
         $stocks = [];
         foreach ($quantities as $quantity) {
+            if (!$quantity['stock_user_product_id'] && $stockUserId === null) {
+                $stockUserId = $this->inventory->requireStockUserId((int) $order->country_id);
+            }
             $stockQuery = UserProduct::query()
                 ->when($quantity['stock_user_product_id'], function ($query) use ($quantity) {
                     $query->whereKey($quantity['stock_user_product_id']);
-                }, function ($query) use ($quantity, $cashboxUserId) {
+                }, function ($query) use ($quantity, $stockUserId) {
                     $query->where('product_color_id', $quantity['product_color_id'])
-                        ->when($cashboxUserId, function ($stockQuery) use ($cashboxUserId) {
-                            $stockQuery->where('user_id', $cashboxUserId);
-                        });
+                        ->where('user_id', $stockUserId);
                 })
                 ->where('product_color_id', $quantity['product_color_id'])
                 ->where('country_id', $order->country_id)

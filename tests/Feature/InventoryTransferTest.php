@@ -238,7 +238,7 @@ class InventoryTransferTest extends TestCase
         $this->assertEquals(50, $destination->fresh()->wholesale_price);
     }
 
-    public function test_transfer_with_merchant_posts_audited_usd_cashbox_movements(): void
+    public function test_transfer_with_merchant_updates_receivable_without_touching_cashboxes(): void
     {
         $admin = $this->user(User::ROLE_ADMIN, 4, 'merchant-transfer-admin@example.test');
         $shop = $this->user(User::ROLE_SHOP, 4, 'merchant-transfer-shop@example.test');
@@ -265,20 +265,9 @@ class InventoryTransferTest extends TestCase
             'debtor_id' => $shop->id,
             'amount' => 30,
         ]);
-        $this->assertDatabaseHas('wallets', [
-            'user_id' => $shop->id,
-            'currency_code' => 'USD',
-            'debit' => 30,
-        ]);
-        $this->assertDatabaseHas('wallets', [
-            'user_id' => $merchant->id,
-            'currency_code' => 'USD',
-            'credit' => 30,
-        ]);
-        $this->assertSame(2, DB::table('wallet_movements')
-            ->where('payment_method', 'inventory')
-            ->where('currency_code', 'USD')
-            ->count());
+        $this->assertSame(0, DB::table('wallet_movements')->count());
+        $this->assertSame(0.0, (float) $shop->wallet->fresh()->credit - (float) $shop->wallet->fresh()->debit);
+        $this->assertSame(0.0, (float) $merchant->wallet->fresh()->credit - (float) $merchant->wallet->fresh()->debit);
     }
 
     public function test_transfer_destinations_follow_catalog_and_inventory_source_rules(): void

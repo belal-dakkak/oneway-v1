@@ -67,11 +67,13 @@ class CurrencyController extends Controller
             'commerce.*.gateway_currency' => 'nullable|in:USD',
             'commerce.*.gateway_mode' => 'nullable|in:sandbox,live',
             'commerce.*.website_cashbox_user_id' => 'nullable|integer|exists:users,id',
+            'commerce.*.website_stock_user_id' => 'nullable|integer|exists:users,id',
         ]);
 
         $data = $request->except('_method');
         foreach ($data['commerce'] as $countryId => $commerce) {
             $cashboxUserId = $commerce['website_cashbox_user_id'] ?? null;
+            $stockUserId = $commerce['website_stock_user_id'] ?? null;
             if ($cashboxUserId && !User::query()
                 ->whereKey($cashboxUserId)
                 ->where('country_id', (int) $countryId)
@@ -84,6 +86,15 @@ class CurrencyController extends Controller
             if ((bool) ($commerce['card_enabled'] ?? false) && !$cashboxUserId) {
                 return back()->withErrors([
                     "commerce.{$countryId}.website_cashbox_user_id" => 'Select a website cashbox before enabling card payments.',
+                ]);
+            }
+            if ($stockUserId && !User::query()
+                ->whereKey($stockUserId)
+                ->where('country_id', (int) $countryId)
+                ->whereIn('role_id', [User::ROLE_SHOP, User::ROLE_WAREHOUSE])
+                ->exists()) {
+                return back()->withErrors([
+                    "commerce.{$countryId}.website_stock_user_id" => 'The website stock location must belong to the same country.',
                 ]);
             }
         }
@@ -104,6 +115,7 @@ class CurrencyController extends Controller
                     'gateway_currency' => strtoupper((string) ($commerce['gateway_currency'] ?? 'USD')),
                     'gateway_mode' => (string) ($commerce['gateway_mode'] ?? 'sandbox'),
                     'website_cashbox_user_id' => $commerce['website_cashbox_user_id'] ?? null,
+                    'website_stock_user_id' => $commerce['website_stock_user_id'] ?? null,
                 ]);
             }
         }

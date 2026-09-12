@@ -95,10 +95,10 @@
             <div v-if="user.role === 1 && Object.keys(totalsByCurrency).length" class="flex gap-3">
                 <div v-for="(summary, code) in totalsByCurrency" :key="code" class="rounded-md bg-emerald-500 px-3 py-2 text-white">
                     <div class="text-lg font-bold">{{ code }}</div>
-                    <div>المبيعات: {{ money(summary.total, code) }}</div>
-                    <div>الصافي: {{ money(summary.net, code) }}</div>
-                    <div>الضريبة: {{ money(summary.tax, code) }}</div>
-                    <div>المرتجعات: {{ money(summary.refunds, code) }}</div>
+                    <div>صافي المبيعات: {{ money(summary.net_sales, code) }}</div>
+                    <div>الإجمالي: {{ money(summary.gross_sales, code) }}</div>
+                    <div>المرتجعات: {{ money(summary.refund_total, code) }}</div>
+                    <div>القطع: {{ summary.gross_qty }} - {{ summary.refund_qty }} = {{ summary.net_qty }}</div>
                 </div>
             </div>
 

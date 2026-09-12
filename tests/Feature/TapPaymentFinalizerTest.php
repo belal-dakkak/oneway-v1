@@ -133,6 +133,7 @@ class TapPaymentFinalizerTest extends TestCase
             $table->string('gateway_currency')->default('USD');
             $table->string('gateway_mode')->default('sandbox');
             $table->unsignedBigInteger('website_cashbox_user_id')->nullable();
+            $table->unsignedBigInteger('website_stock_user_id')->nullable();
             $table->timestamps();
         });
         DB::table('country_commerce_settings')->insert([
@@ -247,6 +248,7 @@ class TapPaymentFinalizerTest extends TestCase
             'gateway_currency' => 'USD',
             'gateway_mode' => 'sandbox',
             'website_cashbox_user_id' => $cashboxId,
+            'website_stock_user_id' => $cashboxId,
             'created_at' => now(),
             'updated_at' => now(),
         ]);
@@ -343,6 +345,18 @@ class TapPaymentFinalizerTest extends TestCase
 
     private function reservedOrder(): array
     {
+        $stockUserId = DB::table('users')->insertGetId([
+            'name' => 'Fulfilment location',
+            'email' => 'fulfilment-' . uniqid() . '@example.test',
+            'password' => 'x',
+            'role_id' => 3,
+            'country_id' => 2,
+            'created_at' => now(),
+            'updated_at' => now(),
+        ]);
+        DB::table('country_commerce_settings')->where('country_id', 2)->update([
+            'website_stock_user_id' => $stockUserId,
+        ]);
         $order = WebsiteOrder::query()->create([
             'barcode' => 'WEB-100',
             'country_id' => 2,
@@ -362,6 +376,7 @@ class TapPaymentFinalizerTest extends TestCase
         ]);
         $stock = UserProduct::query()->create([
             'product_color_id' => 50,
+            'user_id' => $stockUserId,
             'country_id' => 2,
             'size' => 'M',
             'stock' => 8,
@@ -373,7 +388,7 @@ class TapPaymentFinalizerTest extends TestCase
     private function finalizer(): TapPaymentFinalizer
     {
         return new TapPaymentFinalizer(
-            new WebsiteOrderStockService(),
+            app(WebsiteOrderStockService::class),
             app(CashboxService::class)
         );
     }

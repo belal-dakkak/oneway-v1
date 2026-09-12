@@ -12,10 +12,16 @@ class OrderItem extends Model
     use HasFactory;
 
     protected $fillable = [
-        'order_id', 'user_product_id', 'qty','tax_ratio',
+        'order_id', 'user_product_id', 'qty', 'sold_qty', 'unit_cost', 'tax_ratio',
         'item_price', 'total_price','tax_value','price_without_tax',
         'item_price_paid', 'total_price_paid','tax_value_paid','price_without_tax_paid'
 
+    ];
+
+    protected $casts = [
+        'qty' => 'integer',
+        'sold_qty' => 'integer',
+        'unit_cost' => 'float',
     ];
 
     public function order(): BelongsTo

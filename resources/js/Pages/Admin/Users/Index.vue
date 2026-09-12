@@ -84,7 +84,7 @@
                                   {{ formatCashboxBalance(user, code) }} {{ code }}
                               </div>
                           </template>
-                          <div v-else class="text-sm font-medium">{{ parseInt(user.wallet?.credit * rate) }}</div>
+                          <div v-else class="text-sm font-medium">{{ formatLegacyCashboxBalance(user) }}</div>
                       </div>
                   </td>
                   <td class="mx-auto max-w-sm p-6 text-sm leading-6 sm:text-base sm:leading-7" v-if="user.role_id === 2 || user.role_id === 3">
@@ -161,6 +161,10 @@
                   maximumFractionDigits: code === 'SYP' ? 0 : 2,
               })
           },
+          formatLegacyCashboxBalance(user) {
+              const balance = (Number(user.wallet?.credit || 0) - Number(user.wallet?.debit || 0)) * Number(this.rate || 1)
+              return balance.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })
+          },
           getSingleName(type){
               switch (type) {
                   case '2':
@@ -208,22 +212,17 @@
                   color: '#014758',
               }).then((result) => {
                   if (result.isConfirmed) {
-                      this.$swal.fire({
-                          html: '<p class="text-white pt-5 font-extrabold">'+ w+'</p>',
-                          icon: 'success',
-                          iconColor: '#FFFFFF',
-                          width: 400,
-                          showConfirmButton: false,
-                          padding: '1em',
-                          toast: true,
-                          position: 'bottom-end',
-                          color: '#FFFFFF',
-                          background: '#e07575',
-                          timer: 2000,
-                          timerProgressBar: true,
-                          },
-                      )
-                      this.$inertia.post(route('users.wallet.close', id))
+                      this.$inertia.post(route('users.wallet.close', id), { return_type: Number(this.type) }, {
+                          preserveScroll: true,
+                          onSuccess: () => this.$swal.fire({
+                              html: '<p class="text-white pt-5 font-extrabold">'+ w+'</p>',
+                              icon: 'success', iconColor: '#FFFFFF', width: 400,
+                              showConfirmButton: false, padding: '1em', toast: true,
+                              position: 'bottom-end', color: '#FFFFFF', background: '#e07575',
+                              timer: 2000, timerProgressBar: true,
+                          }),
+                          onError: () => this.$swal.fire({ icon: 'error', text: 'تعذر إغلاق المبيعات. راجع رصيد الصندوق وحاول مجدداً.' }),
+                      })
                   }
               })
 

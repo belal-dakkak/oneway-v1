@@ -12,11 +12,13 @@ class WebsitePricingService
 {
     private $currencies;
     private $policy;
+    private $inventory;
 
-    public function __construct(CurrencyService $currencies, SalesCurrencyPolicy $policy)
+    public function __construct(CurrencyService $currencies, SalesCurrencyPolicy $policy, WebsiteInventoryService $inventory)
     {
         $this->currencies = $currencies;
         $this->policy = $policy;
+        $this->inventory = $inventory;
     }
 
     public function quote(array $items, int $countryId, bool $wholesale, string $paymentMethod = 'cod', bool $lock = false): array
@@ -33,6 +35,7 @@ class WebsitePricingService
         $currencyRate = (float) $currency['rate'];
         $decimals = $currencyCode === 'SYP' ? 0 : 2;
         $commerce = CountryCommerceSetting::forCountry($countryId);
+        $stockUserId = $this->inventory->requireStockUserId($countryId);
         $normalized = [];
 
         foreach ($items as $item) {
@@ -73,15 +76,13 @@ class WebsitePricingService
                 ->where('product_color_id', $color->id)
                 ->where('country_id', $countryId)
                 ->where('size', $entry['size'])
-                ->when($commerce->website_cashbox_user_id, function ($query) use ($commerce) {
-                    $query->where('user_id', $commerce->website_cashbox_user_id);
-                })
+                ->where('user_id', $stockUserId)
                 ->orderBy('id');
             if ($lock) {
                 $stockQuery->lockForUpdate();
             }
-            $stock = $stockQuery->first();
-            if (!$stock || (int) $stock->stock < $entry['qty']) {
+            $stocks = $stockQuery->get();
+            if ($stocks->sum('stock') < $entry['qty']) {
                 throw new InvalidArgumentException('The requested quantity is no longer available.');
             }
 
@@ -92,17 +93,28 @@ class WebsitePricingService
             $lineTotal = round($itemPrice * $entry['qty'], $decimals);
             $lineBeforeDiscount = round($oldPrice * $entry['qty'], $decimals);
 
-            $lines[] = [
-                'product_color_id' => (int) $color->id,
-                'stock_user_product_id' => (int) $stock->id,
-                'size' => $entry['size'],
-                'qty' => $entry['qty'],
-                'item_price' => $itemPrice,
-                'item_price_before_discount' => $oldPrice,
-                'total_price' => $lineTotal,
-                'total_price_before_discount' => $lineBeforeDiscount,
-                'name' => (string) $color->product->name,
-            ];
+            $remaining = $entry['qty'];
+            foreach ($stocks as $stock) {
+                if ($remaining <= 0) {
+                    break;
+                }
+                $allocated = min($remaining, (int) $stock->stock);
+                if ($allocated <= 0) {
+                    continue;
+                }
+                $lines[] = [
+                    'product_color_id' => (int) $color->id,
+                    'stock_user_product_id' => (int) $stock->id,
+                    'size' => $entry['size'],
+                    'qty' => $allocated,
+                    'item_price' => $itemPrice,
+                    'item_price_before_discount' => $oldPrice,
+                    'total_price' => round($itemPrice * $allocated, $decimals),
+                    'total_price_before_discount' => round($oldPrice * $allocated, $decimals),
+                    'name' => (string) $color->product->name,
+                ];
+                $remaining -= $allocated;
+            }
             $subtotal += $lineTotal;
             $beforeDiscount += $lineBeforeDiscount;
         }

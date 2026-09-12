@@ -75,6 +75,10 @@ class CartController extends ApiController
         if (!$order instanceof WebsiteOrder)
             return $this->respondError($order);
 
+        if (($payment['name'] ?? 'cod') === 'cod' && $order->exists && $order->id) {
+            $order->dispatchNotifications();
+        }
+
         return $this->respondSuccess(__('api.your_order_has_been_created_successfully'));
     }
 }

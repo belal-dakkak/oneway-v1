@@ -181,15 +181,16 @@ export default {
     }
 
     const quickAddToCart = () => {
-      // Select the first color if available
-      const defaultColor = props.product.colors?.[0] || { id: 'default', color_name: 'Generic' }
-
-      // Select the first size from the pre-filtered sizes array
-      const defaultSize = props.product.sizes?.[0] || 'default'
-
-      // Get stock from user_products for the first color/size combo
-      const firstUserProduct = props.product.colors?.[0]?.userProducts?.[0]
-      const stock = firstUserProduct?.stock ?? null
+      const defaultColor = props.product.colors?.find(color => {
+        const rows = color.user_products || color.userProducts || []
+        return rows.some(row => row.size && Number(row.stock) > 0)
+      }) || props.product.colors?.[0] || { id: 'default', color_name: 'Generic' }
+      const stockRows = defaultColor.user_products || defaultColor.userProducts || []
+      const firstUserProduct = stockRows.find(row => row.size && Number(row.stock) > 0)
+      const defaultSize = firstUserProduct?.size || props.product.sizes?.[0] || 'default'
+      const stock = stockRows
+        .filter(row => row.size === defaultSize)
+        .reduce((sum, row) => sum + Number(row.stock || 0), 0)
 
       const productToAdd = {
         ...props.product,

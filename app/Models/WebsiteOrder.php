@@ -26,6 +26,7 @@ class WebsiteOrder extends Model
         'shipping_fee', 'cod_fee', 'status', 'payment_type', 'curr_type', 'invoice', 
         'notes', 'country_id', 'pricing_mode', 'paid_price', 'remain_price', 'curr_rate', 'display_currency', 'display_rate',
         'stock_reserved_at', 'stock_released_at', 'payment_captured_at', 'notifications_sent_at',
+        'confirmation_email_sent_at', 'notification_last_error',
         'gateway_provider', 'gateway_currency', 'gateway_amount', 'gateway_rate', 'cashbox_posted_at'
     ];
 
@@ -34,6 +35,7 @@ class WebsiteOrder extends Model
         'stock_released_at' => 'datetime',
         'payment_captured_at' => 'datetime',
         'notifications_sent_at' => 'datetime',
+        'confirmation_email_sent_at' => 'datetime',
         'cashbox_posted_at' => 'datetime',
         'curr_rate' => 'float',
         'display_rate' => 'float',
@@ -121,6 +123,19 @@ class WebsiteOrder extends Model
 
     public function sendNotificationsNow(): void
     {
+        $this->refresh();
+        if (!$this->confirmation_email_sent_at) {
+            \Illuminate\Support\Facades\Mail::to($this->email)->send(new \App\Mail\OrderConfirmationEmail($this));
+            $this->forceFill([
+                'confirmation_email_sent_at' => now(),
+                'notification_last_error' => null,
+            ])->save();
+        }
+
+        if ($this->notifications_sent_at) {
+            return;
+        }
+
         // Get all users with admin dashboard access (Admin, Warehouse, Shop)
         $adminUsers = User::query()
             ->whereIn('role_id', [User::ROLE_ADMIN, User::ROLE_WAREHOUSE, User::ROLE_SHOP])
@@ -145,27 +160,14 @@ class WebsiteOrder extends Model
             \Illuminate\Support\Facades\Log::info('Dispatching notification to admin', ['user_id' => $adminUser->id, 'email' => $adminUser->email]);
             \App\Jobs\NotificationOrderJob::dispatch($adminUser, $buyer, $this, $note)->onQueue('notify');
 
-            // Send email to admin/shop users
-            try {
-                \Illuminate\Support\Facades\Mail::to($adminUser->email)->send(new \App\Mail\NewOrderAdminEmail($this));
-                \Illuminate\Support\Facades\Log::info('Admin email sent successfully', ['email' => $adminUser->email]);
-            } catch (\Exception $e) {
-                \Illuminate\Support\Facades\Log::error('Failed to send admin email', [
-                    'email' => $adminUser->email,
-                    'error' => $e->getMessage()
-                ]);
-            }
+            // Let the queue retry delivery failures instead of silently marking
+            // the order as notified.
+            \Illuminate\Support\Facades\Mail::to($adminUser->email)->send(new \App\Mail\NewOrderAdminEmail($this));
         }
 
-        // Send confirmation email to client
-        try {
-            \Illuminate\Support\Facades\Mail::to($this->email)->send(new \App\Mail\OrderConfirmationEmail($this));
-            \Illuminate\Support\Facades\Log::info('Client confirmation email sent successfully', ['email' => $this->email]);
-        } catch (\Exception $e) {
-            \Illuminate\Support\Facades\Log::error('Failed to send client confirmation email', [
-                'email' => $this->email,
-                'error' => $e->getMessage()
-            ]);
-        }
+        $this->forceFill([
+            'notifications_sent_at' => now(),
+            'notification_last_error' => null,
+        ])->save();
     }
 }

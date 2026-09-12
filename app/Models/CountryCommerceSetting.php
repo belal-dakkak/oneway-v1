@@ -15,6 +15,7 @@ class CountryCommerceSetting extends Model
         'gateway_currency',
         'gateway_mode',
         'website_cashbox_user_id',
+        'website_stock_user_id',
     ];
 
     protected $casts = [
@@ -35,6 +36,7 @@ class CountryCommerceSetting extends Model
             'gateway_currency' => 'USD',
             'gateway_mode' => 'sandbox',
             'website_cashbox_user_id' => null,
+            'website_stock_user_id' => null,
         ]);
     }
 

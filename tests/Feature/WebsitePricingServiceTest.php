@@ -25,6 +25,13 @@ class WebsitePricingServiceTest extends TestCase
         DB::purge('sqlite');
         DB::reconnect('sqlite');
 
+        Schema::create('users', function (Blueprint $table) {
+            $table->id();
+            $table->unsignedInteger('role_id');
+            $table->unsignedInteger('country_id');
+            $table->timestamps();
+        });
+
         Schema::create('currencies', function (Blueprint $table) {
             $table->id();
             $table->string('name');
@@ -42,6 +49,7 @@ class WebsitePricingServiceTest extends TestCase
             $table->string('gateway_currency', 3)->default('USD');
             $table->string('gateway_mode')->default('sandbox');
             $table->unsignedBigInteger('website_cashbox_user_id')->nullable();
+            $table->unsignedBigInteger('website_stock_user_id')->nullable();
             $table->timestamps();
         });
         Schema::create('products', function (Blueprint $table) {
@@ -80,8 +88,13 @@ class WebsitePricingServiceTest extends TestCase
             'shipping_fee_usd' => 1,
             'free_shipping_threshold_usd' => null,
             'cod_fee_percent' => 5,
+            'website_stock_user_id' => 1,
             'created_at' => now(),
             'updated_at' => now(),
+        ]);
+        DB::table('users')->insert([
+            'id' => 1, 'role_id' => 3, 'country_id' => 4,
+            'created_at' => now(), 'updated_at' => now(),
         ]);
         app(CurrencyService::class)->clearRateCache();
     }
@@ -126,12 +139,43 @@ class WebsitePricingServiceTest extends TestCase
         $this->assertSame(231400.0, $quote['display']['amount']);
     }
 
+    public function test_quote_uses_only_the_configured_location_and_can_allocate_duplicate_stock_rows(): void
+    {
+        $color = $this->product();
+        UserProduct::query()->where('product_color_id', $color->id)->update(['stock' => 1]);
+        $secondSelected = UserProduct::query()->create([
+            'product_color_id' => $color->id, 'user_id' => 1, 'country_id' => 4,
+            'size' => 'M', 'stock' => 2,
+        ]);
+        DB::table('users')->insert([
+            'id' => 2, 'role_id' => 3, 'country_id' => 4,
+            'created_at' => now(), 'updated_at' => now(),
+        ]);
+        UserProduct::query()->create([
+            'product_color_id' => $color->id, 'user_id' => 2, 'country_id' => 4,
+            'size' => 'M', 'stock' => 100,
+        ]);
+
+        $quote = app(WebsitePricingService::class)->quote([[
+            'product_id' => $color->id, 'size' => 'M', 'qty' => 3,
+        ]], 4, false, 'cod');
+
+        $this->assertSame(3, array_sum(array_column($quote['items'], 'qty')));
+        $this->assertCount(2, $quote['items']);
+        $this->assertContains($secondSelected->id, array_column($quote['items'], 'stock_user_product_id'));
+        $this->assertNotContains(
+            UserProduct::query()->where('user_id', 2)->value('id'),
+            array_column($quote['items'], 'stock_user_product_id')
+        );
+    }
+
     private function product(): ProductColor
     {
         $product = Product::query()->create([
             'name' => 'Dress',
             'barcode' => 'D-1',
             'country_id' => 4,
+            'user_id' => 1,
             'cost_price' => 5,
             'retail_price' => 12.20,
             'sale_price' => 8,
@@ -143,6 +187,7 @@ class WebsitePricingServiceTest extends TestCase
         ]);
         UserProduct::query()->create([
             'product_color_id' => $color->id,
+            'user_id' => 1,
             'country_id' => 4,
             'size' => 'M',
             'stock' => 10,

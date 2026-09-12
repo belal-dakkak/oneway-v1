@@ -84,7 +84,6 @@ class TapPaymentFinalizer
                     ]);
 
                     if ($wasAwaitingPayment && !$order->notifications_sent_at) {
-                        $order->notifications_sent_at = now();
                         $shouldNotify = true;
                     }
                 }

@@ -33,6 +33,7 @@ class RefundRepository
 
         // Track which orders were touched during this refund
         $touchedOrderIds = [];
+        $lastRefundByOrder = [];
 
         foreach ($selectedProducts as $product){
 
@@ -104,10 +105,15 @@ class RefundRepository
 					'item_price' => $productPrice,
 					'total_price' => $productPrice * $refundQty,
                     'total_price_paid' => $productPrice * $refundQty * $rateAux,
+                    'currency_code' => strtoupper((string) ($orderItem->order->curr_type ?: 'USD')),
+                    'net_amount' => (float) ($orderItem->price_without_tax_paid ?: $orderItem->item_price_paid ?: ($productPrice * $rateAux)) * $refundQty,
+                    'tax_amount' => (float) ($orderItem->tax_value_paid ?: 0) * $refundQty,
+                    'cost_amount' => (float) ($orderItem->unit_cost ?: $orderItem->product->wholesale_price ?: 0) * $rateAux * $refundQty,
 					'item_barcode' => $itemBarcode,
 					'order_barcode' => $orderBarcode,
 				]);
 				$refund->save();
+				$lastRefundByOrder[(int) $orderItem->order_id] = $refund;
 				$total += $productPrice * $refundQty;
 
                 $currency = strtoupper((string) ($orderItem->order->curr_type ?: 'USD'));
@@ -176,11 +182,16 @@ class RefundRepository
                         ]
                     );
 
-                    // Zero out fees on the order to prevent double-refunding
-                    $touchedOrder->update([
-                        'shipping_fee' => 0,
-                        'cod_fee'      => 0,
-                    ]);
+                    // Keep the original invoice immutable. The extra amount is
+                    // stored on the final item-refund snapshot for this order;
+                    // the idempotent cashbox key remains the posting safeguard.
+                    $feeRefund = $lastRefundByOrder[(int) $touchedOrder->id] ?? null;
+                    if ($feeRefund) {
+                        $feeRefund->total_price = (float) $feeRefund->total_price + $feesToRefundBase;
+                        $feeRefund->total_price_paid = (float) $feeRefund->total_price_paid + $feesToRefund;
+                        $feeRefund->net_amount = (float) $feeRefund->net_amount + $feesToRefund;
+                        $feeRefund->save();
+                    }
                 }
             }
         }

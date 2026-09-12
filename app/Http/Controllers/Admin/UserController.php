@@ -88,11 +88,13 @@ class UserController extends Controller
         return Redirect::route('users.index', ['type' => $type]);
     }
 
-    public function closeWallet($id): RedirectResponse
+    public function closeWallet(Request $request, $id): RedirectResponse
     {
+        $returnType = (int) $request->input('return_type', User::ROLE_SHOP);
+        abort_unless(in_array($returnType, [User::ROLE_SHOP, User::ROLE_WAREHOUSE], true), 422);
         $receiverId = (int) auth()->id();
 
-        DB::transaction(function () use ($id, $receiverId) {
+        DB::transaction(function () use ($id, $receiverId, &$returnType) {
             abort_if((int) $id === $receiverId, 422, 'The source and destination cashboxes must be different.');
 
             // Lock in a deterministic order so two simultaneous closures cannot deadlock.
@@ -106,13 +108,18 @@ class UserController extends Controller
             $receiver = $users->get($receiverId);
             abort_unless($source && $receiver, 404);
 
+            abort_unless((int) $receiver->role_id === User::ROLE_ADMIN, 403);
             abort_unless(
                 (int) $source->country_id === (int) $receiver->country_id &&
                 in_array((int) $source->role_id, [User::ROLE_SHOP, User::ROLE_WAREHOUSE], true),
                 403
             );
+            $returnType = (int) $source->role_id;
 
             $wallets = $source->wallets()->lockForUpdate()->get();
+            abort_if($wallets->contains(function ($wallet) {
+                return round((float) $wallet->credit - (float) $wallet->debit, 4) < 0;
+            }), 422, 'A cashbox with a negative balance must be reconciled before closing sales.');
             $group = (string) Str::uuid();
             foreach ($wallets as $wallet) {
                 $amount = round((float) $wallet->credit - (float) $wallet->debit, 4);
@@ -145,7 +152,8 @@ class UserController extends Controller
             }
         }, 3);
 
-        return Redirect::route('users.index', ['type' => User::ROLE_SHOP]);
+        $request->session()->flash('success', 'Sales were closed successfully.');
+        return Redirect::route('users.index', ['type' => $returnType]);
     }
 	
 	public function show(User $user): Response

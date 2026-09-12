@@ -123,6 +123,44 @@ class CashboxServiceTest extends TestCase
         $this->assertSame(0, WalletMovement::query()->count());
     }
 
+    public function test_reconciliation_migration_merges_legacy_duplicate_wallets_and_keeps_movements(): void
+    {
+        $user = $this->user();
+        $canonicalId = (int) DB::table('wallets')->where('user_id', $user->id)->value('id');
+        DB::table('wallets')->where('id', $canonicalId)->update(['credit' => 10, 'debit' => 2]);
+        $duplicateId = DB::table('wallets')->insertGetId([
+            'user_id' => $user->id,
+            'currency_code' => 'USD',
+            'credit' => 7,
+            'debit' => 1,
+            'created_at' => now(),
+            'updated_at' => now(),
+        ]);
+        DB::table('wallet_movements')->insert([
+            'wallet_id' => $duplicateId,
+            'user_id' => $user->id,
+            'currency_code' => 'USD',
+            'direction' => 'credit',
+            'amount' => 7,
+            'exchange_rate' => 1,
+            'base_amount' => 7,
+            'balance_after' => 6,
+            'idempotency_key' => 'legacy-duplicate-wallet',
+            'created_at' => now(),
+            'updated_at' => now(),
+        ]);
+
+        require_once database_path('migrations/2026_09_12_000001_reconcile_inventory_reporting_and_notifications.php');
+        (new \ReconcileInventoryReportingAndNotifications())->up();
+
+        $this->assertSame(1, DB::table('wallets')->where('user_id', $user->id)->where('currency_code', 'USD')->count());
+        $this->assertDatabaseHas('wallets', ['id' => $canonicalId, 'credit' => 17, 'debit' => 3]);
+        $this->assertDatabaseHas('wallet_movements', [
+            'idempotency_key' => 'legacy-duplicate-wallet',
+            'wallet_id' => $canonicalId,
+        ]);
+    }
+
     private function user(): User
     {
         return User::query()->create([

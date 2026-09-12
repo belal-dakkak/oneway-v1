@@ -15,6 +15,7 @@ use App\Models\ProductColor;
 use App\Models\MerchantCode;
 use App\Models\Currency;
 use App\Support\Country;
+use App\Services\WebsiteInventoryService;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Session;
@@ -30,14 +31,16 @@ class HomeController extends Controller
         $country = $countryId;
         $language = 'ar';
         $isMerchant = Session::get('is_merchant');
+        $stockUserId = app(WebsiteInventoryService::class)->stockUserId($countryId);
 
-        $baseQuery = function () use ($countryId) {
+        $baseQuery = function () use ($countryId, $stockUserId) {
             return Product::query()
                 ->withCount('reviews')
                 ->with([
                     'colors.color',
-                    'colors.userProducts' => function ($q) use ($countryId) {
+                    'colors.userProducts' => function ($q) use ($countryId, $stockUserId) {
                         $q->where('country_id', $countryId)
+                            ->where('user_id', $stockUserId ?: 0)
                             ->where('stock', '>', 0)
                             ->select(['id','product_color_id','size','stock','country_id']);
                     }
@@ -45,6 +48,7 @@ class HomeController extends Controller
                 ->join('product_colors', 'products.id', '=', 'product_colors.product_id')
                 ->join('user_products', 'product_colors.id', '=', 'user_products.product_color_id')
                 ->where('user_products.country_id', $countryId)
+                ->where('user_products.user_id', $stockUserId ?: 0)
                 ->whereIn('products.country_id', [$countryId, Country::globalProductId()])
                 ->when(Session::get('is_merchant'), function ($q) {
                     return $q->where('shown_for_merchant', true);
@@ -185,6 +189,7 @@ class HomeController extends Controller
         $countryCode = Country::code();
         $countryId = Country::id($countryCode);
         $isMerchant = Session::get('is_merchant');
+        $stockUserId = app(WebsiteInventoryService::class)->stockUserId($countryId);
 
         // Cache categories
         $categories = Cache::remember('shop_categories', 3600, function () {
@@ -210,12 +215,14 @@ class HomeController extends Controller
                 return $q->where('shown_for_merchant', true);
             })
             ->where('user_products.country_id', $countryId)
+            ->where('user_products.user_id', $stockUserId ?: 0)
             ->where('user_products.stock', '>', 0)
             ->with([
                 'category',
                 'colors.color',
-                'colors.userProducts' => function ($q) use ($countryId) {
+                'colors.userProducts' => function ($q) use ($countryId, $stockUserId) {
                     $q->where('country_id', $countryId)
+                        ->where('user_id', $stockUserId ?: 0)
                         ->where('stock', '>', 0)
                         ->select(['id','product_color_id','size','stock','country_id']);
                 }
@@ -334,19 +341,22 @@ class HomeController extends Controller
         }
 
         $countryId = Country::id();
+        $stockUserId = app(WebsiteInventoryService::class)->stockUserId($countryId);
 
         $product->load([
             'category',
-            'colors' => function ($q) use ($countryId) {
-                $q->whereHas('userProducts', function ($uq) use ($countryId) {
+            'colors' => function ($q) use ($countryId, $stockUserId) {
+                $q->whereHas('userProducts', function ($uq) use ($countryId, $stockUserId) {
                     $uq->where('country_id', $countryId)
+                        ->where('user_id', $stockUserId ?: 0)
                         ->where('stock', '>', 0)
                         ->whereNotNull('size');
                 });
             },
             'colors.color',
-            'colors.userProducts' => function($q) use ($countryId) {
+            'colors.userProducts' => function($q) use ($countryId, $stockUserId) {
                 $q->where('country_id', $countryId)
+                    ->where('user_id', $stockUserId ?: 0)
                     ->where('stock', '>', 0)
                     ->whereNotNull('size');
             }
@@ -367,8 +377,9 @@ class HomeController extends Controller
                 return $q->where('shown_for_merchant', true);
             })
             ->where('products.sale_price', '>', 0)
-            ->whereHas('colors.userProducts', function ($uq) use ($countryId) {
+            ->whereHas('colors.userProducts', function ($uq) use ($countryId, $stockUserId) {
                 $uq->where('country_id', $countryId)
+                    ->where('user_id', $stockUserId ?: 0)
                     ->where('stock', '>', 0)
                     ->whereNotNull('size');
             })

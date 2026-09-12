@@ -14,6 +14,8 @@ use App\Models\ProductColor;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Session;
 use App\Support\Country;
+use App\Services\WebsiteInventoryService;
+use Illuminate\Support\Facades\Cache;
 use Inertia\Inertia;
 use Inertia\Response;
 
@@ -22,18 +24,22 @@ class ArabicHomeController extends Controller
     public function index(): Response
     {
         $countryId = Country::id();
+        $country = $countryId;
+        $language = 'ar';
+        $wnumber = Country::code() === 'LB' ? '+96176658734' : (Country::code() === 'SY' ? '' : '+971545516995');
+        $stockUserId = app(WebsiteInventoryService::class)->stockUserId($countryId);
         $featuredProducts = Product::query()
             ->withCount('reviews')
             ->whereIn('country_id', [$countryId, \App\Support\Country::globalProductId()])
             ->when(Session::get('is_merchant'), fn($q) => $q->where('shown_for_merchant', true))
-            ->whereHas('colors.userProducts', function($query) use ($countryId) {
-                $query->where('country_id', $countryId)->where('stock', '>', 0);
+            ->whereHas('colors.userProducts', function($query) use ($countryId, $stockUserId) {
+                $query->where('country_id', $countryId)->where('user_id', $stockUserId ?: 0)->where('stock', '>', 0);
             })
-            ->with(['colors' => function($query) use ($countryId) {
-                $query->whereHas('userProducts', function($q) use ($countryId) {
-                    $q->where('country_id', $countryId)->where('stock', '>', 0);
-                })->with(['userProducts' => function($q) use ($countryId) {
-                    $q->where('country_id', $countryId);
+            ->with(['colors' => function($query) use ($countryId, $stockUserId) {
+                $query->whereHas('userProducts', function($q) use ($countryId, $stockUserId) {
+                    $q->where('country_id', $countryId)->where('user_id', $stockUserId ?: 0)->where('stock', '>', 0);
+                })->with(['userProducts' => function($q) use ($countryId, $stockUserId) {
+                    $q->where('country_id', $countryId)->where('user_id', $stockUserId ?: 0);
                 }]);
             }])
             ->limit(12)
@@ -89,18 +95,20 @@ class ArabicHomeController extends Controller
         $category = null;
 
         $country_id = Country::id();
+        $stockUserId = app(WebsiteInventoryService::class)->stockUserId($country_id);
 
         $userProducts = Product::query()
-            ->with(['category', 'colors' => function($query) use ($country_id) {
-                $query->where('stock', '>', 0)
-                    ->with(['color', 'userProducts' => function($q) use ($country_id) {
-                        $q->where('country_id', $country_id);
+            ->with(['category', 'colors' => function($query) use ($country_id, $stockUserId) {
+                $query->whereHas('userProducts', function ($q) use ($country_id, $stockUserId) {
+                    $q->where('country_id', $country_id)->where('user_id', $stockUserId ?: 0)->where('stock', '>', 0);
+                })->with(['color', 'userProducts' => function($q) use ($country_id, $stockUserId) {
+                        $q->where('country_id', $country_id)->where('user_id', $stockUserId ?: 0);
                     }]);
             }])
             ->whereIn('country_id', [$country_id, \App\Support\Country::globalProductId()])
             ->when(Session::get('is_merchant'), fn($q) => $q->where('shown_for_merchant', true))
-            ->whereHas('colors', function ($query) {
-                $query->where('stock', '>', 0);
+            ->whereHas('colors.userProducts', function ($query) use ($country_id, $stockUserId) {
+                $query->where('country_id', $country_id)->where('user_id', $stockUserId ?: 0)->where('stock', '>', 0);
             });
 
         if ($search = $request->get('search'))

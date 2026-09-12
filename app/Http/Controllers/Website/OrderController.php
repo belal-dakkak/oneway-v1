@@ -278,7 +278,6 @@ class OrderController extends Controller
 
         // Queue notification work so SMTP latency never blocks checkout.
         if (!$order->notifications_sent_at) {
-            $order->update(['notifications_sent_at' => now()]);
             $order->dispatchNotifications();
         }
         return redirect()->route('order.success', ['id' => $order->id]);

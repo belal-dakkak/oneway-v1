@@ -24,6 +24,7 @@ use App\Services\ClientAccountService;
 use App\Services\SalesCurrencyPolicy;
 use App\Services\WebsitePricingService;
 use App\Services\CashboxService;
+use App\Services\SalesReportService;
 use App\Services\Payment\WebsiteOrderStockService;
 use App\Support\Country;
 use App\Models\CountryCommerceSetting;
@@ -47,6 +48,7 @@ class OrderRepository
     private $salesCurrencyPolicy;
     private $websitePricing;
     private $cashboxes;
+    private $salesReports;
 
     public function __construct(
         TaxCalculator $taxCalculator,
@@ -55,7 +57,8 @@ class OrderRepository
         ClientAccountService $clientAccounts,
         SalesCurrencyPolicy $salesCurrencyPolicy,
         WebsitePricingService $websitePricing,
-        CashboxService $cashboxes
+        CashboxService $cashboxes,
+        SalesReportService $salesReports
     )
     {
         $this->taxCalculator = $taxCalculator;
@@ -65,6 +68,7 @@ class OrderRepository
         $this->salesCurrencyPolicy = $salesCurrencyPolicy;
         $this->websitePricing = $websitePricing;
         $this->cashboxes = $cashboxes;
+        $this->salesReports = $salesReports;
     }
 
     private function clearHomeCache()
@@ -179,6 +183,8 @@ class OrderRepository
 
                     'user_product_id' => $product['product_id'],
                     'qty' => $product['qty'],
+                    'sold_qty' => $product['qty'],
+                    'unit_cost' => (float) $userProduct->wholesale_price,
                     'item_price' => $item_price,
                     'total_price' => $itemTotalPrice/$request->get('currency')['rate'],
 
@@ -600,6 +606,8 @@ class OrderRepository
                         $orderItem = OrderItem::query()->create([
                             'user_product_id' => $product['product_id'],
                             'qty' => $product['qty'],
+                            'sold_qty' => $product['qty'],
+                            'unit_cost' => (float) $userProduct->wholesale_price,
                             'item_price' => $product['price'],
                             'total_price' => $itemTotalPrice,
                             'order_id' => $order->id,
@@ -629,6 +637,7 @@ class OrderRepository
 
                         $orderItem->update([
                             'qty' => $product['qty'],
+                            'sold_qty' => (int) $product['qty'] + (int) $orderItem->refunds()->sum('qty'),
                             'item_price' => $product['price'],
                             'total_price' => $itemTotalPrice,
 
@@ -977,6 +986,8 @@ class OrderRepository
         if ($request->get('order_type') === 'website') {
             return $this->getWebsiteOrders($request, $pagination);
         }
+        return $this->salesReports->orders($request, (bool) $debts, $with, (bool) $pagination);
+
         //info($request->all());
         // dd($profits);
 
@@ -1242,6 +1253,8 @@ class OrderRepository
 
     public function getOrders_v2(Request $request, $debts = false, $profits = false, $with = null,$pagination = true,$withItems = true)
     {
+        return $this->salesReports->orders($request, (bool) $debts, $with, (bool) $pagination);
+
         if (!$with)
             if($withItems)
                 $with = ['buyer', 'productItems','seller', 'shipper', 'items.product.productColor'];
@@ -1678,9 +1691,7 @@ class OrderRepository
 
     public function getMonthlyOrders(Request $request, $debts = false, $profits = false, $with = null,$pagination = true,$withItems = true)
     {
-        if ((int) auth()->user()->country_id === Country::SYRIA) {
-            return $this->getMonthlyOrdersByCurrency($request);
-        }
+        return $this->salesReports->monthly($request);
 
         $rate = $this->currencyService->rate(Country::defaultCurrency(auth()->user()->country_id));
 

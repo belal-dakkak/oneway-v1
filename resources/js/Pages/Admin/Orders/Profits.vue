@@ -1,8 +1,11 @@
 <template>
   <app-layout title="Products Management">
       <div class="mt-8 flex justify-around space-x-4">
-          <h3 class="text-2xl font-bold capitalize text-primary"><span class="bg-emerald-500 px-2 rounded-md text-white">
-              {{ currencyExchange(allProfits, rate, true) }}</span> الأرباح</h3>
+          <div class="flex flex-wrap gap-2" dir="rtl">
+              <div v-for="(value, code) in profitsByCurrency" :key="code" class="rounded-md bg-emerald-500 px-3 py-2 text-white">
+                  صافي الأرباح: {{ money(value, code) }}
+              </div>
+          </div>
           <div class="max-w-xs">
               <input dir="rtl"  type="search" v-model="params.search" placeholder="بحث..." class="block w-full rounded-md border-gray-300 shadow-sm focus:ring-primary-500 focus:border-primary-500 sm:text-sm">
           </div>
@@ -174,7 +177,7 @@
                 </td>
                 <td class="mx-auto max-w-sm p-6 text-sm leading-6 sm:text-base sm:leading-7">
                     <div class="ml-4">
-                        <div class="text-sm font-medium">{{ item.total_price }}</div>
+                        <div class="text-sm font-medium">{{ money(item.net_total ?? item.total_price, item.currency_code || item.curr_type) }}</div>
                     </div>
                 </td>
                 <td class="mx-auto max-w-sm p-6 text-sm leading-6 sm:text-base sm:leading-7">
@@ -209,7 +212,7 @@
                 </td>
                 <td class="mx-auto max-w-sm p-6 text-sm leading-6 sm:text-base sm:leading-7">
                     <div class="ml-4">
-                        <div class="text-sm font-medium">{{ getProfit(item) }}</div>
+                        <div class="text-sm font-medium">{{ money(item.net_profit, item.currency_code || item.curr_type) }}</div>
                     </div>
                 </td>
             </tr>
@@ -278,6 +281,7 @@ export default {
         shops: Array,
         buyers: Array,
         profit: Number,
+        profits_by_currency: { type: Object, default: () => ({}) },
         rate: Number
     },
     data() {
@@ -297,11 +301,16 @@ export default {
             item: null,
             products: null,
             allProfits: this.profit,
+            profitsByCurrency: this.profits_by_currency || {},
             currencyExchange: Currency.getExchangeMethod(),
             rate: this.rate
         }
     },
     methods: {
+        money(value, code) {
+            const currency = String(code || 'USD').toUpperCase()
+            return `${Currency.formatAmount(Number(value || 0), currency)} ${currency}`
+        },
         getProfit(item){
             let profit = 0;
             item.items.forEach((orderItem) => {
@@ -468,11 +477,8 @@ export default {
 
             axios.get(this.route('orders.profits', this.params)).then(response => {
 
-                if (response.data.profit < 0){
-                    this.allProfits = 0;
-                }else {
-                    this.allProfits = response.data.profit;
-                }
+                this.allProfits = response.data.profit;
+                this.profitsByCurrency = response.data.profits_by_currency || {};
                 this.profitOrders = {
                     ...response.data.orders,
                     data: [...response.data.orders.data]

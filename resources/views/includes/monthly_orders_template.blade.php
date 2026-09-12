@@ -9,9 +9,9 @@
 </head>
 <body>
     <?php
-        $admin_email  = $settings['email'];
-        $admin_mobile = $settings['phone'];
-        $shop_address = $settings['address'];
+        $admin_email  = $settings['email'] ?? '';
+        $admin_mobile = $settings['phone'] ?? '';
+        $shop_address = $settings['address'] ?? '';
     ?>
     <link href="http://netdna.bootstrapcdn.com/bootstrap/3.1.0/css/bootstrap.min.css" rel="stylesheet" id="bootstrap-css">
 
@@ -20,7 +20,8 @@
             width: 100% !important;
             min-height: 100% !important;
             font-size: 10px;
-            font-family: "Helvetica Neue", Helvetica, Arial, sans-serif !important;
+            font-family: "DejaVu Sans", sans-serif !important;
+            direction: rtl;
 
         }
         .page-break {
@@ -28,7 +29,7 @@
         }
 
         * {
-            font-family: "Helvetica Neue", Helvetica, Arial, sans-serif !important;
+            font-family: "DejaVu Sans", sans-serif !important;
         }
 
         .container {

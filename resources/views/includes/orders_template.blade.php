@@ -12,9 +12,9 @@
 @endphp
 <body>
     <?php
-        $admin_email  = $settings['email'];
-        $admin_mobile = $settings['phone'];
-        $shop_address = $settings['address'];
+        $admin_email  = $settings['email'] ?? '';
+        $admin_mobile = $settings['phone'] ?? '';
+        $shop_address = $settings['address'] ?? '';
     ?>
     <link href="http://netdna.bootstrapcdn.com/bootstrap/3.1.0/css/bootstrap.min.css" rel="stylesheet" id="bootstrap-css">
 
@@ -23,7 +23,8 @@
             width: 100% !important;
             min-height: 100% !important;
             font-size: 10px;
-            font-family: "Helvetica Neue", Helvetica, Arial, sans-serif !important;
+            font-family: "DejaVu Sans", sans-serif !important;
+            direction: rtl;
 
         }
         .page-break {
@@ -31,7 +32,7 @@
         }
 
         * {
-            font-family: "Helvetica Neue", Helvetica, Arial, sans-serif !important;
+            font-family: "DejaVu Sans", sans-serif !important;
         }
 
         .container {
@@ -257,10 +258,10 @@
                                 <td class="td-med"> {{ number_format($item->tax_value, $rowDecimals) }} {{ $rowCurrency }} </td>
                                 <td class="td-med"> {{ number_format($item->price_without_tax + $item->tax_value, $rowDecimals) }} {{ $rowCurrency }} </td>
                             @else
-                                <td class="td-med"> {{ number_format($item->total_price, $rowDecimals) }} {{ $rowCurrency }} </td>
+                                <td class="td-med"> {{ number_format($item->net_total ?? $item->total_price, $rowDecimals) }} {{ $rowCurrency }} </td>
                             @endif
 
-                            <td class="td-med"> {{ $item->items->sum('qty') }} </td>
+                            <td class="td-med"> {{ $item->net_qty ?? $item->items->sum('qty') }} </td>
                         </tr>
 
                     @endforeach
@@ -325,6 +326,30 @@
             </table>
 
         </div>
+
+        @if(!empty($all_orders['totals_by_currency']))
+        <div class="row" style="margin-top: 18px">
+            <table class="" style="width:100%;">
+                <tr class="bg_color1">
+                    <td class="td-med">Currency</td>
+                    <td class="td-med">Gross sales</td>
+                    <td class="td-med">Refunds</td>
+                    <td class="td-med">Net sales</td>
+                    <td class="td-med">Net pieces</td>
+                </tr>
+                @foreach($all_orders['totals_by_currency'] as $currencyCode => $summary)
+                    @php($moneyDecimals = $currencyCode === 'SYP' ? 0 : 2)
+                    <tr>
+                        <td class="td-med">{{ $currencyCode }}</td>
+                        <td class="td-med">{{ number_format($summary['gross_sales'], $moneyDecimals) }} {{ $currencyCode }}</td>
+                        <td class="td-med">{{ number_format($summary['refund_total'], $moneyDecimals) }} {{ $currencyCode }}</td>
+                        <td class="td-med">{{ number_format($summary['net_sales'], $moneyDecimals) }} {{ $currencyCode }}</td>
+                        <td class="td-med">{{ $summary['net_qty'] }}</td>
+                    </tr>
+                @endforeach
+            </table>
+        </div>
+        @endif
 
     </div>
     </div>
