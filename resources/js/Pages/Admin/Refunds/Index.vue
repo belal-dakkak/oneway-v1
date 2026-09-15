@@ -1,6 +1,6 @@
 <template>
   <app-layout title="Products Management">
-      <div class="flex justify-around mt-8">
+      <div class="flex flex-wrap items-end justify-center gap-4 mt-8">
           <div class="flex justify-between" v-if="admin.role !== 1">
               <inertia-link :href="route('refunds.create')">
                   <jet-button class="px-16 mt-8 bg-pcr float-right">
@@ -22,7 +22,7 @@
                   <template #content>
                       <button @click="filter('shop', 0)" class="w-full my-1 font-bold text-gray-600 hover:cursor-pointer text-center text-md bg-gray-50 rounded-md">كل المحلات</button>
                       <div class="border-t border-gray-100"></div>
-                      <div v-for="shop in shops">
+                      <div v-for="shop in shops" :key="shop.id">
                           <p v-if="params.shop === shop.id" class="font-bold text-teal-500 hover:cursor-pointer text-center text-md bg-gray-100">{{ shop.name }}</p>
                           <button v-else @click="filter('shop', shop.id)" class="w-full my-1 font-bold text-gray-600 hover:cursor-pointer text-center text-md bg-gray-50 rounded-md">
                               {{ shop.name}}
@@ -46,7 +46,7 @@
                   <template #content>
                       <button @click="filter('buyer', 0)" class="w-full my-1 font-bold text-gray-600 hover:cursor-pointer text-center text-md bg-gray-50 rounded-md">كل الزبائن</button>
                       <div class="border-t border-gray-100"></div>
-                      <div v-for="buyer in buyers">
+                      <div v-for="buyer in buyers" :key="buyer.id">
                           <p v-if="params.buyer === buyer.id" class="font-bold text-teal-500 hover:cursor-pointer text-center text-md bg-gray-100">{{ buyer.name }}</p>
                           <button v-else @click="filter('buyer', buyer.id)" class="w-full my-1 font-bold text-gray-600 hover:cursor-pointer text-center text-md bg-gray-50 rounded-md">
                               {{ buyer.name}}
@@ -115,17 +115,13 @@
               <span v-for="(amount, code) in totalsByCurrency" :key="code" class="bg-emerald-500 px-2 rounded-md text-3xl text-white">{{ money(amount, code) }}</span>
           </div>
 
-          <div class="flex justify-between block bg-white text-black-500 hover:text-white hover:bg-gray-800 rounded-lg p-6 ring-1 ring-black-400">
+          <div class="flex justify-between bg-white text-black-500 hover:text-white hover:bg-gray-800 rounded-lg p-6 ring-1 ring-black-400">
               <div>
                   <div class="flex items-center space-x-3">
                       <h3 class="p-2 text-2xl font-bold">الصندوق</h3>
                   </div>
                   <p class="p-2 text-4xl font-bold">
-                      <template v-if="Number(admin.country_id) === 4">
-                          <span class="block text-xl">{{ Number(admin.cashboxes?.USD?.balance || 0).toFixed(2) }} USD</span>
-                          <span class="block text-xl">{{ Number(admin.cashboxes?.SYP?.balance || 0).toLocaleString(undefined, { maximumFractionDigits: 0 }) }} SYP</span>
-                      </template>
-                      <template v-else>{{ admin.credit }}</template>
+                      <span v-for="cashbox in cashboxEntries" :key="cashbox.currency" class="block text-xl">{{ money(cashbox.balance, cashbox.currency) }}</span>
                   </p>
               </div>
               <div>
@@ -140,7 +136,7 @@
           </div>
       </div>
     <MeeTable :tableTitle="'All Products'">
-        <div v-if="userRefunds.data.length === 0" class="my-40 flex items-center justify-center text-xl font-bold text-error">
+        <div v-if="!userRefunds?.data?.length" class="my-40 flex items-center justify-center text-xl font-bold text-error">
             <span class="text-center">لا يوجد مرتجعات!</span>
         </div>
         <table v-else class="min-w-full divide-y divide-gray-200">
@@ -259,7 +255,7 @@ export default {
             params: {
                 search: this.filters.search,
                 field: this.filters.field,
-                direction: this.direction,
+                direction: this.filters.direction,
                 shop: this.filters.shop,
                 buyer: this.filters.buyer,
                 date: this.filters.date,
@@ -270,6 +266,8 @@ export default {
             totalRefunds: this.total,
             totalsByCurrency: this.totals_by_currency,
             currencyExchange: Currency.getExchangeMethod(),
+            loadingMore: false,
+            scrollHandler: null,
         }
     },
     methods: {
@@ -283,29 +281,23 @@ export default {
         },
         getShopName(id) {
             const shopObject = this.shops.find((s) => s.id === id)
-            return shopObject.name;
+            return shopObject?.name || '—';
         },
         getBuyerName(id) {
             const buyerObject = this.buyers.find((s) => s.id === id)
-            return buyerObject.name;
+            return buyerObject?.name || '—';
         },
         filter(filter, value) {
             this.params[filter] = value;
         },
         resetDate() {
             this.params.date = null;
-            let params = this.params;
-            this.handleFilter(params)
         },
         resetStartDate() {
             this.params.start_date = null;
-            let params = this.params;
-            this.handleFilter(params)
         },
         resetEndDate() {
             this.params.end_date = null;
-            let params = this.params;
-            this.handleFilter(params)
         },
         handleFilter(params) {
             Object.keys(params).forEach(key => {
@@ -315,57 +307,35 @@ export default {
             }, 150);
 
             axios.get(this.route('refunds.index', this.params)).then(response => {
-                this.totalSales = response.data.total
+                this.totalRefunds = response.data.total
                 this.totalsByCurrency = response.data.totals_by_currency || {}
+                const rows = response.data.rows || response.data.refunds
                 this.userRefunds = {
-                    ...response.data.orders,
-                    data: [...response.data.orders.data]
+                    ...rows,
+                    data: [...(rows?.data || [])]
                 }
             });
+        },
+        formatDate(value) {
+            if (!(value instanceof Date) || Number.isNaN(value.getTime())) return null
+            const month = String(value.getMonth() + 1).padStart(2, '0')
+            const day = String(value.getDate()).padStart(2, '0')
+            return `${value.getFullYear()}-${month}-${day}`
+        },
+        handleDate(value) {
+            this.params.date = this.formatDate(value)
+        },
+        handleStartDate(value) {
+            this.params.start_date = this.formatDate(value)
+        },
+        handleEndDate(value) {
+            this.params.end_date = this.formatDate(value)
         },
     },
     watch: {
         params: {
             handler: throttle(function () {
-                let params = this.params;
-                Object.keys(params).forEach(key => {
-                    if (params[key] == ''){
-                        delete params[key]
-                    }
-                }, 150);
-                axios.get(this.route('refunds.index', this.params)).then(response => {
-                    this.userRefunds = {
-                        ...response.data.refunds,
-                        data: [...response.data.refunds.data]
-                    }
-                    this.totalRefunds = response.data.total;
-                    this.totalsByCurrency = response.data.totals_by_currency || {};
-                });
-                // this.$inertia.get(this.route('refunds.index'), this.params, { replace: true, preserveState: true});
-            }),
-            deep: true
-        },
-        date: {
-            handler: throttle(function () {
-                this.params.date = this.date.value;
-                let params = this.params;
-                this.handleFilter(params)
-            }),
-            deep: true
-        },
-        start_date: {
-            handler: throttle(function () {
-                this.params.start_date = this.start_date.value;
-                let params = this.params;
-                this.handleFilter(params)
-            }),
-            deep: true
-        },
-        end_date: {
-            handler: throttle(function () {
-                this.params.end_date = this.end_date.value;
-                let params = this.params;
-                this.handleFilter(params)
+                this.handleFilter(this.params)
             }),
             deep: true
         },
@@ -377,51 +347,36 @@ export default {
         const end_date = ref();
         const date = ref();
 
-        const handleDate = (date) => {
-            if(date){
-                const day = date.getDate();
-                const month = date.getMonth() + 1;
-                const year = date.getFullYear();
-
-                date.value =  `${year}/${month}/${day}`;
-            }
-        }
-
-        const handleStartDate = (start_date) => {
-            if(start_date){
-                const day = start_date.getDate();
-                const month = start_date.getMonth() + 1;
-                const year = start_date.getFullYear();
-
-                start_date.value =  `${year}/${month}/${day}`;
-            }
-        }
-
-        const handleEndDate = (end_date) => {
-            if(end_date){
-                const day = end_date.getDate();
-                const month = end_date.getMonth() + 1;
-                const year = end_date.getFullYear();
-
-                end_date.value =  `${year}/${month}/${day}`;
-            }
-        }
-
-        return { admin, start_date, handleStartDate, end_date, handleEndDate, date, handleDate }
+        return { admin, start_date, end_date, date }
     },
     mounted() {
-        window.addEventListener('scroll', debounce((e) => {
+        this.scrollHandler = debounce(() => {
             let pixelsFromBottom = document.documentElement.offsetHeight - document.documentElement.scrollTop - window.innerHeight;
 
-            if (pixelsFromBottom < 200){
+            if (pixelsFromBottom < 200 && this.userRefunds?.next_page_url && !this.loadingMore){
+                this.loadingMore = true
                 axios.get(this.userRefunds.next_page_url, { params: this.params }).then(response => {
+                    const rows = response.data.rows || response.data.refunds || response.data
                     this.userRefunds = {
-                        ...response.data,
-                        data: [...this.userRefunds.data, ...response.data.data]
+                        ...rows,
+                        data: [...this.userRefunds.data, ...(rows?.data || [])]
                     }
-                });
+                }).finally(() => { this.loadingMore = false });
             }
-        }, 100))
+        }, 100)
+        window.addEventListener('scroll', this.scrollHandler)
+    },
+    beforeUnmount() {
+        window.removeEventListener('scroll', this.scrollHandler)
+        this.scrollHandler?.cancel?.()
+    },
+    computed: {
+        cashboxEntries() {
+            const entries = Object.values(this.admin.cashboxes || {})
+            if (entries.length) return entries
+            const currency = Number(this.admin.country_id) === 4 ? 'SYP' : (Number(this.admin.country_id) === 2 ? 'AED' : 'USD')
+            return [{ currency, balance: Number(this.admin.credit || 0) - Number(this.admin.debit || 0) }]
+        },
     },
 }
 </script>

@@ -74,10 +74,15 @@ class HandleInertiaRequests extends Middleware
                 $country = 2;
 
                 if($user){
-                    $credit  = $user->wallet?$user->wallet->credit:0;
-                    $debit   = $user->wallet?$user->wallet->debit:0;
-                    $cashboxes = $user->wallets()
-                        ->get()
+                    $country = (int) ($user->country_id ?: Country::id());
+                    $defaultCurrency = Country::defaultCurrency($country);
+                    $wallets = $user->wallets()->get();
+                    $defaultWallet = $wallets->first(function ($wallet) use ($defaultCurrency) {
+                        return strtoupper((string) ($wallet->currency_code ?: 'USD')) === $defaultCurrency;
+                    });
+                    $credit = (float) ($defaultWallet->credit ?? 0);
+                    $debit = (float) ($defaultWallet->debit ?? 0);
+                    $cashboxes = $wallets
                         ->mapWithKeys(function ($wallet) {
                             $code = strtoupper((string) ($wallet->currency_code ?: 'USD'));
                             return [$code => [
@@ -87,24 +92,12 @@ class HandleInertiaRequests extends Middleware
                                 'balance' => (float) $wallet->credit - (float) $wallet->debit,
                             ]];
                         });
-                    // Some historical users do not have a country assigned. Keep
-                    // their dashboard usable by falling back to the active country.
-                    $country = (int) ($user->country_id ?: Country::id());
                 }else{
                     $credit = 0;
                     $debit  = 0;
                     $cashboxes = collect();
                 }
                 // $country   = Session::get('country') == 'LB'?User::COUNTRY_LB:User::COUNTRY_UAE;
-
-                try {
-                    $currencyCode = Country::defaultCurrency($country);
-                    $rate = app(CurrencyService::class)->rate($currencyCode);
-                    $credit *= $rate;
-                    $debit *= $rate;
-                } catch (\InvalidArgumentException $exception) {
-                    // Keep base USD balances when a local rate has not been configured yet.
-                }
 
                 return [
                     'user' => $user ?
@@ -113,8 +106,10 @@ class HandleInertiaRequests extends Middleware
                             'name' => $user->name,
                             'role' => $user->role_id,
                             'country_id' => $user->country_id,
-                            'credit' => round($credit, $country === Country::SYRIA ? 2 : 0),
-                            'debit' => round($debit, $country === Country::SYRIA ? 2 : 0),
+                            // Legacy consumers receive the country's real default
+                            // cashbox instead of a converted USD wallet.
+                            'credit' => round($credit, $defaultCurrency === 'SYP' ? 0 : 2),
+                            'debit' => round($debit, $defaultCurrency === 'SYP' ? 0 : 2),
                             'cashboxes' => $cashboxes,
                             'notifications' => $user->notifications()->orderByDesc('created_at')->limit(5)->get(),
                             'notifications_count' => $user->unreadNotifications()->count(),
@@ -148,12 +143,12 @@ class HandleInertiaRequests extends Middleware
             'base_currency' => Country::baseCurrency($countryId),
             'display_currency' => $displayCurrency,
             'commerce' => $commerce ? array_merge($commerce->toArray(), [
-                'card_available' => $countryId === Country::SYRIA ? $commerce->cardIsAvailable() : true,
+                'card_available' => $commerce->cardIsAvailable(),
             ]) : [
                 'shipping_fee_usd' => 0,
                 'free_shipping_threshold_usd' => null,
                 'cod_fee_percent' => 0,
-                'card_available' => $countryId !== Country::SYRIA,
+                'card_available' => false,
             ],
             'isMerchant' => (boolean) Session::get('is_merchant'),
             'locale' => function () {

@@ -38,10 +38,15 @@
 import AppLayout from '@/Layouts/AppLayout.vue'
 export default {
   components: { AppLayout },
-  props: { wallets: Object, movements: Object, canExchange: Boolean, exchangeRate: [Number, String] },
+  props: { wallets: Object, movements: Object, canExchange: Boolean, exchangeRate: [Number, String], defaultCurrency: { type: String, default: 'USD' } },
   data() { return { form: this.$inertia.form({ from: 'SYP', to: 'USD', amount: null, rate: this.exchangeRate, note: '' }) } },
   computed: {
-    cashboxCodes() { return this.canExchange ? ['USD', 'SYP'] : ['USD'] },
+    cashboxCodes() {
+      const codes = Object.keys(this.wallets || {})
+      if (!codes.includes(this.defaultCurrency)) codes.unshift(this.defaultCurrency)
+      if (this.canExchange) ['USD', 'SYP'].forEach(code => { if (!codes.includes(code)) codes.push(code) })
+      return [...new Set(codes)]
+    },
   },
   methods: {
     money(value, code) { const decimals = code === 'SYP' ? 0 : 2; return `${Number(value || 0).toLocaleString(undefined, { minimumFractionDigits: decimals, maximumFractionDigits: decimals })} ${code}` },

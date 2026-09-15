@@ -41,6 +41,8 @@ class InvoiceTemplateRenderingTest extends TestCase
             $html = view($view, $data)->render();
             $this->assertStringContainsString('SY-INVOICE-1', $html);
             $this->assertStringContainsString('SYP', $html);
+            $this->assertStringNotContainsString('Ajman Industrial', $html);
+            $this->assertStringNotContainsString('Sharjah City', $html);
         }
     }
 }

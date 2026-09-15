@@ -7,6 +7,7 @@ use App\Models\Refund;
 use App\Models\User;
 use App\Models\UserProduct;
 use App\Services\CashboxService;
+use App\Support\Country;
 use Illuminate\Contracts\Pagination\LengthAwarePaginator;
 use Illuminate\Http\Request;
 use Carbon\Carbon;
@@ -201,12 +202,14 @@ class RefundRepository
 
     public function getRefunds(Request $request)
     {
-        $refunds = Refund::query()->with(['orderItem.order']);
+        $refunds = Refund::query()->with([
+            'orderItem.order.buyer',
+            'orderItem.order.seller',
+            'orderItem.product.productColor',
+        ]);
         $country = auth()->user()->country_id;
-        $refunds->whereHas('orderItem', function ($query) use ($country){
-            $query->whereHas('product', function ($q) use ($country){
-                $q->where('country_id',$country);
-            });
+        $refunds->whereHas('orderItem.order.seller', function ($query) use ($country){
+            $query->where('country_id', $country);
         });
         if ($search = $request->get('search')) {
             $refunds->where(function ($query) use ($search) {
@@ -238,14 +241,24 @@ class RefundRepository
             });
         }
 
-        if ($date = $request->get('date'))
-            $refunds->whereDate('refunds.created_at', Carbon::parse($date));
-
-        if ($startDate = $request->get('start_date'))
-            $refunds->whereDate('refunds.created_at', '>=', Carbon::parse($startDate));
-
-        if ($endDate = $request->get('end_date'))
-            $refunds->whereDate('refunds.created_at', '<=', Carbon::parse($endDate));
+        $countryTimezone = Country::timezone((int) $country);
+        $storageTimezone = (string) config('app.timezone', 'UTC');
+        if ($date = $request->get('date')) {
+            $local = Carbon::parse($date, $countryTimezone);
+            $refunds->whereBetween('refunds.created_at', [
+                $local->copy()->startOfDay()->setTimezone($storageTimezone),
+                $local->copy()->endOfDay()->setTimezone($storageTimezone),
+            ]);
+        } else {
+            if ($startDate = $request->get('start_date')) {
+                $refunds->where('refunds.created_at', '>=', Carbon::parse($startDate, $countryTimezone)
+                    ->startOfDay()->setTimezone($storageTimezone));
+            }
+            if ($endDate = $request->get('end_date')) {
+                $refunds->where('refunds.created_at', '<=', Carbon::parse($endDate, $countryTimezone)
+                    ->endOfDay()->setTimezone($storageTimezone));
+            }
+        }
 
 
         if ($request->has(['field', 'direction'])){
@@ -277,8 +290,10 @@ class RefundRepository
             ->toArray();
         $totalAmount = count($totalsByCurrency) === 1 ? (float) reset($totalsByCurrency) : 0;
 
+        $rows = $refunds->paginate(10);
         return [
-            'refunds' => $refunds->paginate(10),
+            'rows' => $rows,
+            'refunds' => $rows,
             'total'   => $totalAmount,
             'totals_by_currency' => $totalsByCurrency,
         ];

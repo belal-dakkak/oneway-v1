@@ -115,10 +115,20 @@ class WebsiteOrder extends Model
      */
     public function dispatchNotifications(): void
     {
-        // Even when a server accidentally uses the sync queue driver, defer the
-        // SMTP/notification work until after the HTTP response is sent.
-        \App\Jobs\DispatchWebsiteOrderNotifications::dispatchAfterResponse($this->id)
-            ->onQueue('notify');
+        try {
+            // Even when a server accidentally uses the sync queue driver, defer
+            // SMTP work until after the HTTP response is sent.
+            \App\Jobs\DispatchWebsiteOrderNotifications::dispatchAfterResponse($this->id)
+                ->onQueue('notify');
+        } catch (\Throwable $exception) {
+            // A queue configuration problem must never turn a committed order
+            // into a failed checkout response.
+            $this->forceFill(['notification_last_error' => $exception->getMessage()])->saveQuietly();
+            \Illuminate\Support\Facades\Log::error('Unable to queue website order notifications.', [
+                'order_id' => $this->id,
+                'message' => $exception->getMessage(),
+            ]);
+        }
     }
 
     public function sendNotificationsNow(): void

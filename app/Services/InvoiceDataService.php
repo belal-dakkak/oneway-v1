@@ -4,6 +4,8 @@ namespace App\Services;
 
 use App\Models\Order;
 use App\Models\WebsiteOrder;
+use App\Models\CountryCommerceSetting;
+use App\Models\User;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Support\Collection;
 use InvalidArgumentException;
@@ -68,6 +70,41 @@ class InvoiceDataService
             'displayDecimals',
             'displayTotal'
         );
+    }
+
+    public function identityForOrder(Model $order, array $fallback = []): array
+    {
+        if (!$order instanceof Order && !$order instanceof WebsiteOrder) {
+            throw new InvalidArgumentException('Invoices can only be generated for an order or website order.');
+        }
+
+        $seller = null;
+        if ($order instanceof Order) {
+            $seller = $order->relationLoaded('seller')
+                ? $order->getRelation('seller')
+                : ($order->seller_id ? $order->seller()->first() : null);
+        } elseif ($order->exists) {
+            $commerce = CountryCommerceSetting::query()
+                ->where('country_id', (int) $order->country_id)
+                ->first();
+            $sellerId = (int) ($commerce?->website_stock_user_id ?: $commerce?->website_cashbox_user_id);
+            if ($sellerId) {
+                $seller = User::query()
+                    ->whereKey($sellerId)
+                    ->where('country_id', (int) $order->country_id)
+                    ->whereIn('role_id', [User::ROLE_SHOP, User::ROLE_WAREHOUSE])
+                    ->first();
+            }
+        }
+
+        return [
+            'name' => (string) ($seller->name ?? $fallback['title'] ?? config('app.name')),
+            'address' => (string) ($seller->address ?? $fallback['address'] ?? ''),
+            'phone' => (string) ($seller->phone ?? $fallback['phone'] ?? ''),
+            'email' => (string) ($seller->email ?? $fallback['email'] ?? ''),
+            'trn' => (string) ($seller->trn ?? ''),
+            'tax_enabled' => (string) ($seller->enable_tax ?? 'no') === 'yes',
+        ];
     }
 
     private function websiteItems(WebsiteOrder $order, int $decimals): Collection

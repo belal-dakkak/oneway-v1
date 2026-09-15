@@ -20,6 +20,7 @@ use App\Services\CurrencyService;
 use App\Services\SalesCurrencyPolicy;
 use App\Services\WebsitePricingService;
 use App\Support\Country;
+use App\Support\SyriaGovernorates;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Session;
 use Illuminate\Support\Facades\Mail;
@@ -92,6 +93,7 @@ class OrderController extends Controller
             'instagram' => $settings['instagram'] ?? '',
             'tiktok' => $settings['tiktok'] ?? '',
             'address' => $settings['address'] ?? '',
+            'syriaGovernorates' => SyriaGovernorates::all(),
         ]);
     }
 
@@ -120,7 +122,7 @@ class OrderController extends Controller
     public function placeOrder(Request $request)
     {
 
-        $request->validate([
+        $rules = [
             'items' => 'required|array|min:1',
             'items.*.color.id' => 'required|integer|exists:product_colors,id',
             'items.*.quantity' => 'required|integer|min:1',
@@ -135,7 +137,11 @@ class OrderController extends Controller
             'flat_number' => 'required|string',
             'payment_method' => 'required|in:cod,card',
             'currency' => 'nullable|string',
-        ]);
+        ];
+        if (Country::id() === User::COUNTRY_SYRIA) {
+            $rules['city'] = ['required', 'string', \Illuminate\Validation\Rule::in(SyriaGovernorates::all())];
+        }
+        $request->validate($rules);
 
         $countryId = Country::id();
         try {
@@ -146,10 +152,8 @@ class OrderController extends Controller
             return back()->withErrors(['currency' => 'العملة المختارة غير متاحة لهذا البلد.']);
         }
         $commerce = CountryCommerceSetting::forCountry($countryId);
-        if ($countryId === User::COUNTRY_SYRIA
-            && $request->payment_method === 'card'
-            && !$commerce->cardIsAvailable()) {
-            return back()->withErrors(['payment_method' => 'الدفع الإلكتروني غير متاح لطلبات سوريا.']);
+        if ($request->payment_method === 'card' && !$commerce->cardIsAvailable()) {
+            return back()->withErrors(['payment_method' => 'الدفع الإلكتروني غير متاح حالياً لهذا البلد.']);
         }
 
         if (Session::get('is_merchant')) {

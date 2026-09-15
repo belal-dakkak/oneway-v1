@@ -9,6 +9,7 @@ use App\Models\ProductColor;
 use App\Models\UserProduct;
 use App\Models\WebsiteOrder;
 use App\Models\WebsiteOrderItem;
+use App\Models\User;
 use App\Services\InvoiceDataService;
 use Illuminate\Support\Collection;
 use PHPUnit\Framework\TestCase;
@@ -142,6 +143,28 @@ class InvoiceDataServiceTest extends TestCase
         $this->assertSame('SYP', $data['currency']);
         $this->assertSame('USD', $data['displayCurrency']);
         $this->assertSame(20.0, $data['displayTotal']);
+    }
+
+    public function test_invoice_identity_comes_from_the_order_seller(): void
+    {
+        $seller = new User([
+            'name' => 'Damascus Branch',
+            'address' => 'Al Hamra Street',
+            'phone' => '+963900000000',
+            'email' => 'damascus@example.test',
+            'trn' => 'TRN-123',
+            'enable_tax' => 'yes',
+        ]);
+        $order = new Order();
+        $order->setRelation('seller', $seller);
+
+        $identity = (new InvoiceDataService())->identityForOrder($order, []);
+
+        $this->assertSame('Damascus Branch', $identity['name']);
+        $this->assertSame('Al Hamra Street', $identity['address']);
+        $this->assertSame('+963900000000', $identity['phone']);
+        $this->assertSame('TRN-123', $identity['trn']);
+        $this->assertTrue($identity['tax_enabled']);
     }
 
     private function orderItem(Product $product, int $colorId, int $qty, float $unit, float $total, float $net, float $tax): OrderItem

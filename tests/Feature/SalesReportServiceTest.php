@@ -63,16 +63,28 @@ class SalesReportServiceTest extends TestCase
         ])->save();
 
         $usdOrder = $this->order($shop, 'USD-1', 'USD', 1, 20, '2026-09-11 09:00:00');
+        $usdOrder->update(['price_without_tax' => 18, 'tax_value' => 2]);
         $this->item($usdOrder, $stock, 1, 1, 20, 10);
+
+        // The application stores timestamps in Dubai time. 00:30 in Dubai is
+        // still the previous calendar day in Syria and must not leak into this
+        // report, while 00:30 on the following Dubai day is still Syria's 11th.
+        $earlyOrder = $this->order($shop, 'USD-EARLY', 'USD', 1, 1000, '2026-09-11 00:30:00');
+        $this->item($earlyOrder, $stock, 1, 1, 1000, 500);
+        $lateOrder = $this->order($shop, 'USD-LATE', 'USD', 1, 30, '2026-09-12 00:30:00');
+        $lateOrder->update(['price_without_tax' => 30, 'tax_value' => 0]);
+        $this->item($lateOrder, $stock, 1, 1, 30, 15);
 
         $report = app(SalesReportService::class)->summary(new Request(['date' => '2026-09-11']));
 
         $this->assertSame(-100.0, (float) $report['totals_by_currency']['SYP']['net_sales']);
         $this->assertSame(-1, $report['totals_by_currency']['SYP']['net_qty']);
         $this->assertSame(-60.0, (float) $report['totals_by_currency']['SYP']['net_profit']);
-        $this->assertSame(20.0, (float) $report['totals_by_currency']['USD']['net_sales']);
-        $this->assertSame(1, $report['totals_by_currency']['USD']['net_qty']);
-        $this->assertSame(10.0, (float) $report['totals_by_currency']['USD']['net_profit']);
+        $this->assertSame(50.0, (float) $report['totals_by_currency']['USD']['net_sales']);
+        $this->assertSame(48.0, (float) $report['totals_by_currency']['USD']['gross_net']);
+        $this->assertSame(2.0, (float) $report['totals_by_currency']['USD']['gross_tax']);
+        $this->assertSame(2, $report['totals_by_currency']['USD']['net_qty']);
+        $this->assertSame(25.0, (float) $report['totals_by_currency']['USD']['net_profit']);
         $this->assertSame(0.0, (float) $report['total'], 'Mixed currencies must not be collapsed into one amount.');
 
         $monthlyReport = $report;
@@ -93,6 +105,7 @@ class SalesReportServiceTest extends TestCase
             ['seller', 'buyer', 'items.product.productColor', 'items.refunds'],
             false
         );
+        $this->assertSame($dailyReport['orders'], $dailyReport['rows']);
         $dailyHtml = view('includes.orders_template', [
             'seller' => null, 'all_orders' => $dailyReport, 'settings' => [],
             'startDate' => null, 'endDate' => null, 'is_website_order' => false,

@@ -34,7 +34,7 @@ class CashboxClosureTest extends TestCase
         $this->assertDatabaseCount('wallet_movements', 4);
     }
 
-    public function test_negative_cashbox_is_not_silently_closed(): void
+    public function test_negative_cashbox_is_reconciled_with_an_audited_reverse_transfer(): void
     {
         $admin = $this->user(User::ROLE_ADMIN, 'negative-admin@example.test');
         $shop = $this->user(User::ROLE_SHOP, 'negative-shop@example.test');
@@ -45,10 +45,26 @@ class CashboxClosureTest extends TestCase
 
         $this->actingAs($admin)
             ->post(route('users.wallet.close', $shop->id), ['return_type' => User::ROLE_SHOP])
-            ->assertStatus(422);
+            ->assertRedirect(route('users.index', ['type' => User::ROLE_SHOP]));
 
-        $this->assertSame(-5.0, $this->balance($shop, 'USD'));
-        $this->assertDatabaseCount('wallet_movements', 0);
+        $this->assertSame(0.0, $this->balance($shop, 'USD'));
+        $this->assertSame(-5.0, $this->balance($admin, 'USD'));
+        $this->assertDatabaseHas('wallet_movements', [
+            'user_id' => $shop->id, 'currency_code' => 'USD',
+            'direction' => 'credit', 'amount' => 5,
+            'payment_method' => 'sales_closure',
+        ]);
+        $this->assertDatabaseHas('wallet_movements', [
+            'user_id' => $admin->id, 'currency_code' => 'USD',
+            'direction' => 'debit', 'amount' => 5,
+            'payment_method' => 'sales_closure',
+        ]);
+        $this->assertDatabaseCount('wallet_movements', 2);
+
+        $this->actingAs($admin)
+            ->post(route('users.wallet.close', $shop->id), ['return_type' => User::ROLE_SHOP])
+            ->assertRedirect(route('users.index', ['type' => User::ROLE_SHOP]));
+        $this->assertDatabaseCount('wallet_movements', 2);
     }
 
     public function test_only_the_country_admin_can_receive_a_sales_closure(): void

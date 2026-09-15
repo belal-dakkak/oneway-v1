@@ -117,38 +117,56 @@ class UserController extends Controller
             $returnType = (int) $source->role_id;
 
             $wallets = $source->wallets()->lockForUpdate()->get();
-            abort_if($wallets->contains(function ($wallet) {
-                return round((float) $wallet->credit - (float) $wallet->debit, 4) < 0;
-            }), 422, 'A cashbox with a negative balance must be reconciled before closing sales.');
             $group = (string) Str::uuid();
             foreach ($wallets as $wallet) {
-                $amount = round((float) $wallet->credit - (float) $wallet->debit, 4);
-                if ($amount <= 0) {
+                $balance = round((float) $wallet->credit - (float) $wallet->debit, 4);
+                if ($balance == 0.0) {
                     continue;
                 }
 
                 $currency = strtoupper((string) $wallet->currency_code);
+                $amount = abs($balance);
                 $context = [
                     'payment_method' => 'sales_closure',
                     'source_type' => User::class,
                     'source_id' => (int) $source->id,
                     'exchange_group' => $group,
-                    'note' => "Sales closure from {$source->name} to {$receiver->name}",
+                    'note' => $balance > 0
+                        ? "Sales closure from {$source->name} to {$receiver->name}"
+                        : "Cashbox deficit settlement from {$receiver->name} to {$source->name}",
                 ];
-                $this->cashboxes->debit(
-                    (int) $source->id,
-                    $amount,
-                    $currency,
-                    "sales-close:{$group}:{$currency}:source",
-                    $context
-                );
-                $this->cashboxes->credit(
-                    (int) $receiver->id,
-                    $amount,
-                    $currency,
-                    "sales-close:{$group}:{$currency}:receiver",
-                    $context
-                );
+
+                if ($balance > 0) {
+                    $this->cashboxes->debit(
+                        (int) $source->id,
+                        $amount,
+                        $currency,
+                        "sales-close:{$group}:{$currency}:source",
+                        $context
+                    );
+                    $this->cashboxes->credit(
+                        (int) $receiver->id,
+                        $amount,
+                        $currency,
+                        "sales-close:{$group}:{$currency}:receiver",
+                        $context
+                    );
+                } else {
+                    $this->cashboxes->credit(
+                        (int) $source->id,
+                        $amount,
+                        $currency,
+                        "sales-close:{$group}:{$currency}:source-deficit",
+                        $context
+                    );
+                    $this->cashboxes->debit(
+                        (int) $receiver->id,
+                        $amount,
+                        $currency,
+                        "sales-close:{$group}:{$currency}:receiver-deficit",
+                        $context
+                    );
+                }
             }
         }, 3);
 

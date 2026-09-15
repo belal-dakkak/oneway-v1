@@ -83,6 +83,10 @@ class WebsitePricingServiceTest extends TestCase
             'name' => 'syp', 'label' => 'SYP', 'rate' => 13000,
             'created_at' => now(), 'updated_at' => now(),
         ]);
+        DB::table('currencies')->insert([
+            'name' => 'aed', 'label' => 'AED', 'rate' => 3.67,
+            'created_at' => now(), 'updated_at' => now(),
+        ]);
         DB::table('country_commerce_settings')->insert([
             'country_id' => 4,
             'shipping_fee_usd' => 1,
@@ -167,6 +171,51 @@ class WebsitePricingServiceTest extends TestCase
             UserProduct::query()->where('user_id', 2)->value('id'),
             array_column($quote['items'], 'stock_user_product_id')
         );
+    }
+
+    public function test_uae_card_quote_requires_readiness_and_keeps_the_aed_settlement_rate(): void
+    {
+        DB::table('users')->insert([
+            'id' => 2, 'role_id' => 3, 'country_id' => 2,
+            'created_at' => now(), 'updated_at' => now(),
+        ]);
+        DB::table('country_commerce_settings')->insert([
+            'country_id' => 2,
+            'shipping_fee_usd' => 0,
+            'free_shipping_threshold_usd' => null,
+            'cod_fee_percent' => 0,
+            'card_enabled' => true,
+            'gateway_currency' => 'AED',
+            'gateway_mode' => 'sandbox',
+            'website_cashbox_user_id' => 2,
+            'website_stock_user_id' => 2,
+            'created_at' => now(),
+            'updated_at' => now(),
+        ]);
+        config([
+            'services.tap.secret_key' => 'sk_test_example',
+            'services.tap.callback_url' => 'https://test.oneway.fashion/payment/callback',
+            'services.tap.webhook_url' => 'https://test.oneway.fashion/payment/webhook',
+        ]);
+        $product = Product::query()->create([
+            'name' => 'UAE Dress', 'barcode' => 'AE-D-1', 'country_id' => 2,
+            'user_id' => 2, 'cost_price' => 5, 'retail_price' => 12.20,
+            'sale_price' => 8, 'price_before_discount' => 12.20,
+        ]);
+        $color = ProductColor::query()->create(['product_id' => $product->id, 'country_id' => 2]);
+        UserProduct::query()->create([
+            'product_color_id' => $color->id, 'user_id' => 2, 'country_id' => 2,
+            'size' => 'M', 'stock' => 2,
+        ]);
+
+        $quote = app(WebsitePricingService::class)->quote([[
+            'product_id' => $color->id, 'size' => 'M', 'qty' => 1,
+        ]], 2, false, 'card');
+
+        $this->assertSame('AED', $quote['currency']);
+        $this->assertSame('AED', $quote['gateway']['currency']);
+        $this->assertSame(3.67, $quote['gateway']['rate']);
+        $this->assertSame($quote['total'], $quote['gateway']['amount']);
     }
 
     private function product(): ProductColor

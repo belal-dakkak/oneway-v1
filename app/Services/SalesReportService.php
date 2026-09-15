@@ -34,7 +34,10 @@ class SalesReportService
         $this->decorateOrders($orders);
 
         $report = $this->summary($request, $debts);
-        return array_merge($report, ['orders' => $result]);
+        return array_merge($report, [
+            'rows' => $result,
+            'orders' => $result,
+        ]);
     }
 
     public function monthly(Request $request): array
@@ -236,6 +239,15 @@ class SalesReportService
             $cost += (float) ($item->unit_cost ?? optional($item->product)->wholesale_price ?? 0) * $rate * $qty;
         }
         $grossSales = (float) $order->total_price;
+        // Order-level values are the immutable invoice snapshot and include the
+        // exact discount/tax rounding used at sale time. Item sums are retained
+        // only as a fallback for historical rows that predate those snapshots.
+        $snapshotNet = (float) ($order->price_without_tax ?? 0);
+        $snapshotTax = (float) ($order->tax_value ?? 0);
+        if ($snapshotNet > 0 || $snapshotTax > 0 || $grossSales == 0.0) {
+            $grossNet = $snapshotNet;
+            $grossTax = $snapshotTax;
+        }
         return [
             'gross_sales' => $grossSales,
             'gross_qty' => $grossQty,
@@ -305,18 +317,27 @@ class SalesReportService
     {
         $countryId = (int) auth()->user()->country_id;
         $timezone = Country::timezone($countryId);
+        $storageTimezone = (string) config('app.timezone', 'UTC');
         if ($request->filled('date')) {
             $local = Carbon::parse($request->input('date'), $timezone);
-            return [$local->copy()->startOfDay()->utc(), $local->copy()->endOfDay()->utc()];
+            return [
+                $local->copy()->startOfDay()->setTimezone($storageTimezone),
+                $local->copy()->endOfDay()->setTimezone($storageTimezone),
+            ];
         }
         if ($request->filled('start_date') || $request->filled('end_date')) {
-            $start = Carbon::parse($request->input('start_date') ?: $request->input('end_date'), $timezone)->startOfDay()->utc();
-            $end = Carbon::parse($request->input('end_date') ?: $request->input('start_date'), $timezone)->endOfDay()->utc();
+            $start = Carbon::parse($request->input('start_date') ?: $request->input('end_date'), $timezone)
+                ->startOfDay()->setTimezone($storageTimezone);
+            $end = Carbon::parse($request->input('end_date') ?: $request->input('start_date'), $timezone)
+                ->endOfDay()->setTimezone($storageTimezone);
             return [$start, $end];
         }
         if ($monthlyDefault) {
             $now = Carbon::now($timezone);
-            return [$now->copy()->startOfMonth()->utc(), $now->copy()->endOfDay()->utc()];
+            return [
+                $now->copy()->startOfMonth()->setTimezone($storageTimezone),
+                $now->copy()->endOfDay()->setTimezone($storageTimezone),
+            ];
         }
         return [null, null];
     }

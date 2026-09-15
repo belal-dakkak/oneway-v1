@@ -205,9 +205,6 @@ class UserProductRepository
                         'user_product_log_id' => $log->id
                     ]);
 
-                    $userProduct->user->wallet->update(['debit' => DB::raw("debit + $amount")]);
-                    User::query()->find($creditor)->wallet->update(['credit' => DB::raw("credit + $amount")]);
-
                     $merchantDebit = MerchantDebit::query()->firstOrCreate([
                         'creditor_id' => $creditor,
                         'debtor_id' => $userProduct->user_id

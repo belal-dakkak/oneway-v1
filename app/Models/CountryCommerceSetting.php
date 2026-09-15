@@ -42,22 +42,48 @@ class CountryCommerceSetting extends Model
 
     public function cardIsAvailable(): bool
     {
+        return $this->cardUnavailableReason() === null;
+    }
+
+    public function cardUnavailableReason(): ?string
+    {
         $secret = (string) config('services.tap.secret_key');
-        if (!$this->card_enabled || !$this->website_cashbox_user_id || $secret === '') {
-            return false;
+        if (!$this->card_enabled) {
+            return 'disabled';
+        }
+        if (!$this->website_cashbox_user_id) {
+            return 'cashbox_missing';
+        }
+        if ($secret === '') {
+            return 'secret_missing';
         }
         if (!User::query()
             ->whereKey($this->website_cashbox_user_id)
             ->where('country_id', $this->country_id)
             ->whereIn('role_id', [User::ROLE_SHOP, User::ROLE_WAREHOUSE])
             ->exists()) {
-            return false;
+            return 'cashbox_invalid';
         }
 
+        $mode = strtolower((string) $this->gateway_mode);
         if (app()->environment(['production', 'live'])) {
-            return $this->gateway_mode === 'live' && strpos($secret, 'sk_live_') === 0;
+            if ($mode !== 'live' || strpos($secret, 'sk_live_') !== 0) {
+                return 'mode_or_key_mismatch';
+            }
+        } elseif (($mode === 'sandbox' && strpos($secret, 'sk_test_') !== 0)
+            || ($mode === 'live' && strpos($secret, 'sk_live_') !== 0)
+            || !in_array($mode, ['sandbox', 'live'], true)) {
+            return 'mode_or_key_mismatch';
         }
 
-        return $this->gateway_mode === 'sandbox' || strpos($secret, 'sk_live_') === 0;
+        foreach (['callback_url', 'webhook_url'] as $key) {
+            $url = (string) config('services.tap.' . $key);
+            if (!$url || strtolower((string) parse_url($url, PHP_URL_SCHEME)) !== 'https'
+                || !parse_url($url, PHP_URL_HOST)) {
+                return 'endpoint_invalid';
+            }
+        }
+
+        return null;
     }
 }

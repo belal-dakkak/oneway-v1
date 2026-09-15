@@ -92,43 +92,8 @@
                 </div>
             </div>
 
-            <div v-if="user.role === 1 && Object.keys(totalsByCurrency).length" class="flex gap-3">
-                <div v-for="(summary, code) in totalsByCurrency" :key="code" class="rounded-md bg-emerald-500 px-3 py-2 text-white">
-                    <div class="text-lg font-bold">{{ code }}</div>
-                    <div>صافي المبيعات: {{ money(summary.net_sales, code) }}</div>
-                    <div>الإجمالي: {{ money(summary.gross_sales, code) }}</div>
-                    <div>المرتجعات: {{ money(summary.refund_total, code) }}</div>
-                    <div>القطع: {{ summary.gross_qty }} - {{ summary.refund_qty }} = {{ summary.net_qty }}</div>
-                </div>
-            </div>
-
-            <div class="flex flex-col" v-if="user.role === 1 && !Object.keys(totalsByCurrency).length">
-                <label dir="rtl" class="pr-2"> إجمالي المبيع</label>
-                <span class="bg-emerald-500 px-2 rounded-md text-3xl text-white">{{ money(totalSales) }}</span>
-            </div>
-
-            <div class="flex flex-col" v-if="user.role === 1 && !Object.keys(totalsByCurrency).length">
-                <label dir="rtl" class="pr-2">  الإجمالي غير  ش.ض</label>
-                <span class="bg-emerald-500 px-2 rounded-md text-3xl text-white">{{ money(totalPriceWithoutTax) }}</span>
-            </div>
-
-            <div class="flex flex-col" v-if="user.role === 1 && !Object.keys(totalsByCurrency).length">
-                <label dir="rtl" class="pr-2"> إجمالي الضريبه</label>
-                <span class="bg-emerald-500 px-2 rounded-md text-3xl text-white">{{ money(totalTaxValue) }}</span>
-            </div>
-
-            <div class="flex flex-col" v-if="user.role === 1 && !Object.keys(totalsByCurrency).length">
-                <label dir="rtl" class="pr-2"> إجمالي المرتجعات</label>
-                <span class="bg-emerald-500 px-2 rounded-md text-3xl text-white">{{ money(totalRefunds) }}</span>
-            </div>
-
-            <div class="flex flex-col" v-if="user.role === 1">
-                <label dir="rtl" class="pr-2">  عدد القطع</label>
-                <span class="bg-emerald-500 px-2 rounded-md text-3xl text-white">{{totalCount}}</span>
-            </div>
-
-
         </div>
+        <SalesTotals v-if="user.role === 1" :totals="totalsByCurrency" class="px-4" />
           <MeeTable :tableTitle="''">
           <div v-if="userOrders.length === 0" class="my-40 flex items-center justify-center text-xl font-bold text-error">
               <span class="text-center">لا يوجد طلبيات!</span>
@@ -252,12 +217,13 @@
   import JsonCSV from 'vue-json-csv'
   import Currency from '@/Utils/Currency.js';
   import Receipt from '@/Utils/Receipt.js';
+  import SalesTotals from '@/Components/Admin/SalesTotals.vue'
 
   import JetLabel from '@/Jetstream/Label.vue'
   import Multiselect from '@suadelabs/vue3-multiselect'
 
 
-  const components = { AppLayout, MeeTable, Pagination, JetButton,  JetDropdown, JetDropdownLink, Datepicker, JetLabel, Multiselect, 'download-csv': JsonCSV}
+  const components = { AppLayout, MeeTable, Pagination, JetButton, JetDropdown, JetDropdownLink, Datepicker, JetLabel, Multiselect, SalesTotals, 'download-csv': JsonCSV}
 
   export default {
       name: 'PortalProductsIndex',
@@ -301,7 +267,7 @@
               params: {
                   search: this.filters.search,
                   field: this.filters.field,
-                  direction: this.direction,
+                  direction: this.filters.direction,
                   shop: this.filters.shop,
                   buyer: this.filters.buyer,
                   date: this.filters.date,
@@ -409,18 +375,12 @@
           },
           resetDate(){
               this.params.date = null;
-              let params = this.params;
-              this.handleFilter(params)
           },
           resetStartDate(){
               this.params.start_date = null;
-              let params = this.params;
-              this.handleFilter(params)
           },
           resetEndDate(){
               this.params.end_date = null;
-              let params = this.params;
-              this.handleFilter(params)
           },
           openPopover(event, tooltipID) {
               let element = event.target;
@@ -448,13 +408,10 @@
                   this.totalCount = response.data.count
                   this.totalsByCurrency = response.data.totals_by_currency || {}
 
-                  this.userOrders = {
-                      ...response.data.orders,
-                      data: [...response.data.orders]
-                  }
+                  this.userOrders = response.data.rows || response.data.orders || []
 
                   this.json_data = []
-                  this.userOrders.data.forEach(order => {
+                  this.userOrders.forEach(order => {
                       this.json_data.push({
                         'shop_name': order.shop_name,
                         'date': order.date,
@@ -468,53 +425,16 @@
                   });
               });
           },
+          formatDate(value) {
+              if (!(value instanceof Date) || Number.isNaN(value.getTime())) return null
+              const month = String(value.getMonth() + 1).padStart(2, '0')
+              const day = String(value.getDate()).padStart(2, '0')
+              return `${value.getFullYear()}-${month}-${day}`
+          },
+          handleDate(value) { this.params.date = this.formatDate(value) },
+          handleStartDate(value) { this.params.start_date = this.formatDate(value) },
+          handleEndDate(value) { this.params.end_date = this.formatDate(value) },
 
-          // new code
-        fetchData() {
-            // Fetch data from the server and update this.items
-            // Update loading state accordingly
-
-            if(this.page <= this.userOrders.last_page ) {
-
-                axios.get(app_url+'admin/orders/monthly/orders', { params: { params: this.params, page: this.page++ } }).then(response => {
-                    this.totalRefunds = response.data.totalRefunds
-                    this.totalSales = response.data.total
-                    this.totalPriceWithoutTax = response.data.total_price_without_tax
-                    this.totalTaxValue = response.data.total_tax_value
-                    this.totalCount = response.data.count
-                    this.totalsByCurrency = response.data.totals_by_currency || {}
-                    this.userOrders = {
-                        ...response.data.orders,
-                        data: [...this.userOrders, ...response.data.orders]
-                    }
-                    this.json_data = []
-                    this.userOrders.data.forEach(order => {
-                        this.json_data.push({
-                            'shop_name': order.shop_name,
-                            'date': order.date,
-                            'total_refund': order.total_refund,
-                            'count': order.count,
-                            'price_without_tax': order.price_without_tax,
-                            'tax_value': order.tax_value,
-                            'total_price': order.total_price,
-                            'currency': order.currency || this.currency,
-                        })
-                    });
-                });
-
-
-            }
-
-
-        },
-        handleScroll() {
-            // let pixelsFromBottom = document.documentElement.offsetHeight - document.documentElement.scrollTop - window.innerHeight;
-            // if (pixelsFromBottom < 50){
-            if (window.innerHeight + window.scrollY + 50 >= document.documentElement.offsetHeight &&!this.loading) {
-                //this.page++;
-                this.fetchData();
-            }
-        },
       },
       watch: {
           params: {
@@ -522,30 +442,6 @@
                   let params = this.params;
                   this.handleFilter(params)
                   // this.$inertia.get(this.route('orders.monthly_orders'), this.params, { replace: true, preserveState: true});
-              }),
-              deep: true
-          },
-          date: {
-              handler: throttle(function () {
-                  this.params.date = this.date.value;
-                  let params = this.params;
-                  this.handleFilter(params)
-              }),
-              deep: true
-          },
-          start_date: {
-              handler: throttle(function () {
-                  this.params.start_date = this.start_date.value;
-                  let params = this.params;
-                  this.handleFilter(params)
-              }),
-              deep: true
-          },
-          end_date: {
-              handler: throttle(function () {
-                  this.params.end_date = this.end_date.value;
-                  let params = this.params;
-                  this.handleFilter(params)
               }),
               deep: true
           },
@@ -557,43 +453,7 @@
           const end_date = ref();
           const date = ref();
 
-          const handleDate = (date) => {
-              if(date){
-                  const day = date.getDate();
-                  const month = date.getMonth() + 1;
-                  const year = date.getFullYear();
-
-                  date.value =  `${year}/${month}/${day}`;
-              }
-          }
-
-          const handleStartDate = (start_date) => {
-              if(start_date){
-                  const day = start_date.getDate();
-                  const month = start_date.getMonth() + 1;
-                  const year = start_date.getFullYear();
-
-                  start_date.value =  `${year}/${month}/${day}`;
-              }
-          }
-
-          const handleEndDate = (end_date) => {
-              if(end_date){
-                  const day = end_date.getDate();
-                  const month = end_date.getMonth() + 1;
-                  const year = end_date.getFullYear();
-
-                  end_date.value =  `${year}/${month}/${day}`;
-              }
-          }
-
-          return { user, start_date, handleStartDate, end_date, handleEndDate, date, handleDate }
-      },
-      mounted() {
-
-            this.fetchData();
-            window.addEventListener('scroll', this.handleScroll);
-
+          return { user, start_date, end_date, date }
       },
   }
   </script>

@@ -40,14 +40,18 @@ class RefundController extends Controller
     {
         $request->validate([
             'direction' => ['in:asc,desc', 'nullable'],
-            'field' => ['in:stock,id,qty', 'nullable']
+            'field' => ['in:stock,id,qty', 'nullable'],
+            'date' => ['nullable', 'date'],
+            'start_date' => ['nullable', 'date'],
+            'end_date' => ['nullable', 'date', 'after_or_equal:start_date'],
         ]);
 
         $refunds = $this->refundRepository->getRefunds($request);
 
         if ($request->wantsJson()){
             return [
-                'refunds' => $refunds['refunds'],
+                'rows' => $refunds['rows'],
+                'refunds' => $refunds['rows'],
                 'total'   => $refunds['total'],
                 'totals_by_currency' => $refunds['totals_by_currency'] ?? [],
             ];
@@ -68,12 +72,12 @@ class RefundController extends Controller
 
         return Inertia::render('Admin/Refunds/Index', [
             'rate'    => $rate,
-            'refunds' => $refunds['refunds'],
+            'refunds' => $refunds['rows'],
             'total'   => $refunds['total'],
             'totals_by_currency' => $refunds['totals_by_currency'] ?? [],
             'shops'   => $shops,
             'buyers'  => $buyers,
-            'filters' => $request->all(['search', 'buyer', 'shop', 'field', 'direction'])
+            'filters' => $request->all(['search', 'buyer', 'shop', 'field', 'direction', 'date', 'start_date', 'end_date'])
         ]);
     }
 

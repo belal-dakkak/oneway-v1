@@ -42,28 +42,33 @@
                     <p class="mt-1 text-xs text-gray-500">لن يعرض الموقع مخزوناً قابلاً للشراء قبل اختيار موقع التجهيز.</p>
                     <jet-input-error :message="form.errors[`commerce.${country.id}.website_stock_user_id`]" class="mt-2" />
                 </div>
-                <template v-if="country.id === 4">
-                    <div class="col-span-8 sm:col-span-4" dir="rtl">
-                        <jet-label for="syria_card_enabled" value="تفعيل الدفع بالبطاقة لسوريا" />
-                        <input id="syria_card_enabled" type="checkbox" class="mt-3" v-model="form.commerce[country.id].card_enabled" />
-                        <p class="text-xs text-amber-700 mt-2">لا تفعّله Live قبل موافقة Tap على التحصيل بالدولار.</p>
-                    </div>
-                    <div class="col-span-8 sm:col-span-4" dir="rtl">
-                        <jet-label for="syria_gateway_mode" value="وضع بوابة Tap" />
-                        <select id="syria_gateway_mode" class="mt-1 block w-full rounded-md border-gray-300" v-model="form.commerce[country.id].gateway_mode">
-                            <option value="sandbox">Sandbox</option>
-                            <option value="live">Live</option>
-                        </select>
-                    </div>
-                    <div class="col-span-8 sm:col-span-4" dir="rtl">
-                        <jet-label for="syria_cashbox_user" value="صندوق استلام مبيعات الموقع" />
-                        <select id="syria_cashbox_user" class="mt-1 block w-full rounded-md border-gray-300" v-model="form.commerce[country.id].website_cashbox_user_id">
-                            <option :value="null">اختر المحل أو المستودع</option>
-                            <option v-for="user in usersForCountry(country.id)" :key="user.id" :value="user.id">{{ user.name }}</option>
-                        </select>
-                        <jet-input-error :message="form.errors[`commerce.${country.id}.website_cashbox_user_id`]" class="mt-2" />
-                    </div>
-                </template>
+                <div class="col-span-8 sm:col-span-4" dir="rtl">
+                    <jet-label :for="`card_enabled_${country.id}`" :value="`تفعيل الدفع بالبطاقة لمتجر ${country.name}`" />
+                    <input :id="`card_enabled_${country.id}`" type="checkbox" class="mt-3" v-model="form.commerce[country.id].card_enabled" />
+                    <p class="text-xs text-amber-700 mt-2">Sandbox يحتاج مفتاح Tap تجريبي، وLive يحتاج مفتاحاً حياً وروابط HTTPS.</p>
+                </div>
+                <div class="col-span-8 sm:col-span-4" dir="rtl">
+                    <jet-label :for="`gateway_mode_${country.id}`" value="وضع بوابة Tap" />
+                    <select :id="`gateway_mode_${country.id}`" class="mt-1 block w-full rounded-md border-gray-300" v-model="form.commerce[country.id].gateway_mode">
+                        <option value="sandbox">Sandbox</option>
+                        <option value="live">Live</option>
+                    </select>
+                </div>
+                <div class="col-span-8 sm:col-span-4" dir="rtl">
+                    <jet-label :for="`gateway_currency_${country.id}`" value="عملة تحصيل Tap" />
+                    <select :id="`gateway_currency_${country.id}`" class="mt-1 block w-full rounded-md border-gray-300" v-model="form.commerce[country.id].gateway_currency">
+                        <option value="USD">USD</option>
+                        <option v-if="country.id === 2" value="AED">AED</option>
+                    </select>
+                </div>
+                <div class="col-span-8 sm:col-span-4" dir="rtl">
+                    <jet-label :for="`cashbox_user_${country.id}`" value="صندوق استلام مبيعات الموقع" />
+                    <select :id="`cashbox_user_${country.id}`" class="mt-1 block w-full rounded-md border-gray-300" v-model="form.commerce[country.id].website_cashbox_user_id">
+                        <option :value="null">اختر المحل أو المستودع</option>
+                        <option v-for="user in usersForCountry(country.id)" :key="user.id" :value="user.id">{{ user.name }}</option>
+                    </select>
+                    <jet-input-error :message="form.errors[`commerce.${country.id}.website_cashbox_user_id`]" class="mt-2" />
+                </div>
             </template>
         </template>
         <template #actions>

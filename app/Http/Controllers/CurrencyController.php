@@ -64,7 +64,7 @@ class CurrencyController extends Controller
             'commerce.*.free_shipping_threshold_usd' => 'nullable|numeric|min:0',
             'commerce.*.cod_fee_percent' => 'required|numeric|min:0|max:100',
             'commerce.*.card_enabled' => 'nullable|boolean',
-            'commerce.*.gateway_currency' => 'nullable|in:USD',
+            'commerce.*.gateway_currency' => 'nullable|in:USD,AED',
             'commerce.*.gateway_mode' => 'nullable|in:sandbox,live',
             'commerce.*.website_cashbox_user_id' => 'nullable|integer|exists:users,id',
             'commerce.*.website_stock_user_id' => 'nullable|integer|exists:users,id',
@@ -86,6 +86,12 @@ class CurrencyController extends Controller
             if ((bool) ($commerce['card_enabled'] ?? false) && !$cashboxUserId) {
                 return back()->withErrors([
                     "commerce.{$countryId}.website_cashbox_user_id" => 'Select a website cashbox before enabling card payments.',
+                ]);
+            }
+            if ((int) $countryId === Country::SYRIA
+                && strtoupper((string) ($commerce['gateway_currency'] ?? 'USD')) !== 'USD') {
+                return back()->withErrors([
+                    "commerce.{$countryId}.gateway_currency" => 'Syrian card payments must settle in USD.',
                 ]);
             }
             if ($stockUserId && !User::query()

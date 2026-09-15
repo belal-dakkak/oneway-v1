@@ -108,7 +108,7 @@ class OrderController extends Controller
             'shops'   => $shops,
             'buyers'  => $buyers,
 
-            'filters' => $request->all(['search', 'field', 'direction'])
+            'filters' => $request->all(['search', 'field', 'direction', 'shop', 'buyer', 'date', 'start_date', 'end_date'])
         ]);
     }
 
@@ -1513,6 +1513,7 @@ class OrderController extends Controller
             ->where('language', 'en')
             ->pluck('value', 'name')
             ->toArray();
+        $data['invoiceIdentity'] = $this->invoiceDataService->identityForOrder($order, $data['settings']);
         $data['Currency'] = $data['currency'];
         $data['user_role'] = $order instanceof Order && $order->seller && (int) $order->seller->role_id !== User::ROLE_SHOP
             ? 'stock'

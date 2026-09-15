@@ -53,6 +53,7 @@ class CashboxController extends Controller
                 ->paginate(30),
             'canExchange' => (int) auth()->user()->country_id === Country::SYRIA,
             'exchangeRate' => $exchangeRate,
+            'defaultCurrency' => Country::defaultCurrency((int) auth()->user()->country_id),
         ]);
     }
 

@@ -114,19 +114,6 @@
                 </div>
             </div>
 
-            <div v-if="user.role === 1" class="flex flex-wrap gap-3" dir="rtl">
-                <div v-for="(values, code) in totalsByCurrency" :key="code" class="flex flex-col rounded-md bg-emerald-500 px-3 py-2 text-white">
-                    <span class="font-bold">{{ formatMoney(values.net_sales, code) }} صافي المبيعات</span>
-                    <span class="text-xs">إجمالي: {{ formatMoney(values.gross_sales, code) }}</span>
-                    <span class="text-xs">مرتجعات: {{ formatMoney(values.refund_total, code) }}</span>
-                    <span class="text-xs">القطع: {{ values.gross_qty }} - {{ values.refund_qty }} = {{ values.net_qty }}</span>
-                </div>
-            </div>
-
-            <div class="flex flex-col" v-if="user.role === 1">
-                <label dir="rtl" class="pr-2">  عدد القطع</label>
-                <span class="bg-emerald-500 px-2 rounded-md text-3xl text-white">{{totalCount}}</span>
-            </div>
             <div class="mt-8 flex justify-between space-x-4">
                 <div class="max-w-xs">
                     <input dir="rtl"  type="search" v-model="params.search" placeholder="بحث..." class="block w-full rounded-md border-gray-300 shadow-sm focus:ring-primary-500 focus:border-primary-500 sm:text-sm">
@@ -134,6 +121,7 @@
                 <h3 class="text-2xl font-bold capitalize text-primary">الطلبيات</h3>
             </div>
         </div>
+        <SalesTotals v-if="user.role === 1" :totals="totalsByCurrency" class="px-4" />
           <MeeTable :tableTitle="''">
           <div v-if="userOrders.data.length === 0" class="my-40 flex items-center justify-center text-xl font-bold text-error">
               <span class="text-center">لا يوجد طلبيات!</span>
@@ -335,12 +323,13 @@
   import JsonCSV from 'vue-json-csv'
   import Currency from '@/Utils/Currency.js';
   import Receipt from '@/Utils/Receipt.js';
+  import SalesTotals from '@/Components/Admin/SalesTotals.vue'
 
   import JetLabel from '@/Jetstream/Label.vue'
   import Multiselect from '@suadelabs/vue3-multiselect'
 
 
-  const components = { AppLayout, MeeTable, Pagination, JetButton,  JetDropdown, JetDropdownLink, Datepicker, JetLabel, Multiselect, 'download-csv': JsonCSV}
+  const components = { AppLayout, MeeTable, Pagination, JetButton, JetDropdown, JetDropdownLink, Datepicker, JetLabel, Multiselect, SalesTotals, 'download-csv': JsonCSV}
 
   export default {
       name: 'PortalProductsIndex',
@@ -379,7 +368,7 @@
               params: {
                   search: this.filters.search,
                   field: this.filters.field,
-                  direction: this.direction,
+                  direction: this.filters.direction,
                   shop: this.filters.shop,
                   buyer: this.filters.buyer,
                   date: this.filters.date,
@@ -398,7 +387,7 @@
               totalCount: this.count,
               json_data: ordersd,
               currencyFormat: Currency.getFormatMethod(),
-              page: 1,
+              page: 2,
 
           }
       },
@@ -593,18 +582,12 @@
           },
           resetDate(){
               this.params.date = null;
-              let params = this.params;
-              this.handleFilter(params)
           },
           resetStartDate(){
               this.params.start_date = null;
-              let params = this.params;
-              this.handleFilter(params)
           },
           resetEndDate(){
               this.params.end_date = null;
-              let params = this.params;
-              this.handleFilter(params)
           },
           openPopover(event, tooltipID) {
               let element = event.target;
@@ -630,9 +613,10 @@
                   this.totalTaxValue = response.data.total_tax_value
                   this.totalsByCurrency = response.data.totals_by_currency || {}
                   this.totalCount = response.data.count
+                  const rows = response.data.rows || response.data.orders
                   this.userOrders = {
-                      ...response.data.orders,
-                      data: [...response.data.orders.data]
+                      ...rows,
+                      data: [...(rows?.data || [])]
                   }
                   this.json_data = []
                   this.userOrders.data.forEach(order => {
@@ -649,27 +633,34 @@
                   });
               });
           },
+          formatDate(value) {
+              if (!(value instanceof Date) || Number.isNaN(value.getTime())) return null
+              const month = String(value.getMonth() + 1).padStart(2, '0')
+              const day = String(value.getDate()).padStart(2, '0')
+              return `${value.getFullYear()}-${month}-${day}`
+          },
+          handleDate(value) { this.params.date = this.formatDate(value) },
+          handleStartDate(value) { this.params.start_date = this.formatDate(value) },
+          handleEndDate(value) { this.params.end_date = this.formatDate(value) },
 
 
         fetchData: throttle(async function () {
-            if (this.isLoading || this.page > this.userOrders.last_page) return;
+            if (this.isLoading || !this.userOrders?.next_page_url) return;
             this.isLoading = true;
 
 
             try {
-              const response = await axios.get(
-                  `${app_url.replace(/\/$/, '')}/admin/orders`,
-                  { params: { ...this.params, page: this.page++ } }
-              );
+              const response = await axios.get(this.userOrders.next_page_url, { params: this.params });
                 this.totalSales = response.data.total || 0;
                 this.totalPriceWithoutTax = response.data.total_price_without_tax || 0;
                 this.totalTaxValue = response.data.total_tax_value || 0;
                 this.totalsByCurrency = response.data.totals_by_currency || {};
                 this.totalCount = response.data.count || 0;
 
+                const rows = response.data.rows || response.data.orders
                 this.userOrders = {
-                    ...response.data.orders,
-                    data: [...this.userOrders.data, ...response.data.orders.data]
+                    ...rows,
+                    data: [...this.userOrders.data, ...(rows?.data || [])]
                 };
 
                 this.json_data = this.userOrders.data.map(order => ({
@@ -811,30 +802,6 @@
               }),
               deep: true
           },
-          date: {
-              handler: throttle(function () {
-                  this.params.date = this.date.value;
-                  let params = this.params;
-                  this.handleFilter(params)
-              }),
-              deep: true
-          },
-          start_date: {
-              handler: throttle(function () {
-                  this.params.start_date = this.start_date.value;
-                  let params = this.params;
-                  this.handleFilter(params)
-              }),
-              deep: true
-          },
-          end_date: {
-              handler: throttle(function () {
-                  this.params.end_date = this.end_date.value;
-                  let params = this.params;
-                  this.handleFilter(params)
-              }),
-              deep: true
-          },
       },
       setup() {
           const user = computed(() => usePage().props.value.auth.user)
@@ -843,41 +810,9 @@
           const end_date = ref();
           const date = ref();
 
-          const handleDate = (date) => {
-              if(date){
-                  const day = date.getDate();
-                  const month = date.getMonth() + 1;
-                  const year = date.getFullYear();
-
-                  date.value =  `${year}/${month}/${day}`;
-              }
-          }
-
-          const handleStartDate = (start_date) => {
-              if(start_date){
-                  const day = start_date.getDate();
-                  const month = start_date.getMonth() + 1;
-                  const year = start_date.getFullYear();
-
-                  start_date.value =  `${year}/${month}/${day}`;
-              }
-          }
-
-          const handleEndDate = (end_date) => {
-              if(end_date){
-                  const day = end_date.getDate();
-                  const month = end_date.getMonth() + 1;
-                  const year = end_date.getFullYear();
-
-                  end_date.value =  `${year}/${month}/${day}`;
-              }
-          }
-
-          return { user, start_date, handleStartDate, end_date, handleEndDate, date, handleDate }
+          return { user, start_date, end_date, date }
       },
       mounted() {
-
-            this.fetchData();
             window.addEventListener('scroll', this.handleScroll);
 
         //   window.addEventListener('scroll', debounce((e) => {
@@ -909,6 +844,9 @@
         //           });
         //       }
         //   }, 100))
+      },
+      beforeUnmount() {
+          window.removeEventListener('scroll', this.handleScroll)
       },
   }
   </script>

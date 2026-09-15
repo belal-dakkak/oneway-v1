@@ -236,11 +236,12 @@
             <table height="82" class=" " style=" width:100%;">
                 <tr class="bg_color1">
                     <td colspan="3" style="width: 23% !important" class="td-med"></td>
+                    <td class="td-med"> إجمالي المبيعات الأصلي </td>
+                    <td class="td-med"> الأصلي غير شامل الضريبة </td>
+                    <td class="td-med"> الضريبة الأصلية </td>
                     <td class="td-med"> إجمالي المرتجعات </td>
-                    <td class="td-med"> اجمالي عدد العناصر </td>
-                    <td class="td-med"> اجمالي المبيعات بدون الضريبة </td>
-                    <td class="td-med"> إجمالي الضريبه </td>
-                    <td class="td-med"> اجمالي المبيعات شاملة الضريبة	 </td>
+                    <td class="td-med"> صافي المبيعات </td>
+                    <td class="td-med"> القطع مباعة / مرتجعة / صافي </td>
 
                 </tr>
 
@@ -248,12 +249,13 @@
                     @foreach($all_orders['totals_by_currency'] as $currencyCode => $summary)
                     @php($moneyDecimals = $currencyCode === 'SYP' ? 0 : 2)
                     <tr class=" ">
-                        <td colspan="3" style="width: 23% !important" class="td-med">{{ $currencyCode }}</td>
-                        <td class="td-med">{{ number_format($summary['refunds'], $moneyDecimals) }}</td>
-                        <td class="td-med">{{ number_format($summary['count'], 0) }}</td>
-                        <td class="td-med">{{ number_format($summary['net'], $moneyDecimals) }}</td>
-                        <td class="td-med">{{ number_format($summary['tax'], $moneyDecimals) }}</td>
-                        <td class="td-med">{{ number_format($summary['total'], $moneyDecimals) }}</td>
+                        <td colspan="2" class="td-med">{{ $currencyCode }}</td>
+                        <td class="td-med">{{ number_format($summary['gross_sales'], $moneyDecimals) }}</td>
+                        <td class="td-med">{{ number_format($summary['gross_net'], $moneyDecimals) }}</td>
+                        <td class="td-med">{{ number_format($summary['gross_tax'], $moneyDecimals) }}</td>
+                        <td class="td-med">{{ number_format($summary['refund_total'], $moneyDecimals) }}</td>
+                        <td class="td-med">{{ number_format($summary['net_sales'], $moneyDecimals) }}</td>
+                        <td class="td-med">{{ $summary['gross_qty'] }} / {{ $summary['refund_qty'] }} / {{ $summary['net_qty'] }}</td>
                     </tr>
                     @endforeach
                 @else

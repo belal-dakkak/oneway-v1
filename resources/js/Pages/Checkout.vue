@@ -46,7 +46,11 @@
               </div>
               <div class="space-y-2">
                 <label class="text-sm font-medium">{{ store.t('city') }}</label>
-                <input v-model="form.city" type="text" class="w-full border-primary rounded-lg px-4 py-3 focus:ring-2 focus:ring-red-500" placeholder="Dubai">
+                <select v-if="store.country === 'SY'" v-model="form.city" class="w-full border-primary rounded-lg px-4 py-3 focus:ring-2 focus:ring-red-500">
+                  <option value="" disabled>{{ store.isRTL ? 'اختر المحافظة' : 'Select governorate' }}</option>
+                  <option v-for="governorate in syriaGovernorates" :key="governorate" :value="governorate">{{ governorate }}</option>
+                </select>
+                <input v-else v-model="form.city" type="text" class="w-full border-primary rounded-lg px-4 py-3 focus:ring-2 focus:ring-red-500" placeholder="Dubai">
               </div>
             </div>
           </section>
@@ -65,7 +69,7 @@
                 </div>
               </label>
 
-              <label v-if="store.country !== 'SY' || store.commerce.card_available" class="relative flex items-center p-6 bg-secondary rounded-xl border-2 cursor-pointer transition-all" :class="form.payment_method === 'card' ? 'border-primary ring-2 ring-primary/20' : 'border-transparent'">
+              <label v-if="store.commerce.card_available" class="relative flex items-center p-6 bg-secondary rounded-xl border-2 cursor-pointer transition-all" :class="form.payment_method === 'card' ? 'border-primary ring-2 ring-primary/20' : 'border-transparent'">
                 <input v-model="form.payment_method" type="radio" value="card" class="sr-only">
                 <div class="w-6 h-6 rounded-full text-white border-2 flex items-center justify-center rtl:ml-4 ltr:mr-4" :class="form.payment_method === 'card' ? 'border-white' : 'border-muted-foreground'">
                   <div v-if="form.payment_method === 'card'" class="w-3 h-3 bg-white rounded-full"></div>
@@ -242,9 +246,10 @@ export default {
     FloatingButtons
   },
   props: {
-    categories: Array, title: String, phone: String, email: String, facebook: String, instagram: String, tiktok: String, address: String
+    categories: Array, title: String, phone: String, email: String, facebook: String, instagram: String, tiktok: String, address: String,
+    syriaGovernorates: { type: Array, default: () => [] }
   },
-  setup() {
+  setup(props) {
     const store = useStore()
     const loading = ref(false)
     const quoteLoading = ref(false)
@@ -267,7 +272,7 @@ export default {
       city: '',
       building_name: '',
       flat_number: '',
-      payment_method: store.country === 'SY' ? 'cod' : 'card',
+      payment_method: store.commerce.card_available && store.country !== 'SY' ? 'card' : 'cod',
       items: store.cart
     })
 
@@ -288,13 +293,14 @@ export default {
         }
       }
       form.country_code = store.country === 'SY' ? '+963' : (store.country === 'LB' ? '+961' : '+971')
-      if (store.country === 'SY') form.payment_method = 'cod'
+      if (!store.commerce.card_available || store.country === 'SY') form.payment_method = 'cod'
       refreshQuote()
     })
 
     watch(() => store.country, (country) => {
       form.country_code = country === 'SY' ? '+963' : (country === 'LB' ? '+961' : '+971')
-      if (country === 'SY') form.payment_method = 'cod'
+      form.city = ''
+      if (!store.commerce.card_available || country === 'SY') form.payment_method = 'cod'
     })
 
     watch([() => store.cart, () => form.payment_method], () => {
@@ -436,7 +442,7 @@ export default {
       })
     }
 
-    return { store, form, loading, quoteLoading, quoteError, quote, submitOrder, shippingFee, codFeeValue, subtotal, totalWithShipping, shippingMessage, countryOptions, officialCurrency, formatMoney, formatOfficial }
+    return { store, form, loading, quoteLoading, quoteError, quote, submitOrder, shippingFee, codFeeValue, subtotal, totalWithShipping, shippingMessage, countryOptions, officialCurrency, formatMoney, formatOfficial, syriaGovernorates: props.syriaGovernorates }
   }
 }
 </script>

@@ -143,28 +143,25 @@ class WebsitePricingService
 
         $gateway = null;
         if ($paymentMethod === 'card') {
-            if ($countryId === Country::SYRIA && !$commerce->cardIsAvailable()) {
+            if (!$commerce->cardIsAvailable()) {
                 throw new InvalidArgumentException('Card payment is not currently enabled for this country.');
             }
-            if ($countryId === Country::SYRIA) {
-                $gatewayCode = strtoupper((string) ($commerce->gateway_currency ?: 'USD'));
-                if ($gatewayCode !== 'USD') {
-                    throw new InvalidArgumentException('Syrian card payments must settle in USD.');
-                }
-                $gateway = [
-                    'provider' => 'tap',
-                    'currency' => 'USD',
-                    'amount' => round($total / $currencyRate, 2),
-                    'rate' => $currencyRate,
-                ];
-            } else {
-                $gateway = [
-                    'provider' => 'tap',
-                    'currency' => $currencyCode,
-                    'amount' => round($total, 2),
-                    'rate' => 1,
-                ];
+
+            $gatewayCode = strtoupper((string) ($commerce->gateway_currency ?: $currencyCode));
+            if ($countryId === Country::SYRIA && $gatewayCode !== 'USD') {
+                throw new InvalidArgumentException('Syrian card payments must settle in USD.');
             }
+            $gatewayRate = $gatewayCode === 'USD' ? 1.0 : $this->currencies->rate($gatewayCode);
+            $totalUsd = $total / $currencyRate;
+            $gatewayAmount = $gatewayCode === 'USD'
+                ? round($totalUsd, 2)
+                : round($totalUsd * $gatewayRate, 2);
+            $gateway = [
+                'provider' => 'tap',
+                'currency' => $gatewayCode,
+                'amount' => $gatewayAmount,
+                'rate' => $gatewayRate,
+            ];
         }
 
         return [

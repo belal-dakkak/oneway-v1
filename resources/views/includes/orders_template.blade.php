@@ -333,18 +333,22 @@
                 <tr class="bg_color1">
                     <td class="td-med">Currency</td>
                     <td class="td-med">Gross sales</td>
+                    <td class="td-med">Gross excl. tax</td>
+                    <td class="td-med">Gross tax</td>
                     <td class="td-med">Refunds</td>
                     <td class="td-med">Net sales</td>
-                    <td class="td-med">Net pieces</td>
+                    <td class="td-med">Pieces sold / returned / net</td>
                 </tr>
                 @foreach($all_orders['totals_by_currency'] as $currencyCode => $summary)
                     @php($moneyDecimals = $currencyCode === 'SYP' ? 0 : 2)
                     <tr>
                         <td class="td-med">{{ $currencyCode }}</td>
                         <td class="td-med">{{ number_format($summary['gross_sales'], $moneyDecimals) }} {{ $currencyCode }}</td>
+                        <td class="td-med">{{ number_format($summary['gross_net'], $moneyDecimals) }} {{ $currencyCode }}</td>
+                        <td class="td-med">{{ number_format($summary['gross_tax'], $moneyDecimals) }} {{ $currencyCode }}</td>
                         <td class="td-med">{{ number_format($summary['refund_total'], $moneyDecimals) }} {{ $currencyCode }}</td>
                         <td class="td-med">{{ number_format($summary['net_sales'], $moneyDecimals) }} {{ $currencyCode }}</td>
-                        <td class="td-med">{{ $summary['net_qty'] }}</td>
+                        <td class="td-med">{{ $summary['gross_qty'] }} / {{ $summary['refund_qty'] }} / {{ $summary['net_qty'] }}</td>
                     </tr>
                 @endforeach
             </table>

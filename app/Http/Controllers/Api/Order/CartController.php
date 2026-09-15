@@ -56,8 +56,10 @@ class CartController extends ApiController
         if (is_string($payment)) {
             $payment = ['name' => $payment];
         }
-        if ($countryId === Country::SYRIA && ($payment['name'] ?? 'cod') !== 'cod') {
-            return $this->respondError('Card payment is not available for Syria.');
+        if (($payment['name'] ?? 'cod') !== 'cod') {
+            // This endpoint has no gateway redirect/callback contract. Refuse to
+            // create an unpaid card order that the client cannot complete.
+            return $this->respondError('Card payment must be completed through the website checkout.');
         }
 
         $request->merge([

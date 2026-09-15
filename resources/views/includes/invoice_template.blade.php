@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="ar" dir="rtl">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -9,9 +9,18 @@
 </head>
 <body>
     <?php
-        $admin_email  = $settings['email'] ?? '';
-        $admin_mobile = $settings['phone'] ?? '';
-        $shop_address = $settings['address'] ?? '';
+        $invoiceIdentity = $invoiceIdentity ?? [
+            'name' => $settings['title'] ?? config('app.name'),
+            'address' => $settings['address'] ?? '',
+            'phone' => $settings['phone'] ?? '',
+            'email' => $settings['email'] ?? '',
+            'trn' => '',
+            'tax_enabled' => false,
+        ];
+        $admin_email  = $invoiceIdentity['email'];
+        $admin_mobile = $invoiceIdentity['phone'];
+        $shop_address = $invoiceIdentity['address'];
+        $taxEnabled = (bool) $invoiceIdentity['tax_enabled'];
     ?>
 
     <style type="text/css">
@@ -19,7 +28,7 @@
             width: 100% !important;
             min-height: 100% !important;
             font-size: 12px;
-            font-family: "Helvetica Neue", Helvetica, Arial, sans-serif !important;
+            font-family: "DejaVu Sans", sans-serif !important;
             padding:0 !important;
             margin:0 !important;
 
@@ -29,7 +38,7 @@
         }
 
         * {
-            font-family: "Helvetica Neue", Helvetica, Arial, sans-serif !important;
+            font-family: "DejaVu Sans", sans-serif !important;
             padding:0 !important;
             margin:0 !important;
         }
@@ -110,7 +119,6 @@
     <div class="container-fluid" >
 
         <div class="outer_border" style="position:relative" >
-=
             <div class="row">
 
                 <table width="100%" height="70" border="0" class="table_pad">
@@ -118,18 +126,10 @@
                         <td width="35%" style="border: 0;">
                             <div class="pull-left top_box">
 
-                                {{$shop_address}}<br>
-
-                                <span style="color: red">Branch 1</span> : Ajman Industrial 2 Beirut Street <br>
-                                <span style="color: red">Branch 2</span> : Sharjah City centre <br>
-
-                                <span style="color: red">Phone</span> : +971 545 516 995 <br>
-                                <span style="color: red">Phone</span> : +971 564 533 655 <b6r>
-
-                                <br>Lebanon, Beirut <br>
-                                <span style="color: red">Branch 3</span> : Lebanon Beirut <br>
-                                <span style="color: red">Phone</span> : +961 76 658 734 <br>
-                                <span style="color: red">Phone</span> : +961 81 730 725 <br>
+                                <strong>{{ $invoiceIdentity['name'] }}</strong><br>
+                                @if($shop_address)<span style="color: red">Address</span> : {{ $shop_address }}<br>@endif
+                                @if($admin_mobile)<span style="color: red">Phone</span> : {{ $admin_mobile }}<br>@endif
+                                @if($admin_email)<span style="color: red">Email</span> : {{ $admin_email }}<br>@endif
 
                             </div>
                         </td>
@@ -138,20 +138,12 @@
                             {{-- <h2 style="color:black;font-weight: bold;font-size:30px; text-align:right; padding-right: 30px;" id="invoice">INVOICE</h2><br> --}}
                             <img src="{{ public_path('custom/logo-icon-black.png') }}" align="center" style="border-radius: 20px;align-items:center;margin-left:9%;margin-bottom:-35px;" width="120" height="120" alt="" srcset=""><br><br>
 
-                            @if($order->seller && $order->seller->enable_tax == 'yes')
+                            @if($taxEnabled)
                             <p align="center" style="text-align: center;font-size:18px;">
-                                {{ @$order->seller->name }}
+                                {{ $invoiceIdentity['name'] }}
                             </p>
                             @else
-							<br>
-<span align="center" style="text-align: center;font-size:18px;"> ONE WAY CLOTHING TRADING <br>  LLC SOLE PROPRIETORSHIP </span>
-<br><br>
-<span align="center" style="text-align: center;font-size:18px;margin-left:0%;">
-&nbsp;&nbsp;&nbsp;&nbsp;
-<span style="display: block;">  وان واي لتجارة الملابس ذ.م.م   </span>
- <span style="display: block;;margin-left:15%"> شركة الشخص الواحد  </span>
- </span><br><br>
-
+                                <p align="center" style="text-align: center;font-size:18px;">{{ $invoiceIdentity['name'] }}</p>
                             @endif
 
 
@@ -165,13 +157,13 @@
                                     <div class="bg_color1" style="text-indent:10px;font-size: 14px;width: 50%;height: 26px;line-height: 24px;color:black; ">BILL TO </div>
                                     <table width="100%" border="0">
                                         <tr>
-                                            <td width="100%">Name: {{$order->buyer->name??'No name'}}</td>
+                                            <td width="100%">Name: {{ optional($order->buyer)->name ?? trim(($order->first_name ?? '').' '.($order->last_name ?? '')) ?: 'No name' }}</td>
                                         </tr>
                                         <tr>
-                                            <td width="100%">Phone: {{$order->buyer->phone??'No phone'}}</td>
+                                            <td width="100%">Phone: {{ optional($order->buyer)->phone ?? $order->phone ?? 'No phone' }}</td>
                                         </tr>
                                         <tr>
-                                            <td width="100%"> Address: {{$order->buyer->address??'No address'}} </td>
+                                            <td width="100%"> Address: {{ optional($order->buyer)->address ?? $order->address ?? 'No address' }} </td>
                                         </tr>
                                     </table>
                                     </td>
@@ -192,23 +184,19 @@
                     <tr>
                         <td width="50%" style="border: 0;">
 
-                            <br>Türkiye  <br>
-                            <span style="color: red">Branch 4</span> : Türkiye Istanbul Merter <br>
-                            <span style="color: red">Phone</span> : +905 004001621 <br><br>
-
                             <p style="color:red;">Website : www.oneway.fashion</p>
-                            <span style="color: red">Email</span> : theoneway.fashion@gmail.com <br>
+                            @if($admin_email)<span style="color: red">Email</span> : {{ $admin_email }} <br>@endif
 
                         </td>
                         <td width="30%" style="border: 0;">
                             <h2 style="color:black;font-weight: bold;font-size:20px; text-align:center;" id="invoice">
 
-                                @if($order->seller && $order->seller->enable_tax == 'yes')
+                                @if($taxEnabled)
                                     <div style="text-align: center;">
                                         <table height="70" border="0" style="text-align: center !important">
                                             <tr>
                                                 <td width="30%" class="td-font bg_color1" style="color:black;border:1px solid black;">TRN</td>
-                                                <td width="70%" class="td-font"> {{ $order->seller->trn }} </td>
+                                                <td width="70%" class="td-font"> {{ $invoiceIdentity['trn'] }} </td>
                                             </tr>
                                         </table>
                                         <br>
@@ -216,10 +204,10 @@
                                 @endif
 
                                 <span style="display: block">
-                                    {{ $order->seller && $order->seller->enable_tax == 'yes' ? 'TAX INVOICE' : 'INVOICE' }}
+                                    {{ $taxEnabled ? 'TAX INVOICE' : 'INVOICE' }}
                                 </span>
 
-                                @if($order->seller && $order->seller->enable_tax == 'yes')
+                                @if($taxEnabled)
                                     <p> فاتورة ضريبية </p>
                                     <br> <br>
                                 @endif
@@ -245,7 +233,7 @@
                                         <td width="30%" class="td-font bg_color1" style="color:black;border:1px solid black;">Order ID</td>
                                         <td width="40%" class="td-font">{{$order->id}}</td>
                                     </tr>
-                                    @if($order->seller && $order->seller->enable_tax == 'yes')
+                                    @if($taxEnabled)
                                     <tr>
                                         <td width="30%" style="border: 0;" class=""></td>
                                         <td width="30%" class="td-font bg_color1" style="color:black;border:1px solid black;">Customer TRN</td>
@@ -269,7 +257,7 @@
                         <td width="30%" height="12" style="padding-left: 10px;" class="td-med">DESCRIPTION</td>
                         <td width="7%" class="td-med">QTY</td>
                         <td width="10%" class="td-med">RATE</td>
-                        @if($order->seller && $order->seller->enable_tax == 'yes')
+                        @if($taxEnabled)
                         <td style="padding-right: 10px;" width="15%" align="right" class="td-med">AMOUNT EXel.Vat</td>
                         <td style="padding-right: 10px;" width="10%" align="right" class="td-med">Vat @ {{ $order->seller->tax_ratio }}%</td>
                         <td style="padding-right: 10px;" width="15%" align="right" class="td-med">AMOUNT Incl VAT</td>
@@ -289,13 +277,13 @@
                             <td class="td-med" style=""> {{$k+1}} </td>
                             <td class="td-med" style=""> {{$order_item->name}} </td>
                             <td class="td-med">{{$order_item->qty}}</td>
-                            @if($order->seller && $order->seller->enable_tax == 'yes')
+                            @if($taxEnabled)
                             <td class="td-med">{{ number_format($order_item->price_without_tax, $moneyDecimals) }} {{ $Currency }} </td>
                             @else
                                 <td class="td-med">{{ number_format($order_item->item_price, $moneyDecimals) }} {{ $Currency }} </td>
                             @endif
 
-                            @if($order->seller && $order->seller->enable_tax == 'yes')
+                            @if($taxEnabled)
                             <td align="center" class="td-med"> {{ number_format($order_item->line_price_without_tax, $moneyDecimals) }} {{ $Currency }}</td>
                             <td align="center" class="td-med"> {{ number_format($order_item->line_tax_value, $moneyDecimals) }} {{ $Currency }}</td>
                             <td align="center" class="td-med"> {{ number_format($order_item->total_price, $moneyDecimals) }} {{ $Currency }}</td>
@@ -376,7 +364,7 @@
                                 </tr>
                             @endif
 
-                            @if($order->seller && $order->seller->enable_tax == 'yes')
+                            @if($taxEnabled)
 
                             <tr class="total" style="width: 100% !important">
                                 <td width="50%" class="td-med1 bg_color1" style="color: black;">إجمالي  الفاتورة بدون الضريبة <br> Total bill EXel.Vat</td>

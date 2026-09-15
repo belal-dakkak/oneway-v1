@@ -79,12 +79,12 @@
                   </td>
                   <td class="mx-auto max-w-sm p-6 text-sm leading-6 sm:text-base sm:leading-7" v-if="user.role_id === 3 || user.role_id === 2 || user.role_id === 5">
                       <div class="ml-4">
-                          <template v-if="admin.country_id === 4">
-                              <div v-for="code in ['SYP', 'USD']" :key="code" class="text-sm font-medium" dir="ltr">
+                          <template v-if="cashboxCodes(user).length">
+                              <div v-for="code in cashboxCodes(user)" :key="code" class="text-sm font-medium" dir="ltr">
                                   {{ formatCashboxBalance(user, code) }} {{ code }}
                               </div>
                           </template>
-                          <div v-else class="text-sm font-medium">{{ formatLegacyCashboxBalance(user) }}</div>
+                          <div v-else class="text-sm font-medium" dir="ltr">0 {{ defaultCashboxCode }}</div>
                       </div>
                   </td>
                   <td class="mx-auto max-w-sm p-6 text-sm leading-6 sm:text-base sm:leading-7" v-if="user.role_id === 2 || user.role_id === 3">
@@ -161,9 +161,11 @@
                   maximumFractionDigits: code === 'SYP' ? 0 : 2,
               })
           },
-          formatLegacyCashboxBalance(user) {
-              const balance = (Number(user.wallet?.credit || 0) - Number(user.wallet?.debit || 0)) * Number(this.rate || 1)
-              return balance.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })
+          cashboxCodes(user) {
+              const codes = (user.wallets || [])
+                  .map(item => String(item.currency_code || 'USD').toUpperCase())
+              if (!codes.includes(this.defaultCashboxCode)) codes.unshift(this.defaultCashboxCode)
+              return [...new Set(codes)]
           },
           getSingleName(type){
               switch (type) {
@@ -214,13 +216,16 @@
                   if (result.isConfirmed) {
                       this.$inertia.post(route('users.wallet.close', id), { return_type: Number(this.type) }, {
                           preserveScroll: true,
-                          onSuccess: () => this.$swal.fire({
+                          onSuccess: (page) => {
+                              if (page.props?.users) this.allUsers = page.props.users
+                              this.$swal.fire({
                               html: '<p class="text-white pt-5 font-extrabold">'+ w+'</p>',
                               icon: 'success', iconColor: '#FFFFFF', width: 400,
                               showConfirmButton: false, padding: '1em', toast: true,
                               position: 'bottom-end', color: '#FFFFFF', background: '#e07575',
                               timer: 2000, timerProgressBar: true,
-                          }),
+                              })
+                          },
                           onError: () => this.$swal.fire({ icon: 'error', text: 'تعذر إغلاق المبيعات. راجع رصيد الصندوق وحاول مجدداً.' }),
                       })
                   }
@@ -262,6 +267,13 @@
       setup() {
           const admin = computed(() => usePage().props.value.auth.user)
           return { admin }
+      },
+      computed: {
+          defaultCashboxCode() {
+              if (Number(this.admin.country_id) === 4) return 'SYP'
+              if (Number(this.admin.country_id) === 2) return 'AED'
+              return 'USD'
+          },
       },
       mounted() {
           window.addEventListener('scroll', debounce((e) => {

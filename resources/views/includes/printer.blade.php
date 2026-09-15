@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="ar" dir="rtl">
 
 
 <head>
@@ -14,7 +14,7 @@
         body {
             margin: 0;
             padding: 0;
-            font-family: 'PT Sans', sans-serif;
+            font-family: 'DejaVu Sans', sans-serif;
         }
 
         @page {
@@ -149,9 +149,18 @@
 
 
     <?php
-        $admin_email  = $settings['email'] ?? '';
-        $admin_mobile = $settings['phone'] ?? '';
-        $shop_address = $settings['address'] ?? '';
+        $invoiceIdentity = $invoiceIdentity ?? [
+            'name' => $settings['title'] ?? config('app.name'),
+            'address' => $settings['address'] ?? '',
+            'phone' => $settings['phone'] ?? '',
+            'email' => $settings['email'] ?? '',
+            'trn' => '',
+            'tax_enabled' => false,
+        ];
+        $admin_email  = $invoiceIdentity['email'];
+        $admin_mobile = $invoiceIdentity['phone'];
+        $shop_address = $invoiceIdentity['address'];
+        $taxEnabled = (bool) $invoiceIdentity['tax_enabled'];
     ?>
 
     <div id="bodyContent" style="margin-bottom: 20px;">
@@ -162,7 +171,7 @@
                 <tr style="text-align: center;">
                     <td colspan="2" style="height: 80px !important">
                         <p style="margin-top: 10px;">
-                            @if($order->seller && $order->seller->enable_tax == 'yes')
+                            @if($taxEnabled)
                                 <span style="font-size:30px !important">
                                     فاتورة ضريبية / TAX INVOICE
                                 </span>
@@ -177,11 +186,11 @@
                 </tr>
 
 
-					@if($order->seller && $order->seller->enable_tax == 'yes')
+					@if($taxEnabled)
 
 					<tr style="text-align: center;">
 						<td colspan="2" style="height: 80px !important">
-							{{ $order->seller->trn }}
+							{{ $invoiceIdentity['trn'] }}
 							TRN
 						</td>
 
@@ -199,14 +208,11 @@
             <tbody>
                 <tr>
                     <td>
-                        One Way
+                        {{ $invoiceIdentity['name'] }}
                     </td>
                     <td>
                         <p>
-                            Tel 1 : +971 545 516 995
-                        </p>
-                        <p>
-                            Tel 2 : +971 564 533 655
+                            @if($admin_mobile) Tel : {{ $admin_mobile }} @endif
                         </p>
                     </td>
                 </tr>
@@ -217,16 +223,7 @@
                     </td>
                     <td style="text-align: left;">
                         <p style="margin-bottom: 10px;">
-                            Branch 1 : Ajman Industrial 2 Beirut Street
-                        </p>
-                        <p style="margin-bottom: 10px;">
-                            Branch 2 : Sharjah City centre
-                        </p>
-                        <p style="margin-bottom: 10px;">
-                            Branch 3 : Lebanon Beirut
-                        </p>
-						<p style="margin-bottom: 10px;">
-                            Branch 4 : Turkiye Istanbul Merter
+                            {{ $shop_address }}
                         </p>
                     </td>
                 </tr>
@@ -311,7 +308,7 @@
                     </td>
                 </tr>
 
-                @if($order->seller && $order->seller->enable_tax == 'yes')
+                @if($taxEnabled)
                 <tr>
                     <td style="height: 40px">
                     Customer TRN
@@ -352,7 +349,7 @@
                     <th class="heading">Model</th>
                     <th class="heading">Qty</th>
                     <th class="heading">Rate</th>
-                    @if($order->seller && $order->seller->enable_tax == 'yes')
+                    @if($taxEnabled)
                     <th class="heading">Amount Exel.Vat</th>
                     <th class="heading">Vat @ {{ $order->seller->tax_ratio }}%</th>
                     <th class="heading">Amount Ancl Vat</th>
@@ -378,7 +375,7 @@
                         <td> {{$order_item->qty}} </td>
                         <td class="price"> {{ number_format($order_item->item_price, $moneyDecimals) }} {{ $Currency }} </td>
 
-                        @if($order->seller && $order->seller->enable_tax == 'yes')
+                        @if($taxEnabled)
                         <td class="price"> {{ number_format($order_item->line_price_without_tax, $moneyDecimals)  }} {{ $Currency }} </td>
                         <td class="price"> {{ number_format($order_item->line_tax_value, $moneyDecimals) }} {{ $Currency }} </td>
                         <td class="price"> {{ number_format($order_item->total_price, $moneyDecimals) }} {{ $Currency }} </td>
@@ -398,7 +395,7 @@
                 @endphp
 
 
-                @if($order->seller && $order->seller->enable_tax == 'yes')
+                @if($taxEnabled)
                 <tr>
                     <td style="text-align: center !important;direction: rtl;" colspan="3" class="sum-up line">
                           الإجمالي بدون الضريبة / Total bill EXel.Vat
@@ -472,7 +469,7 @@
                     </td>
                 </tr>
 
-                @if($order->seller && $order->seller->enable_tax == 'yes')
+                @if($taxEnabled)
                 <tr>
                     <td style="text-align: center !important;direction: rtl;" colspan="3" class="sum-up line">
                          الإجمالي شامل الضريبة / Total bill Incl VAT
@@ -487,7 +484,7 @@
                     <td style="text-align: center !important;direction: rtl;" colspan="3" class="sum-up line">
                         المدفوع / Paid
                     </td>
-                    <td style="text-align: center !important;direction: rtl;" @if($order->seller && $order->seller->enable_tax == 'yes') colspan="3" @else colspan="1" @endif class="line price">
+                    <td style="text-align: center !important;direction: rtl;" @if($taxEnabled) colspan="3" @else colspan="1" @endif class="line price">
                         {{ number_format($order->paid_price, $moneyDecimals) }} {{ $Currency }}
                     </td>
                 </tr>
@@ -495,7 +492,7 @@
                     <td style="text-align: center !important;direction: rtl;" colspan="3" class="sum-up line">
                         المتبقي / Remaining
                     </td>
-                    <td style="text-align: center !important;direction: rtl;" @if($order->seller && $order->seller->enable_tax == 'yes') colspan="3" @else colspan="1" @endif class="line price">
+                    <td style="text-align: center !important;direction: rtl;" @if($taxEnabled) colspan="3" @else colspan="1" @endif class="line price">
                         {{ number_format($order->remain_price, $moneyDecimals) }} {{ $Currency }}
                     </td>
                 </tr>

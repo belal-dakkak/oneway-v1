@@ -7,6 +7,7 @@ use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Jenssegers\Date\Date;
+use App\Support\Country;
 
 class Refund extends Model
 {
@@ -36,28 +37,34 @@ class Refund extends Model
 
     public function getDateAttribute()
     {
+        if (!$this->created_at) {
+            return '';
+        }
         Date::setLocale('ar');
-        return Date::parse($this->created_at)->timezone('Asia/Dubai')->format('d-m-Y h:i a');
+        $countryId = (int) data_get($this, 'orderItem.order.seller.country_id', Country::UAE);
+        return Date::parse($this->created_at)
+            ->timezone(Country::timezone($countryId))
+            ->format('d-m-Y h:i a');
     }
 
     public function getClientNameAttribute()
     {
-        return $this->orderItem->order->buyer?$this->orderItem->order->buyer->name:'طلبية سريعة';
+        return data_get($this, 'orderItem.order.buyer.name', 'طلبية سريعة');
     }
 
     public function getShopNameAttribute()
     {
-        return $this->orderItem->order->seller->name;
+        return (string) data_get($this, 'orderItem.order.seller.name', '—');
     }
 
     public function getItemNameAttribute()
     {
-        return $this->orderItem->product->productColor->product_name;
+        return (string) data_get($this, 'orderItem.product.productColor.product_name', '—');
     }
 
     public function getItemImageAttribute()
     {
-        return $this->orderItem->product->productColor->photo_url;
+        return (string) data_get($this, 'orderItem.product.productColor.photo_url', '');
     }
 
     public function getCurrencyCodeAttribute(): string
