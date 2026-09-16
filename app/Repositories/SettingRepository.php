@@ -14,16 +14,19 @@ class SettingRepository
     public function add(Request $request,$country)
     {
         $language = $request->get('settinglanguage');
-        DB::table('settings')->where('language',$language)->where('country',$country)->delete();
-        $data = $request->except('_method','settinglanguage');
-        foreach ($data as $key => $value) {
-            Setting::create([
-                'name' => $key,
-                'value' => $value,
-                'language' => $language,
-                'country' => (int)$country
-            ]);
-        }
+        $data = $request->except('_method', '_token', 'settinglanguage');
+        $keyColumn = Setting::keyColumn();
+        DB::transaction(function () use ($language, $country, $data, $keyColumn) {
+            DB::table('settings')->where('language', $language)->where('country', $country)->delete();
+            foreach ($data as $key => $value) {
+                Setting::create([
+                    $keyColumn => $key,
+                    'value' => $value,
+                    'language' => $language,
+                    'country' => (int) $country,
+                ]);
+            }
+        });
         Cache::forget("shop_settings_{$country}_{$language}");
 
         // $setting = Setting::create([

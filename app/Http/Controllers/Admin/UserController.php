@@ -14,6 +14,7 @@ use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Redirect;
 use Illuminate\Support\Str;
+use Illuminate\Validation\ValidationException;
 use Inertia\Inertia;
 use Inertia\Response;
 
@@ -168,6 +169,16 @@ class UserController extends Controller
                     );
                 }
             }
+
+            $balances = $this->cashboxes->balancesForUser((int) $source->id);
+            foreach ($balances as $currency => $cashbox) {
+                if (abs($cashbox['balance']) > 0.0001) {
+                    throw ValidationException::withMessages([
+                        'cashbox' => "تعذر إغلاق صندوق {$currency} بالكامل؛ لم تُحفظ العملية.",
+                    ]);
+                }
+            }
+
         }, 3);
 
         $request->session()->flash('success', 'Sales were closed successfully.');

@@ -72,13 +72,8 @@
                       <span>{{ store.locale === 'ar' ? 'عجمان الصناعية 2، شارع بيروت' : 'Ajman Industrial 2 Beirut Street' }}</span>
                     </a>
                     <div class="flex flex-col mt-1" :class="store.locale === 'ar'?'float-right':''">
-                      <a href="https://wa.me/971545516995" class="text-muted-foreground hover:text-primary transition-colors flex items-center gap-2" dir="ltr">
-                        <span>📞</span> +971 545 516 995
-                        <span>{{ store.t('wholesale') }}</span>
-                      </a>
-                      <a href="https://wa.me/971564533655" class="text-muted-foreground hover:text-primary transition-colors flex items-center gap-2" dir="ltr">
-                        <span>📞</span> +971 564 533 655
-                        <span>{{ store.t('retail') }}</span>
+                      <a v-if="contacts.AE?.whatsapp_url" :href="contacts.AE.whatsapp_url" target="_blank" rel="noopener noreferrer" class="text-muted-foreground hover:text-primary transition-colors flex items-center gap-2" dir="ltr">
+                        <span>WhatsApp</span> {{ contacts.AE.whatsapp }}
                       </a>
                     </div>
                   </div>
@@ -95,8 +90,8 @@
                       <span>📍</span>
                       <span>{{ store.locale === 'ar' ? 'لبنان - بيروت' : 'Lebanon - Beirut' }}</span>
                     </a>
-                    <a href="https://wa.me/96176658734" class="text-muted-foreground hover:text-primary transition-colors flex items-center gap-2 mt-1" dir="ltr">
-                      <span>📞</span> +961 76 658 734
+                    <a v-if="contacts.LB?.whatsapp_url" :href="contacts.LB.whatsapp_url" target="_blank" rel="noopener noreferrer" class="text-muted-foreground hover:text-primary transition-colors flex items-center gap-2 mt-1" dir="ltr">
+                      <span>WhatsApp</span> {{ contacts.LB.whatsapp }}
                     </a>
                   </div>
                 </div>
@@ -113,13 +108,8 @@
                       <span>{{ store.locale === 'ar' ? 'سوريا - حلب' : 'Syria - Aleppo' }}</span>
                     </a>
                       <div class="flex flex-col mt-1" :class="store.locale === 'ar'?'float-right':''">
-                          <a href="https://wa.me/963958900555" class="text-muted-foreground hover:text-primary transition-colors flex items-center gap-2" dir="ltr">
-                              <span>📞</span> +963 958 900 555
-                              <span>{{ store.t('wholesale') }}</span>
-                          </a>
-                          <a href="https://wa.me/963947900555" class="text-muted-foreground hover:text-primary transition-colors flex items-center gap-2" dir="ltr">
-                              <span>📞</span> +963 947 900 555
-                              <span>{{ store.t('retail') }}</span>
+                          <a v-if="contacts.SY?.whatsapp_url" :href="contacts.SY.whatsapp_url" target="_blank" rel="noopener noreferrer" class="text-muted-foreground hover:text-primary transition-colors flex items-center gap-2" dir="ltr">
+                              <span>WhatsApp</span> {{ contacts.SY.whatsapp }}
                           </a>
                       </div>
                   </div>
@@ -136,14 +126,11 @@
                       <span>📍</span>
                       <span>{{ store.locale === 'ar' ? 'تركيا، إسطنبول، مارتر' : 'Turkey Istanbul Merter' }}</span>
                     </a>
-                    <a href="https://wa.me/905004001621" class="text-muted-foreground hover:text-primary transition-colors flex items-center gap-2 mt-1" dir="ltr">
-                      <span>📞</span> +905 004 001 621
-                    </a>
                   </div>
                 </div>
 
                 <!-- Email Address -->
-                <div class="flex items-start pt-6 border-t border-border">
+                <div v-if="contacts[store.country]?.email" class="flex items-start pt-6 border-t border-border">
                   <div class="p-3 bg-primary text-white rounded-lg rtl:ml-4 ltr:mr-4">
                     <svg class="h-6 w-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                       <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" />
@@ -151,7 +138,7 @@
                   </div>
                   <div>
                     <h3 class="font-bold text-lg mb-1">{{ store.locale === 'ar' ? 'البريد الإلكتروني' : 'Email' }}</h3>
-                    <a href="mailto:theoneway.fashion@gmail.com" class="text-muted-foreground hover:text-primary transition-colors">theoneway.fashion@gmail.com</a>
+                    <a :href="`mailto:${contacts[store.country].email}`" class="text-muted-foreground hover:text-primary transition-colors">{{ contacts[store.country].email }}</a>
                   </div>
                 </div>
               </div>
@@ -318,7 +305,8 @@
 
 <script>
 import { useStore } from '@/stores/store'
-import { ref, reactive } from 'vue'
+import { ref, reactive, computed } from 'vue'
+import { usePage } from '@inertiajs/inertia-vue3'
 import { Inertia } from '@inertiajs/inertia'
 import FlagIcon from '../Components/Website/FlagIcon.vue'
 import Header from '../Components/Website/Header.vue'
@@ -346,6 +334,8 @@ export default {
   },
   setup() {
     const store = useStore()
+    const page = usePage()
+    const contacts = computed(() => page.props.value.website_contacts || {})
     const showInstagramModal = ref(false)
     const showFacebookModal = ref(false)
     const showTelegramModal = ref(false)
@@ -409,6 +399,7 @@ export default {
 
     return {
       store,
+      contacts,
       showInstagramModal,
       showTelegramModal,
       showFacebookModal,

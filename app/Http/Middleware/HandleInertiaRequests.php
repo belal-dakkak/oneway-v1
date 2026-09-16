@@ -5,7 +5,9 @@ namespace App\Http\Middleware;
 use App\Models\CountryCommerceSetting;
 use App\Models\User;
 use App\Services\CurrencyService;
+use App\Services\CashboxService;
 use App\Services\SalesCurrencyPolicy;
+use App\Services\WebsiteContactService;
 use App\Support\Country;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Session;
@@ -76,22 +78,9 @@ class HandleInertiaRequests extends Middleware
                 if($user){
                     $country = (int) ($user->country_id ?: Country::id());
                     $defaultCurrency = Country::defaultCurrency($country);
-                    $wallets = $user->wallets()->get();
-                    $defaultWallet = $wallets->first(function ($wallet) use ($defaultCurrency) {
-                        return strtoupper((string) ($wallet->currency_code ?: 'USD')) === $defaultCurrency;
-                    });
-                    $credit = (float) ($defaultWallet->credit ?? 0);
-                    $debit = (float) ($defaultWallet->debit ?? 0);
-                    $cashboxes = $wallets
-                        ->mapWithKeys(function ($wallet) {
-                            $code = strtoupper((string) ($wallet->currency_code ?: 'USD'));
-                            return [$code => [
-                                'currency' => $code,
-                                'credit' => (float) $wallet->credit,
-                                'debit' => (float) $wallet->debit,
-                                'balance' => (float) $wallet->credit - (float) $wallet->debit,
-                            ]];
-                        });
+                    $cashboxes = app(CashboxService::class)->balancesForUser((int) $user->id);
+                    $credit = (float) ($cashboxes[$defaultCurrency]['credit'] ?? 0);
+                    $debit = (float) ($cashboxes[$defaultCurrency]['debit'] ?? 0);
                 }else{
                     $credit = 0;
                     $debit  = 0;
@@ -137,6 +126,11 @@ class HandleInertiaRequests extends Middleware
                 'SY' => $syriaRetailAvailable || (bool) Session::get('is_merchant'),
                 'TR' => false,
             ],
+            'website_contacts' => function () use ($request) {
+                return $request->is('admin/*')
+                    ? []
+                    : app(WebsiteContactService::class)->forStorefrontCountries();
+            },
             'currency_options' => $currencyOptions,
             'default_currency' => $defaultStorefrontCurrency,
             'transaction_currency' => $defaultStorefrontCurrency,

@@ -1,6 +1,6 @@
 <template>
   <app-layout title="الصندوق">
-    <template #header><h2 class="font-semibold text-xl text-gray-800" dir="rtl">الصندوق حسب العملة</h2></template>
+    <template #header><h2 class="font-semibold text-xl text-gray-800" dir="rtl">الصندوق حسب العملة <span class="text-xs text-gray-500">#{{ walletOwnerId }}</span></h2></template>
     <div class="py-10 max-w-6xl mx-auto px-4" dir="rtl">
       <div class="grid md:grid-cols-2 gap-5 mb-8">
         <div v-for="code in cashboxCodes" :key="code" class="bg-white rounded-xl shadow p-6">
@@ -38,8 +38,10 @@
 import AppLayout from '@/Layouts/AppLayout.vue'
 export default {
   components: { AppLayout },
-  props: { wallets: Object, movements: Object, canExchange: Boolean, exchangeRate: [Number, String], defaultCurrency: { type: String, default: 'USD' } },
-  data() { return { form: this.$inertia.form({ from: 'SYP', to: 'USD', amount: null, rate: this.exchangeRate, note: '' }) } },
+  props: { wallets: Object, movements: Object, walletOwnerId: Number, canExchange: Boolean, exchangeRate: [Number, String], defaultCurrency: { type: String, default: 'USD' } },
+  data() { return { form: this.$inertia.form({ from: 'SYP', to: 'USD', amount: null, rate: this.exchangeRate, note: '' }), refreshing: false } },
+  mounted() { window.addEventListener('focus', this.refreshBalances) },
+  beforeUnmount() { window.removeEventListener('focus', this.refreshBalances) },
   computed: {
     cashboxCodes() {
       const codes = Object.keys(this.wallets || {})
@@ -50,6 +52,11 @@ export default {
   },
   methods: {
     money(value, code) { const decimals = code === 'SYP' ? 0 : 2; return `${Number(value || 0).toLocaleString(undefined, { minimumFractionDigits: decimals, maximumFractionDigits: decimals })} ${code}` },
+    refreshBalances() {
+      if (this.refreshing) return
+      this.refreshing = true
+      this.$inertia.reload({ only: ['wallets', 'movements', 'auth'], preserveScroll: true, onFinish: () => { this.refreshing = false } })
+    },
     submitExchange() { this.form.post(route('cashboxes.exchange'), { preserveScroll: true, onSuccess: () => this.form.reset('amount', 'note') }) },
     syncTarget() { this.form.to = this.form.from === 'USD' ? 'SYP' : 'USD' },
   },

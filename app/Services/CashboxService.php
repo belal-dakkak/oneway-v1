@@ -18,6 +18,21 @@ class CashboxService
         $this->currencies = $currencies;
     }
 
+    /** Read the same persisted balances for the branch and administrator views. */
+    public function balancesForUser(int $userId): array
+    {
+        return Wallet::query()->where('user_id', $userId)->get()
+            ->mapWithKeys(function (Wallet $wallet) {
+                $code = strtoupper((string) ($wallet->currency_code ?: 'USD'));
+                return [$code => [
+                    'currency' => $code,
+                    'credit' => (float) $wallet->credit,
+                    'debit' => (float) $wallet->debit,
+                    'balance' => (float) $wallet->credit - (float) $wallet->debit,
+                ]];
+            })->all();
+    }
+
     public function credit(
         int $userId,
         float $amount,

@@ -23,7 +23,7 @@ class FavoriteController extends Controller
 
         $country = Country::id();
         $language = 'en';
-        $settings = Setting::where('country', $country)->where('language', $language)->pluck('value', 'name')->toArray();
+        $settings = Setting::where('country', $country)->where('language', $language)->pluck('value', Setting::keyColumn())->toArray();
 
         $favorites = [];
         if (auth()->check()) {

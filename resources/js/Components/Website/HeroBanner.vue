@@ -131,7 +131,8 @@ export default defineComponent({
 }
 
 .hero-carousel :deep(.carousel__pagination-button--active) {
-  @apply bg-white w-8;
+  @apply w-8;
+  background-color: #c20000 !important;
 }
 
 /* Navigation Arrows (Desktop) */

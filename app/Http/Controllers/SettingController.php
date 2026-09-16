@@ -64,25 +64,16 @@ class SettingController extends Controller
     {
         $language  = $language == 'ar' ? $language : 'en';
         $country = auth()->user()->country_id;
-        // $settings  = Setting::where('country',$country)->where('language',$language)->pluck('value','name')->toArray();
-        $settings  = Setting::where('country',$country)->where('language',$language);
-        $title     = Setting::where('country',$country)->where('language',$language)->where('name','title')->first()->value??'';
-        $phone     = Setting::where('country',$country)->where('language',$language)->where('name','phone')->first()->value??'';
-        $tiktok    = Setting::where('country',$country)->where('language',$language)->where('name','tiktok')->first()->value??'';
-        $facebook  = Setting::where('country',$country)->where('language',$language)->where('name','facebook')->first()->value??'';
-        $instagram = Setting::where('country',$country)->where('language',$language)->where('name','instagram')->first()->value??'';
-        $whatsapp  = Setting::where('country',$country)->where('language',$language)->where('name','whatsapp')->first()->value??'';
-        $address   = Setting::where('country',$country)->where('language',$language)->where('name','address')->first()->value??'';
-        $email     = Setting::where('country',$country)->where('language',$language)->where('name','email')->first()->value??'';
+        $settings = Setting::valuesFor((int) $country, $language);
         return Inertia::render('Admin/Settings/Edit',[
-            'title' => $title,
-            'phone' => $phone,
-            'tiktok' => $tiktok,
-            'facebook' => $facebook,
-            'instagram' => $instagram,
-            'whatsapp' => $whatsapp,
-            'address' => $address,
-            'email' => $email,
+            'title' => $settings['title'] ?? '',
+            'phone' => $settings['phone'] ?? '',
+            'tiktok' => $settings['tiktok'] ?? '',
+            'facebook' => $settings['facebook'] ?? '',
+            'instagram' => $settings['instagram'] ?? '',
+            'whatsapp' => $settings['whatsapp'] ?? '',
+            'address' => $settings['address'] ?? '',
+            'email' => $settings['email'] ?? '',
             'settinglanguage' => $language
         ]);
     }

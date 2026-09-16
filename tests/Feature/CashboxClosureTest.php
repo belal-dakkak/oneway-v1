@@ -5,6 +5,9 @@ namespace Tests\Feature;
 use App\Models\Currency;
 use App\Models\User;
 use App\Models\Wallet;
+use App\Models\WalletMovement;
+use App\Services\CashboxService;
+use Inertia\Testing\AssertableInertia as Assert;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Tests\TestCase;
 
@@ -32,6 +35,10 @@ class CashboxClosureTest extends TestCase
         $this->assertSame(15.0, $this->balance($admin, 'USD'));
         $this->assertSame(260000.0, $this->balance($admin, 'SYP'));
         $this->assertDatabaseCount('wallet_movements', 4);
+        $movements = WalletMovement::query()->where('payment_method', 'sales_closure')->get();
+        $this->assertCount(1, $movements->pluck('exchange_group')->unique());
+        $this->assertNotEmpty($movements->first()->exchange_group);
+        $this->assertSame([$warehouse->id], $movements->pluck('source_id')->unique()->values()->all());
     }
 
     public function test_negative_cashbox_is_reconciled_with_an_audited_reverse_transfer(): void
@@ -65,6 +72,32 @@ class CashboxClosureTest extends TestCase
             ->post(route('users.wallet.close', $shop->id), ['return_type' => User::ROLE_SHOP])
             ->assertRedirect(route('users.index', ['type' => User::ROLE_SHOP]));
         $this->assertDatabaseCount('wallet_movements', 2);
+    }
+
+    public function test_branch_page_reads_the_closed_wallet_and_a_later_sale_is_a_new_balance(): void
+    {
+        $admin = $this->user(User::ROLE_ADMIN, 'page-admin@example.test');
+        $shop = $this->user(User::ROLE_SHOP, 'page-shop@example.test');
+        Wallet::query()->updateOrCreate(
+            ['user_id' => $shop->id, 'currency_code' => 'USD'],
+            ['credit' => 25, 'debit' => 0]
+        );
+
+        $this->actingAs($admin)->post(route('users.wallet.close', $shop->id));
+        $this->actingAs($shop)->get(route('cashboxes.index'))
+            ->assertOk()
+            ->assertInertia(fn (Assert $page) => $page
+                ->component('Admin/Cashboxes/Index')
+                ->where('walletOwnerId', $shop->id)
+                ->where('wallets.USD.balance', 0)
+                ->etc());
+
+        app(CashboxService::class)->credit($shop->id, 7, 'USD', 'test:new-sale');
+        $this->actingAs($shop)->get(route('cashboxes.index'))
+            ->assertInertia(fn (Assert $page) => $page
+                ->component('Admin/Cashboxes/Index')
+                ->where('wallets.USD.balance', 7)
+                ->etc());
     }
 
     public function test_only_the_country_admin_can_receive_a_sales_closure(): void

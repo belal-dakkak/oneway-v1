@@ -143,7 +143,7 @@ class HomeController extends Controller
             function () use ($country, $language) {
                 return Setting::where('country', $country)
                     ->where('language', $language)
-                    ->pluck('value', 'name')
+                    ->pluck('value', Setting::keyColumn())
                     ->toArray();
             }
         );
@@ -312,7 +312,7 @@ class HomeController extends Controller
             function () use ($country, $language) {
                 return Setting::where('country', $country)
                     ->where('language', $language)
-                    ->pluck('value', 'name')
+                    ->pluck('value', Setting::keyColumn())
                     ->toArray();
             }
         );
@@ -403,7 +403,7 @@ class HomeController extends Controller
 
         $country = Country::id();
         $language = 'ar';
-        $settings = Setting::where('country', $country)->where('language', $language)->pluck('value', 'name')->toArray();
+        $settings = Setting::where('country', $country)->where('language', $language)->pluck('value', Setting::keyColumn())->toArray();
 
 //        dd($product->colors);
         return Inertia::render('ProductDetail', [
@@ -431,7 +431,7 @@ class HomeController extends Controller
 
         $country = Country::id();
         $language = 'ar';
-        $settings = Setting::where('country', $country)->where('language', $language)->pluck('value', 'name')->toArray();
+        $settings = Setting::where('country', $country)->where('language', $language)->pluck('value', Setting::keyColumn())->toArray();
 
         return Inertia::render('Categories', [
             'categories' => $categories,
@@ -452,7 +452,7 @@ class HomeController extends Controller
 
         $country = Country::id();
         $language = 'ar';
-        $settings = Setting::where('country', $country)->where('language', $language)->pluck('value', 'name')->toArray();
+        $settings = Setting::where('country', $country)->where('language', $language)->pluck('value', Setting::keyColumn())->toArray();
 
         return Inertia::render('About', [
             'categories' => $categories,
@@ -473,7 +473,7 @@ class HomeController extends Controller
 
         $country = Country::id();
         $language = 'ar';
-        $settings = Setting::where('country', $country)->where('language', $language)->pluck('value', 'name')->toArray();
+        $settings = Setting::where('country', $country)->where('language', $language)->pluck('value', Setting::keyColumn())->toArray();
 
         return Inertia::render('Contact', [
             'categories' => $categories,
@@ -534,7 +534,7 @@ class HomeController extends Controller
 
         $country = Country::id();
         $language = 'ar';
-        $settings = Setting::where('country', $country)->where('language', $language)->pluck('value', 'name')->toArray();
+        $settings = Setting::where('country', $country)->where('language', $language)->pluck('value', Setting::keyColumn())->toArray();
 
         return Inertia::render('ComingSoon', [
             'categories' => $categories,
@@ -575,7 +575,7 @@ class HomeController extends Controller
 
         $country = Country::id();
         $language = 'ar';
-        $settings = Setting::where('country', $country)->where('language', $language)->pluck('value', 'name')->toArray();
+        $settings = Setting::where('country', $country)->where('language', $language)->pluck('value', Setting::keyColumn())->toArray();
 
         return Inertia::render($component, [
             'categories' => $categories,

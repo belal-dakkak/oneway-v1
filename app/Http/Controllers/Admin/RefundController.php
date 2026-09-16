@@ -72,6 +72,7 @@ class RefundController extends Controller
 
         return Inertia::render('Admin/Refunds/Index', [
             'rate'    => $rate,
+            'rows'    => $refunds['rows'],
             'refunds' => $refunds['rows'],
             'total'   => $refunds['total'],
             'totals_by_currency' => $refunds['totals_by_currency'] ?? [],

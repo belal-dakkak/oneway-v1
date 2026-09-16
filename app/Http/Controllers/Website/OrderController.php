@@ -63,7 +63,7 @@ class OrderController extends Controller
 
         $country = Country::id();
         $language = 'en';
-        $settings = Setting::where('country', $country)->where('language', $language)->pluck('value', 'name')->toArray();
+        $settings = Setting::where('country', $country)->where('language', $language)->pluck('value', Setting::keyColumn())->toArray();
 
         return Inertia::render('Cart', [
             'categories' => $categories,
@@ -83,7 +83,7 @@ class OrderController extends Controller
 
         $country = Country::id();
         $language = 'en';
-        $settings = Setting::where('country', $country)->where('language', $language)->pluck('value', 'name')->toArray();
+        $settings = Setting::where('country', $country)->where('language', $language)->pluck('value', Setting::keyColumn())->toArray();
 
         return Inertia::render('Checkout', [
             'categories' => $categories,
@@ -295,7 +295,7 @@ class OrderController extends Controller
 
         $country = $order->country_id;
         $language = 'en';
-        $settings = Setting::where('country', $country)->where('language', $language)->pluck('value', 'name')->toArray();
+        $settings = Setting::where('country', $country)->where('language', $language)->pluck('value', Setting::keyColumn())->toArray();
 
         return Inertia::render('OrderSuccess', [
             'order' => $order,
@@ -317,7 +317,7 @@ class OrderController extends Controller
 
         $country = $order->country_id;
         $language = 'en';
-        $settings = Setting::where('country', $country)->where('language', $language)->pluck('value', 'name')->toArray();
+        $settings = Setting::where('country', $country)->where('language', $language)->pluck('value', Setting::keyColumn())->toArray();
 
         return Inertia::render('PaymentFailed', [
             'order' => $order,
@@ -337,7 +337,7 @@ class OrderController extends Controller
         $categories = transformDataForVue(Category::limit(6)->get());
         $settings = Setting::where('country', $order->country_id)
             ->where('language', 'en')
-            ->pluck('value', 'name')
+            ->pluck('value', Setting::keyColumn())
             ->toArray();
 
         return Inertia::render('PaymentPending', [

@@ -168,7 +168,7 @@ class OrderController extends Controller
 
         $language  = 'en';
         $country = auth()->user()->country_id;
-        $settings = Setting::where('country',$country)->where('language',$language)->pluck('value','name')->toArray();
+        $settings = Setting::where('country',$country)->where('language',$language)->pluck('value',Setting::keyColumn())->toArray();
 
         if ($sellerId = $request->get('shop')) {
             $seller = User::find($sellerId);
@@ -199,7 +199,7 @@ class OrderController extends Controller
 
         $language  = 'en';
         $country = auth()->user()->country_id;
-        $settings = Setting::where('country',$country)->where('language',$language)->pluck('value','name')->toArray();
+        $settings = Setting::where('country',$country)->where('language',$language)->pluck('value',Setting::keyColumn())->toArray();
 
         if ($sellerId = $request->get('shop')) {
             $seller = User::find($sellerId);
@@ -1343,7 +1343,7 @@ class OrderController extends Controller
         $invoice_date = date('jS F Y', strtotime($order->invoice_date));
         $language  = 'en';
         $country = $order->country_id ?? $order->seller->country_id ?? auth()->user()->country_id;
-        $settings = Setting::where('country',$country)->where('language',$language)->pluck('value','name')->toArray();
+        $settings = Setting::where('country',$country)->where('language',$language)->pluck('value',Setting::keyColumn())->toArray();
 
         // dd('ok');
 
@@ -1465,7 +1465,7 @@ class OrderController extends Controller
         $invoice_date = date('jS F Y', strtotime($order->invoice_date));
         $language  = 'en';
         $country = $order->country_id ?? $order->seller->country_id ?? auth()->user()->country_id;
-        $settings = Setting::where('country',$country)->where('language',$language)->pluck('value','name')->toArray();
+        $settings = Setting::where('country',$country)->where('language',$language)->pluck('value',Setting::keyColumn())->toArray();
 
         return view('includes.printer',array('user_role'=>$user_role,'order'=>$order,'settings'=>$settings, 'items' => $items,'Currency' => $Currency));
 
@@ -1474,8 +1474,11 @@ class OrderController extends Controller
     public function typedInvoice(string $source, int $id)
     {
         $data = $this->invoicePayload($source, $id);
+        $data['invoiceLogoSrc'] = asset('custom/logo-icon-black.png');
 
-        return view('receipts.pdfReceipt', $data);
+        return view($data['invoiceCountryId'] === Country::SYRIA
+            ? 'includes.invoice_template'
+            : 'receipts.pdfReceipt', $data);
     }
 
     public function typedDownloadInvoice(string $source, int $id)
@@ -1509,10 +1512,20 @@ class OrderController extends Controller
         $this->authorizeInvoiceAccess($order);
         $data = $this->invoiceDataService->forOrder($order);
         $country = $order->country_id ?? optional($order->seller)->country_id ?? Country::UAE;
-        $data['settings'] = Setting::where('country', $country)
-            ->where('language', 'en')
-            ->pluck('value', 'name')
-            ->toArray();
+        $data['settings'] = Setting::valuesFor((int) $country, 'en');
+        if ((int) $country === Country::SYRIA) {
+            $arabicContacts = Setting::where('country', $country)
+                ->where('language', 'ar')
+                ->whereIn(Setting::keyColumn(), ['phone', 'email'])
+                ->pluck('value', Setting::keyColumn())
+                ->toArray();
+            foreach (['phone', 'email'] as $field) {
+                if (empty($data['settings'][$field])) {
+                    $data['settings'][$field] = $arabicContacts[$field] ?? '';
+                }
+            }
+        }
+        $data['invoiceCountryId'] = (int) $country;
         $data['invoiceIdentity'] = $this->invoiceDataService->identityForOrder($order, $data['settings']);
         $data['Currency'] = $data['currency'];
         $data['user_role'] = $order instanceof Order && $order->seller && (int) $order->seller->role_id !== User::ROLE_SHOP

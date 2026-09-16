@@ -161,6 +161,7 @@
         $admin_mobile = $invoiceIdentity['phone'];
         $shop_address = $invoiceIdentity['address'];
         $taxEnabled = (bool) $invoiceIdentity['tax_enabled'];
+        $isSyriaInvoice = (int) ($invoiceCountryId ?? ($order->country_id ?? optional($order->seller)->country_id ?? 0)) === \App\Support\Country::SYRIA;
     ?>
 
     <div id="bodyContent" style="margin-bottom: 20px;">
@@ -212,10 +213,15 @@
                     </td>
                     <td>
                         <p>
-                            @if($admin_mobile) Tel : {{ $admin_mobile }} @endif
+                            @if($admin_mobile) {{ $isSyriaInvoice ? 'الهاتف / Tel' : 'Tel' }} : {{ $admin_mobile }} @endif
                         </p>
                     </td>
                 </tr>
+                @if($isSyriaInvoice && $admin_email)
+                <tr>
+                    <td colspan="2" style="text-align:center;">البريد الإلكتروني / Email: {{ $admin_email }}</td>
+                </tr>
+                @endif
                 <tr>
                     <td>
                         <img class="media" data-src="{{ asset('custom/logo-icon-black.png') }}" src="{{ asset('custom/logo-icon-black.png') }}" style="width: 150px;">

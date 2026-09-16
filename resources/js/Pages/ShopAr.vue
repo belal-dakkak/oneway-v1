@@ -16,7 +16,7 @@
                 <div class="flex items-center justify-between">
                     <!-- Logo -->
                     <inertia-link :href="route('homepage.arabic')" class="">
-                        <img :src="'/custom/logo-icon.png'" class="w-48" alt="" />
+                        <img :src="brandLogo" class="w-48 object-contain" alt="Oneway Logo" />
                     </inertia-link>
                     <!-- Menu Items -->
                     <div class="hidden space-x-6 md:flex">
@@ -53,13 +53,9 @@
                 </div>
 
                 <div class="md:hidden flex justify-around mt-4" style="position: fixed;bottom: 0;z-index: 999;margin-left: 8%;">
-                    <!-- <a href="https://www.tiktok.com/@oneway503" target="_blank"><img src="/assets/header/tiktok.png" style="padding: 18px;" alt="" srcset=""></a>
-                    <a href="https://www.facebook.com/theoneway.fashion" target="_blank"><img src="/assets/header/facebook.png" style="padding: 18px;" alt="" srcset=""></a>
-                    <a :href="'https://wa.me/'+wnumber" target="_blank"><img src="/assets/header/whatsapp.png" style="padding: 18px;" alt="" srcset=""></a>
-                    <a href="https://www.instagram.com/theoneway.fashion" target="_blank"><img src="/assets/header/instagram.png" style="padding: 18px;" alt="" srcset=""></a> -->
                     <a href="https://www.tiktok.com/@oneway503" target="_blank"><img src="/assets/header/tiktok.png" style="padding: 18px;" alt="" srcset=""></a>
                     <a href="https://www.facebook.com/theoneway.fashion" target="_blank"><img src="/assets/header/facebook.png" style="padding: 18px;" alt="" srcset=""></a>
-                    <a href="https://wa.me/+971545516995" target="_blank"><img src="/assets/header/whatsapp.png" style="padding: 18px;" alt="" srcset=""></a>
+                    <a v-if="whatsappUrl" :href="whatsappUrl" target="_blank" rel="noopener noreferrer"><img src="/assets/header/whatsapp.png" style="padding: 18px;" alt="WhatsApp"></a>
                     <a href="https://www.instagram.com/theoneway.fashion" target="_blank"><img src="/assets/header/instagram.png" style="padding: 18px;" alt="" srcset=""></a>
                 </div>
 
@@ -190,7 +186,7 @@
 
         <footer class="snap-start h-1/2 bg-black flex flex-col md:flex-row items-center md:justify-around text-white">
             <div class="flex flex-col ml-12 items-center py-4">
-                <img :src="'/custom/logo-icon.png'" class="w-48" alt="one-way">
+                <img :src="brandLogo" class="w-48 object-contain" alt="Oneway Logo">
                 <p>
                     © 2023 One Way.
                     جميع الحقوق محفوطة.</p>
@@ -299,6 +295,9 @@ import ProductCarousel from "./product/ProductCarousel.vue";
 import ArrowDown from "../Shared/Icons/ArrowDown.vue";
 import ColorTag from '@/Components/ColorTag.vue';
 import { useStore } from '@/stores/store';
+import { usePage } from '@inertiajs/inertia-vue3';
+import { computed } from 'vue';
+import { brandLogo } from '@/Utils/brand';
 
 const components = { Carousel, Slide, Pagination, Navigation, Arrow, ArrowDown, ProductCarousel, ColorTag }
 
@@ -311,7 +310,9 @@ export default {
     },
     setup() {
       const store = useStore()
-      return { store }
+      const page = usePage()
+      const whatsappUrl = computed(() => page.props.value.website_contacts?.[store.country]?.whatsapp_url || null)
+      return { store, whatsappUrl, brandLogo }
     },
     data(){
       return {

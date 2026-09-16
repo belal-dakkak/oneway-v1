@@ -7,9 +7,9 @@
           <div>
             <a :href="route('homepage')" class="inline-block mb-4">
               <img
-                src="/custom/logo-icon-black.png"
+                :src="brandLogo"
                 alt="Oneway Logo"
-                class="h-16 md:h-20 w-auto brightness-0 invert"
+                class="h-16 md:h-20 w-auto max-w-full object-contain brightness-0 invert"
               />
             </a>
             <p class="text-sm text-gray-400 leading-relaxed">
@@ -130,16 +130,9 @@
                 <span class="text-[#c20000]">📍</span>
                 <span>{{ store.locale === 'ar' ? 'عجمان الصناعية 2، شارع بيروت' : 'Ajman Industrial 2 Beirut Street' }}</span>
               </a>
-              <div class="flex items-center gap-2" dir="ltr">
-                <span class="text-[#c20000]">📞</span>
-                <a href="https://wa.me/971545516995" class="hover:text-white transition-colors">+971 545 516 995</a>
-                  <span>{{ store.t('wholesale') }}</span>
-              </div>
-              <div class="flex items-center gap-2" dir="ltr">
-                <span class="text-[#c20000]">📞</span>
-                <a href="https://wa.me/971564533655" class="hover:text-white transition-colors">+971 564 533 655</a>
-                  <span>{{ store.t('retail') }}</span>
-              </div>
+              <a v-if="contacts.AE?.whatsapp_url" :href="contacts.AE.whatsapp_url" target="_blank" rel="noopener noreferrer" class="inline-flex items-center gap-2 rounded-lg border border-white/20 px-3 py-2 hover:text-white hover:border-[#c20000] transition-colors" dir="ltr">
+                <span class="text-[#c20000]">WhatsApp</span> {{ contacts.AE.whatsapp }}
+              </a>
             </div>
 
             <!-- Branch: Lebanon -->
@@ -152,10 +145,9 @@
                 <span class="text-[#c20000]">📍</span>
                 <span>{{ store.locale === 'ar' ? 'لبنان - بيروت' : 'Lebanon - Beirut' }}</span>
               </a>
-              <div class="flex items-center gap-2" dir="ltr">
-                <span class="text-[#c20000]">📞</span>
-                <a href="https://wa.me/96176658734" class="hover:text-white transition-colors">+961 76 658 734</a>
-              </div>
+              <a v-if="contacts.LB?.whatsapp_url" :href="contacts.LB.whatsapp_url" target="_blank" rel="noopener noreferrer" class="inline-flex items-center gap-2 rounded-lg border border-white/20 px-3 py-2 hover:text-white hover:border-[#c20000] transition-colors" dir="ltr">
+                <span class="text-[#c20000]">WhatsApp</span> {{ contacts.LB.whatsapp }}
+              </a>
             </div>
 
             <!-- Branch: Syria -->
@@ -168,16 +160,9 @@
                 <span class="text-[#c20000]">📍</span>
                 <span>{{ store.locale === 'ar' ? 'سوريا - حلب' : 'Syria - Aleppo' }}</span>
               </a>
-              <div class="flex items-center gap-2" dir="ltr">
-                <span class="text-[#c20000]">📞</span>
-                <a href="https://wa.me/963958900555" class="hover:text-white transition-colors">+963 958 900 555</a>
-                 <span>{{ store.t('wholesale') }}</span>
-              </div>
-                <div class="flex items-center gap-2" dir="ltr">
-                    <span class="text-[#c20000]">📞</span>
-                    <a href="https://wa.me/963947900555" class="hover:text-white transition-colors">+963 947 900 555</a>
-                    <span>{{ store.t('retail') }}</span>
-                </div>
+              <a v-if="contacts.SY?.whatsapp_url" :href="contacts.SY.whatsapp_url" target="_blank" rel="noopener noreferrer" class="inline-flex items-center gap-2 rounded-lg border border-white/20 px-3 py-2 hover:text-white hover:border-[#c20000] transition-colors" dir="ltr">
+                <span class="text-[#c20000]">WhatsApp</span> {{ contacts.SY.whatsapp }}
+              </a>
             </div>
 
             <!-- Branch: Turkey -->
@@ -190,17 +175,13 @@
                 <span class="text-[#c20000]">📍</span>
                 <span>{{ store.locale === 'ar' ? 'تركيا، إسطنبول، مارتر' : 'Turkey Istanbul Merter' }}</span>
               </a>
-              <div class="flex items-center gap-2" dir="ltr">
-                <span class="text-[#c20000]">📞</span>
-                <a href="https://wa.me/905004001621" class="hover:text-white transition-colors">+905 004 001 621</a>
-              </div>
             </div>
 
             <!-- Email -->
-            <div class="pt-4 border-t border-white/5">
+            <div v-if="contacts[store.country]?.email" class="pt-4 border-t border-white/5">
               <div class="flex items-center gap-2">
                 <span class="text-[#c20000]">✉️</span>
-                <a href="mailto:theoneway.fashion@gmail.com" class="hover:text-white transition-colors">theoneway.fashion@gmail.com</a>
+                <a :href="`mailto:${contacts[store.country].email}`" class="hover:text-white transition-colors">{{ contacts[store.country].email }}</a>
               </div>
             </div>
           </div>
@@ -291,6 +272,9 @@
 import { useStore } from '@/stores/store'
 import { ref } from 'vue'
 import FlagIcon from './FlagIcon.vue'
+import { usePage } from '@inertiajs/inertia-vue3'
+import { computed } from 'vue'
+import { brandLogo } from '@/Utils/brand'
 
 export default {
   name: 'Sitemap',
@@ -312,6 +296,8 @@ export default {
   },
   setup() {
     const store = useStore()
+    const page = usePage()
+    const contacts = computed(() => page.props.value.website_contacts || {})
     const showInstagramModal = ref(false)
     const showFacebookModal = ref(false)
 
@@ -322,6 +308,8 @@ export default {
 
     return {
       store,
+      contacts,
+      brandLogo,
       showInstagramModal,
       showFacebookModal,
       closeModals

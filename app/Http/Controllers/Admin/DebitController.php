@@ -248,7 +248,7 @@ class DebitController extends Controller
         $Currency = Country::defaultCurrency($country);
         $rate = app(CurrencyService::class)->rate($Currency);
 				
-        $settings = Setting::where('country',$country)->where('language',$language)->pluck('value','name')->toArray();
+        $settings = Setting::where('country',$country)->where('language',$language)->pluck('value',Setting::keyColumn())->toArray();
         $pdf = PDF::loadView('includes.log_template',array('log'=>$log,'settings'=>$settings, 'creditor' => $creditor, 'debtor' => $debtor, 'debit' => $debit, 'now' => $now, 'totalPaid' => $totalPaid, 'totalAccount' => $totalAccount, 'totalRefund' => $totalRefund,'rate' => $rate,'Currency' => $Currency));
         return $pdf->download('Invoice_'.config('app.name').'_Acc_No # '.$id.'.pdf');
         return view('receipts.pdfMerchantAccount', compact('log', 'creditor', 'debtor', 'debit', 'now', 'totalPaid', 'totalAccount','totalRefund','Currency'));

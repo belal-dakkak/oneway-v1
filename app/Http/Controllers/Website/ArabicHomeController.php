@@ -55,7 +55,7 @@ class ArabicHomeController extends Controller
         }
         // Cache Settings for 1 hour
         $settings = Cache::remember("settings_{$country}_{$language}", 3600, function() use ($country, $language) {
-            return Setting::where('country', $country)->where('language', $language)->pluck('value', 'name')->toArray();
+            return Setting::where('country', $country)->where('language', $language)->pluck('value', Setting::keyColumn())->toArray();
         });
 
         $sliders = Cache::remember("home_sliders", 3600, fn() => Slider::all());

@@ -149,9 +149,10 @@ class Product extends Model
     public function getRawSizesAttribute()
     {
         $raw = '';
-        foreach ($this->sizes as $key => $size){
+        $sizes = is_array($this->sizes) ? $this->sizes : [];
+        foreach ($sizes as $key => $size){
             $raw .= $size ;
-            if ($key < count($this->sizes)-1)
+            if ($key < count($sizes)-1)
                 $raw .= ' - ';
         }
         return $raw;

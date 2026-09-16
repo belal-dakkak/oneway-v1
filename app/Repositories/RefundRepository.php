@@ -213,8 +213,8 @@ class RefundRepository
         });
         if ($search = $request->get('search')) {
             $refunds->where(function ($query) use ($search) {
-                $query->where('item_barcode', 'LIKE', "%$search%")
-                    ->orWhere('order_barcode', 'LIKE', "%$search%");
+                $query->where('refunds.item_barcode', 'LIKE', "%$search%")
+                    ->orWhere('refunds.order_barcode', 'LIKE', "%$search%");
             });
         }
 
@@ -276,14 +276,18 @@ class RefundRepository
             $refunds->orderByDesc('id');
         }
 
+        // MySQL resolves GROUP BY currency_code to refunds.currency_code (the
+        // physical column), not necessarily to a SELECT alias. Group by the
+        // exact expression and use a distinct alias under ONLY_FULL_GROUP_BY.
+        $currencyExpression = "UPPER(COALESCE(NULLIF(refunds.currency_code, ''), NULLIF(refund_orders.curr_type, ''), 'USD'))";
         $totalsByCurrency = (clone $refunds)
             ->reorder()
             ->join('order_items as refund_order_items', 'refunds.order_item_id', '=', 'refund_order_items.id')
             ->join('orders as refund_orders', 'refund_order_items.order_id', '=', 'refund_orders.id')
-            ->selectRaw("UPPER(COALESCE(refund_orders.curr_type, 'USD')) as currency_code")
+            ->selectRaw("{$currencyExpression} as report_currency")
             ->selectRaw('SUM(CASE WHEN refunds.total_price_paid IS NOT NULL AND refunds.total_price_paid <> 0 THEN refunds.total_price_paid ELSE refunds.total_price * COALESCE(refund_orders.curr_rate, 1) END) as total')
-            ->groupBy('currency_code')
-            ->pluck('total', 'currency_code')
+            ->groupByRaw($currencyExpression)
+            ->pluck('total', 'report_currency')
             ->map(function ($total) {
                 return (float) $total;
             })

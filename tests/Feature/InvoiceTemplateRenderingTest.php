@@ -3,12 +3,48 @@
 namespace Tests\Feature;
 
 use App\Models\WebsiteOrder;
+use App\Models\Order;
+use App\Models\User;
 use App\Services\InvoiceDataService;
 use Illuminate\Support\Collection;
 use Tests\TestCase;
 
 class InvoiceTemplateRenderingTest extends TestCase
 {
+    public function test_syrian_invoice_uses_website_contacts_and_positions_buyer_left_of_seller(): void
+    {
+        $seller = new User([
+            'name' => 'Syrian shop', 'country_id' => User::COUNTRY_SYRIA,
+            'phone' => 'shop-phone', 'email' => 'shop@example.test',
+        ]);
+        $order = new Order([
+            'barcode' => 'SY-LAYOUT-1', 'curr_type' => 'USD', 'curr_rate' => 1,
+            'type' => Order::TYPE_CASH, 'total_price' => 5, 'paid_price' => 5,
+            'remain_price' => 0, 'first_name' => 'Buyer',
+        ]);
+        $order->id = 81;
+        $order->created_at = now();
+        $order->setRelation('seller', $seller);
+        $order->setRelation('items', new Collection());
+
+        $service = new InvoiceDataService();
+        $identity = $service->identityForOrder($order, ['phone' => '+963 900 000 001', 'email' => 'syria@example.test']);
+        $this->assertSame('+963 900 000 001', $identity['phone']);
+        $this->assertSame('syria@example.test', $identity['email']);
+        $this->assertSame('', $service->identityForOrder($order, [])['email']);
+
+        $data = $service->forOrder($order);
+        $data += ['invoiceIdentity' => $identity, 'invoiceCountryId' => User::COUNTRY_SYRIA, 'settings' => [], 'Currency' => 'USD', 'user_role' => 'shop'];
+        $html = view('includes.invoice_template', $data)->render();
+        $this->assertStringContainsString('dir="ltr"', $html);
+        $this->assertLessThan(strpos($html, 'Syrian shop'), strpos($html, 'BILL TO'));
+        $this->assertStringContainsString('syria@example.test', $html);
+        $this->assertStringNotContainsString('shop@example.test', $html);
+        $this->assertStringContainsString('DESCRIPTION / الوصف', $html);
+        $this->assertStringContainsString('QTY / الكمية', $html);
+        $this->assertStringStartsWith('%PDF-', app('dompdf.wrapper')->loadHTML($html)->output());
+    }
+
     public function test_invoice_pdf_view_and_print_templates_tolerate_optional_data(): void
     {
         $order = new WebsiteOrder([

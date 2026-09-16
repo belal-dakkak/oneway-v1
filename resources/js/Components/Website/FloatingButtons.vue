@@ -17,8 +17,8 @@
 
     <!-- WhatsApp Button (bottom left) -->
     <a
-      v-if="whatsappNumber"
-      :href="'https://wa.me/971564533655'"
+      v-if="whatsappUrl"
+      :href="whatsappUrl"
       target="_blank"
       rel="noopener noreferrer"
       class="fixed bottom-6 left-6 z-50 w-14 h-14 rounded-full shadow-lg hover:-translate-y-1 transition-all flex items-center justify-center"
@@ -36,6 +36,8 @@
 
 <script>
 import { ref, computed, onMounted, onUnmounted } from 'vue'
+import { usePage } from '@inertiajs/inertia-vue3'
+import { useStore } from '@/stores/store'
 
 export default {
   props: {
@@ -50,10 +52,9 @@ export default {
   },
   setup(props) {
     const showScrollTop = ref(false)
-
-    const cleanNumber = computed(() =>
-      (props.whatsappNumber || '').replace(/\D/g, '')
-    )
+    const page = usePage()
+    const store = useStore()
+    const whatsappUrl = computed(() => page.props.value.website_contacts?.[store.country]?.whatsapp_url || null)
 
     const handleScroll = () => {
       showScrollTop.value = window.scrollY > 100
@@ -66,7 +67,7 @@ export default {
     onMounted(() => window.addEventListener('scroll', handleScroll))
     onUnmounted(() => window.removeEventListener('scroll', handleScroll))
 
-    return { showScrollTop, cleanNumber, scrollToTop }
+    return { showScrollTop, whatsappUrl, scrollToTop }
   }
 }
 </script>

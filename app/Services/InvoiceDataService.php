@@ -6,6 +6,7 @@ use App\Models\Order;
 use App\Models\WebsiteOrder;
 use App\Models\CountryCommerceSetting;
 use App\Models\User;
+use App\Support\Country;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Support\Collection;
 use InvalidArgumentException;
@@ -97,11 +98,22 @@ class InvoiceDataService
             }
         }
 
+        $countryId = $order instanceof WebsiteOrder
+            ? (int) $order->country_id
+            : (int) ($seller->country_id ?? 0);
+        $syrianInvoice = $countryId === Country::SYRIA;
+
         return [
             'name' => (string) ($seller->name ?? $fallback['title'] ?? config('app.name')),
             'address' => (string) ($seller->address ?? $fallback['address'] ?? ''),
-            'phone' => (string) ($seller->phone ?? $fallback['phone'] ?? ''),
-            'email' => (string) ($seller->email ?? $fallback['email'] ?? ''),
+            // Syrian invoice contacts belong to the country website, never to
+            // an individual shop account. An unset website email stays blank.
+            'phone' => $syrianInvoice
+                ? (string) ($fallback['phone'] ?? '')
+                : (string) ($seller->phone ?? $fallback['phone'] ?? ''),
+            'email' => $syrianInvoice
+                ? (string) ($fallback['email'] ?? '')
+                : (string) ($seller->email ?? $fallback['email'] ?? ''),
             'trn' => (string) ($seller->trn ?? ''),
             'tax_enabled' => (string) ($seller->enable_tax ?? 'no') === 'yes',
         ];

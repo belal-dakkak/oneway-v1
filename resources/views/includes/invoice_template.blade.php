@@ -21,6 +21,7 @@
         $admin_mobile = $invoiceIdentity['phone'];
         $shop_address = $invoiceIdentity['address'];
         $taxEnabled = (bool) $invoiceIdentity['tax_enabled'];
+        $isSyriaInvoice = (int) ($invoiceCountryId ?? ($order->country_id ?? optional($order->seller)->country_id ?? 0)) === \App\Support\Country::SYRIA;
     ?>
 
     <style type="text/css">
@@ -121,59 +122,38 @@
         <div class="outer_border" style="position:relative" >
             <div class="row">
 
-                <table width="100%" height="70" border="0" class="table_pad">
+                <table width="100%" height="70" border="0" class="table_pad" dir="{{ $isSyriaInvoice ? 'ltr' : 'rtl' }}">
                     <tr>
-                        <td width="35%" style="border: 0;">
-                            <div class="pull-left top_box">
-
-                                <strong>{{ $invoiceIdentity['name'] }}</strong><br>
-                                @if($shop_address)<span style="color: red">Address</span> : {{ $shop_address }}<br>@endif
-                                @if($admin_mobile)<span style="color: red">Phone</span> : {{ $admin_mobile }}<br>@endif
-                                @if($admin_email)<span style="color: red">Email</span> : {{ $admin_email }}<br>@endif
-
-                            </div>
-                        </td>
-
-                        <td width="40%" style="border: 0;">
-                            {{-- <h2 style="color:black;font-weight: bold;font-size:30px; text-align:right; padding-right: 30px;" id="invoice">INVOICE</h2><br> --}}
-                            <img src="{{ public_path('custom/logo-icon-black.png') }}" align="center" style="border-radius: 20px;align-items:center;margin-left:9%;margin-bottom:-35px;" width="120" height="120" alt="" srcset=""><br><br>
-
-                            @if($taxEnabled)
-                            <p align="center" style="text-align: center;font-size:18px;">
-                                {{ $invoiceIdentity['name'] }}
-                            </p>
-                            @else
+                        @if($isSyriaInvoice)
+                            @include('includes.invoice_buyer')
+                            @include('includes.invoice_logo')
+                            @include('includes.invoice_seller')
+                        @else
+                            <td width="35%" style="border: 0;">
+                                <div class="pull-left top_box">
+                                    <strong>{{ $invoiceIdentity['name'] }}</strong><br>
+                                    @if($shop_address)<span style="color: red">Address</span> : {{ $shop_address }}<br>@endif
+                                    @if($admin_mobile)<span style="color: red">Phone</span> : {{ $admin_mobile }}<br>@endif
+                                    @if($admin_email)<span style="color: red">Email</span> : {{ $admin_email }}<br>@endif
+                                </div>
+                            </td>
+                            <td width="40%" style="border: 0;">
+                                <img src="{{ public_path('custom/logo-icon-black.png') }}" align="center" style="border-radius: 20px;align-items:center;margin-left:9%;margin-bottom:-35px;" width="120" height="120" alt=""><br><br>
                                 <p align="center" style="text-align: center;font-size:18px;">{{ $invoiceIdentity['name'] }}</p>
-                            @endif
-
-
-                        </td>
-
-                        <td width="25%" style="border: 0;">
-                            <div class="">
+                            </td>
+                            <td width="25%" style="border: 0;">
                                 <table width="100%" border="0">
-                                <tr>
-                                    <td colspan="2">
-                                    <div class="bg_color1" style="text-indent:10px;font-size: 14px;width: 50%;height: 26px;line-height: 24px;color:black; ">BILL TO </div>
-                                    <table width="100%" border="0">
-                                        <tr>
-                                            <td width="100%">Name: {{ optional($order->buyer)->name ?? trim(($order->first_name ?? '').' '.($order->last_name ?? '')) ?: 'No name' }}</td>
-                                        </tr>
-                                        <tr>
-                                            <td width="100%">Phone: {{ optional($order->buyer)->phone ?? $order->phone ?? 'No phone' }}</td>
-                                        </tr>
-                                        <tr>
-                                            <td width="100%"> Address: {{ optional($order->buyer)->address ?? $order->address ?? 'No address' }} </td>
-                                        </tr>
-                                    </table>
-                                    </td>
-                                </tr>
-                                <tr>
-                                    <td colspan="2"></td>
-                                </tr>
+                                    <tr><td colspan="2">
+                                        <div class="bg_color1" style="text-indent:10px;font-size: 14px;width: 50%;height: 26px;line-height: 24px;color:black;">BILL TO</div>
+                                        <table width="100%" border="0">
+                                            <tr><td width="100%">Name: {{ optional($order->buyer)->name ?? trim(($order->first_name ?? '').' '.($order->last_name ?? '')) ?: 'No name' }}</td></tr>
+                                            <tr><td width="100%">Phone: {{ optional($order->buyer)->phone ?? $order->phone ?? 'No phone' }}</td></tr>
+                                            <tr><td width="100%">Address: {{ optional($order->buyer)->address ?? $order->address ?? 'No address' }}</td></tr>
+                                        </table>
+                                    </td></tr>
                                 </table>
-                            </div>
-                        </td>
+                            </td>
+                        @endif
                     </tr>
                 </table>
 
@@ -184,8 +164,8 @@
                     <tr>
                         <td width="50%" style="border: 0;">
 
-                            <p style="color:red;">Website : www.oneway.fashion</p>
-                            @if($admin_email)<span style="color: red">Email</span> : {{ $admin_email }} <br>@endif
+                            <p style="color:red;">Website {{ $isSyriaInvoice ? '/ الموقع' : '' }} : www.oneway.fashion</p>
+                            @if($admin_email)<span style="color: red">Email {{ $isSyriaInvoice ? '/ البريد الإلكتروني' : '' }}</span> : {{ $admin_email }} <br>@endif
 
                         </td>
                         <td width="30%" style="border: 0;">
@@ -204,7 +184,7 @@
                                 @endif
 
                                 <span style="display: block">
-                                    {{ $taxEnabled ? 'TAX INVOICE' : 'INVOICE' }}
+                                    {{ $taxEnabled ? 'TAX INVOICE' : 'INVOICE' }} {{ $isSyriaInvoice ? '/ فاتورة' : '' }}
                                 </span>
 
                                 @if($taxEnabled)
@@ -220,17 +200,17 @@
                                 <table width="100%" height="70" border="0" class="table_pad">
                                     <tr>
                                         <td width="30%" style="border: 0;" class=""></td>
-                                        <td width="30%" class="td-font bg_color1" style="color:black;border:1px solid black;">Date</td>
+                                        <td width="30%" class="td-font bg_color1" style="color:black;border:1px solid black;">Date {{ $isSyriaInvoice ? '/ التاريخ' : '' }}</td>
                                         <td width="40%" class="td-font"><?php $invoice_date = date('Y-m-d', strtotime($order->created_at)); echo $invoice_date;?> </td>
                                     </tr>
                                     <tr>
                                         <td width="30%" style="border: 0;"  class=""></td>
-                                        <td width="30%" class="td-fon bg_color1"style="color:black;border:1px solid black;">Invoice #</td>
+                                        <td width="30%" class="td-font bg_color1" style="color:black;border:1px solid black;">Invoice # {{ $isSyriaInvoice ? '/ رقم الفاتورة' : '' }}</td>
                                         <td width="40%" class="td-font" >{{$order->barcode}}</td>
                                     </tr>
                                     <tr>
                                         <td width="30%" style="border: 0;" class=""></td>
-                                        <td width="30%" class="td-font bg_color1" style="color:black;border:1px solid black;">Order ID</td>
+                                        <td width="30%" class="td-font bg_color1" style="color:black;border:1px solid black;">Order ID {{ $isSyriaInvoice ? '/ رقم الطلب' : '' }}</td>
                                         <td width="40%" class="td-font">{{$order->id}}</td>
                                     </tr>
                                     @if($taxEnabled)
@@ -253,16 +233,16 @@
 
                 <table height="82" class=" " style=" width:100%;">
                     <tr class="bg_color1">
-                        <td width="7%" class="td-med">NO.</td>
-                        <td width="30%" height="12" style="padding-left: 10px;" class="td-med">DESCRIPTION</td>
-                        <td width="7%" class="td-med">QTY</td>
-                        <td width="10%" class="td-med">RATE</td>
+                        <td width="7%" class="td-med">NO. {{ $isSyriaInvoice ? '/ رقم' : '' }}</td>
+                        <td width="30%" height="12" style="padding-left: 10px;" class="td-med">DESCRIPTION {{ $isSyriaInvoice ? '/ الوصف' : '' }}</td>
+                        <td width="7%" class="td-med">QTY {{ $isSyriaInvoice ? '/ الكمية' : '' }}</td>
+                        <td width="10%" class="td-med">RATE {{ $isSyriaInvoice ? '/ السعر' : '' }}</td>
                         @if($taxEnabled)
-                        <td style="padding-right: 10px;" width="15%" align="right" class="td-med">AMOUNT EXel.Vat</td>
-                        <td style="padding-right: 10px;" width="10%" align="right" class="td-med">Vat @ {{ $order->seller->tax_ratio }}%</td>
-                        <td style="padding-right: 10px;" width="15%" align="right" class="td-med">AMOUNT Incl VAT</td>
+                        <td style="padding-right: 10px;" width="15%" align="right" class="td-med">AMOUNT EXcl. VAT {{ $isSyriaInvoice ? '/ دون الضريبة' : '' }}</td>
+                        <td style="padding-right: 10px;" width="10%" align="right" class="td-med">VAT {{ $isSyriaInvoice ? '/ الضريبة' : '' }} @ {{ optional($order->seller)->tax_ratio ?? 0 }}%</td>
+                        <td style="padding-right: 10px;" width="15%" align="right" class="td-med">AMOUNT Incl VAT {{ $isSyriaInvoice ? '/ شامل الضريبة' : '' }}</td>
                         @else
-                        <td style="padding-right: 10px;" width="15%" align="right" class="td-med">AMOUNT</td>
+                        <td style="padding-right: 10px;" width="15%" align="right" class="td-med">AMOUNT {{ $isSyriaInvoice ? '/ المبلغ' : '' }}</td>
                         @endif
                     </tr>
                     @php
@@ -319,7 +299,7 @@
 
             <div class="row">
 
-                <div style="float: left; width: 28%;">
+                <div style="float: {{ $isSyriaInvoice ? 'right' : 'left' }}; width: 28%;" dir="rtl">
                     <div style="width: 100% !important;">
                         <table class=" " style=" width:100%;" width="100%">
                             <tr class="total" style="width: 100% !important">

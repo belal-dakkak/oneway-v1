@@ -26,15 +26,7 @@ class CashboxController extends Controller
 
     public function index(): Response
     {
-        $wallets = auth()->user()->wallets()->get()->mapWithKeys(function ($wallet) {
-            $code = strtoupper((string) ($wallet->currency_code ?: 'USD'));
-            return [$code => [
-                'currency' => $code,
-                'credit' => (float) $wallet->credit,
-                'debit' => (float) $wallet->debit,
-                'balance' => (float) $wallet->credit - (float) $wallet->debit,
-            ]];
-        });
+        $wallets = $this->cashboxes->balancesForUser((int) auth()->id());
 
         $exchangeRate = null;
         if ((int) auth()->user()->country_id === Country::SYRIA) {
@@ -47,6 +39,7 @@ class CashboxController extends Controller
 
         return Inertia::render('Admin/Cashboxes/Index', [
             'wallets' => $wallets,
+            'walletOwnerId' => (int) auth()->id(),
             'movements' => WalletMovement::query()
                 ->where('user_id', auth()->id())
                 ->latest('id')

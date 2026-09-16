@@ -10,7 +10,7 @@
 
         <div class="flex items-center h-full py-1">
           <a :href="route('homepage')" class="hover:opacity-90 transition-opacity h-full flex items-center">
-            <img src="/custom/logo-icon-black.png" alt="Oneway Logo" class="max-h-full w-auto object-contain" />
+            <img :src="brandLogo" alt="Oneway Logo" class="max-h-full w-auto object-contain" />
           </a>
         </div>
 
@@ -358,7 +358,7 @@
           <!-- Drawer -->
           <div class="relative flex flex-col w-full max-w-xs bg-white shadow-xl rtl:right-0 ltr:left-0 h-full overflow-y-auto">
             <div class="flex items-center justify-between p-4 border-b">
-              <img src="/custom/logo-icon-black.png" alt="Oneway Logo" class="h-12 w-auto" />
+              <img :src="brandLogo" alt="Oneway Logo" class="h-12 w-auto object-contain" />
               <button @click="isMenuOpen = false" class="p-2 -mr-2 hover:bg-muted rounded-md transition-colors">
                 <svg class="h-6 w-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
@@ -508,6 +508,7 @@ import { useStore } from '@/stores/store'
 import { Inertia } from '@inertiajs/inertia'
 import { usePage } from '@inertiajs/inertia-vue3'
 import FlagIcon from './FlagIcon.vue'
+import { brandLogo } from '@/Utils/brand'
 
 export default {
   props: {
@@ -594,6 +595,7 @@ export default {
 
     return {
       store,
+      brandLogo,
       isSearchOpen,
       isUserMenuOpen,
       isCountryMenuOpen,
