@@ -11,16 +11,17 @@ use Tests\TestCase;
 
 class InvoiceTemplateRenderingTest extends TestCase
 {
-    public function test_syrian_invoice_uses_website_contacts_and_positions_buyer_left_of_seller(): void
+    public function test_syrian_invoice_uses_website_contacts_and_positions_seller_left_of_buyer(): void
     {
         $seller = new User([
             'name' => 'Syrian shop', 'country_id' => User::COUNTRY_SYRIA,
-            'phone' => 'shop-phone', 'email' => 'shop@example.test',
+            'phone' => 'shop-phone', 'email' => 'shop@example.test', 'address' => 'Aleppo branch',
         ]);
         $order = new Order([
             'barcode' => 'SY-LAYOUT-1', 'curr_type' => 'USD', 'curr_rate' => 1,
             'type' => Order::TYPE_CASH, 'total_price' => 5, 'paid_price' => 5,
             'remain_price' => 0, 'first_name' => 'Buyer',
+            'phone' => '+963 911 111 111', 'address' => 'Buyer street',
         ]);
         $order->id = 81;
         $order->created_at = now();
@@ -37,8 +38,11 @@ class InvoiceTemplateRenderingTest extends TestCase
         $data += ['invoiceIdentity' => $identity, 'invoiceCountryId' => User::COUNTRY_SYRIA, 'settings' => [], 'Currency' => 'USD', 'user_role' => 'shop'];
         $html = view('includes.invoice_template', $data)->render();
         $this->assertStringContainsString('dir="ltr"', $html);
-        $this->assertLessThan(strpos($html, 'Syrian shop'), strpos($html, 'BILL TO'));
+        $this->assertLessThan(strpos($html, 'BILL TO'), strpos($html, 'Syrian shop'));
         $this->assertStringContainsString('syria@example.test', $html);
+        $this->assertStringContainsString('Aleppo branch', $html);
+        $this->assertStringContainsString('Buyer street', $html);
+        $this->assertStringContainsString('+963 911 111 111', $html);
         $this->assertStringNotContainsString('shop@example.test', $html);
         $this->assertStringContainsString('DESCRIPTION / الوصف', $html);
         $this->assertStringContainsString('QTY / الكمية', $html);

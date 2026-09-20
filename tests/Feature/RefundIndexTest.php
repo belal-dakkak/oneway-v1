@@ -49,18 +49,32 @@ class RefundIndexTest extends TestCase
             $this->refund($syp, "RF-SYP-{$number}", 'SYP', 100);
         }
         $this->refund($usd, 'RF-USD-1', 'USD', 2);
+        $usd->order()->update(['curr_rate' => 3]);
+        Refund::query()->create([
+            'order_item_id' => $usd->id,
+            'qty' => 1,
+            'item_price' => 7,
+            'total_price' => 7,
+            'total_price_paid' => 0,
+            'currency_code' => null,
+            'item_barcode' => 'RF-USD-FALLBACK',
+            'order_barcode' => 'RF-USD-FALLBACK',
+        ]);
         $this->refund($outside, 'RF-OUT-1', 'AED', 9);
 
         $this->actingAs($admin)->get(route('refunds.index'))->assertOk();
         $response = $this->actingAs($admin)->getJson(route('refunds.index'))
-            ->assertOk()->assertJsonPath('rows.total', 12)
-            ->assertJsonPath('refunds.total', 12)
+            ->assertOk()->assertJsonPath('rows.total', 13)
+            ->assertJsonPath('refunds.total', 13)
             ->assertJsonPath('totals_by_currency.SYP', 1100)
-            ->assertJsonPath('totals_by_currency.USD', 2);
+            ->assertJsonPath('totals_by_currency.USD', 23);
         $this->assertCount(10, $response->json('rows.data'));
 
         $this->actingAs($admin)->getJson(route('refunds.index', ['page' => 2]))
-            ->assertOk()->assertJsonCount(2, 'rows.data');
+            ->assertOk()->assertJsonCount(3, 'rows.data');
+        $this->actingAs($admin)->getJson(route('refunds.index', ['shop' => $shop->id]))
+            ->assertOk()->assertJsonPath('rows.total', 13)
+            ->assertJsonPath('totals_by_currency.USD', 23);
         $this->actingAs($admin)->getJson(route('refunds.index', ['search' => 'RF-USD-1']))
             ->assertOk()->assertJsonPath('rows.total', 1)
             ->assertJsonPath('totals_by_currency.USD', 2);

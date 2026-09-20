@@ -375,7 +375,7 @@ export default defineComponent({
 						{
 							const id = queryParams['order_id'];
 
-                            window.location.href = route('invoice.typed.printv2', { source: 'order', id });
+                            window.location.href = route('invoice.typed.printv2', { source: 'order', id }) + '?format=receipt';
 
                             /*
 							axios.get(this.route('orders.print-info', id))

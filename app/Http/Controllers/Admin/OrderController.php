@@ -1476,9 +1476,7 @@ class OrderController extends Controller
         $data = $this->invoicePayload($source, $id);
         $data['invoiceLogoSrc'] = asset('custom/logo-icon-black.png');
 
-        return view($data['invoiceCountryId'] === Country::SYRIA
-            ? 'includes.invoice_template'
-            : 'receipts.pdfReceipt', $data);
+        return view('includes.invoice_template', $data);
     }
 
     public function typedDownloadInvoice(string $source, int $id)
@@ -1503,7 +1501,15 @@ class OrderController extends Controller
 
     private function printInvoiceFor(string $source, int $id)
     {
-        return view('includes.printer', $this->invoicePayload($source, $id));
+        $data = $this->invoicePayload($source, $id);
+        if (request()->query('format') === 'receipt') {
+            return view('includes.printer', $data);
+        }
+
+        $data['invoiceLogoSrc'] = asset('custom/logo-icon-black.png');
+        $data['autoPrint'] = true;
+
+        return view('includes.invoice_template', $data);
     }
 
     private function invoicePayload(string $source, int $id): array

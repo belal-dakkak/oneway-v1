@@ -10,6 +10,7 @@ use App\Services\CashboxService;
 use App\Support\Country;
 use Illuminate\Contracts\Pagination\LengthAwarePaginator;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\DB;
 use Carbon\Carbon;
 use Illuminate\Validation\ValidationException;
 
@@ -276,17 +277,17 @@ class RefundRepository
             $refunds->orderByDesc('id');
         }
 
-        // MySQL resolves GROUP BY currency_code to refunds.currency_code (the
-        // physical column), not necessarily to a SELECT alias. Group by the
-        // exact expression and use a distinct alias under ONLY_FULL_GROUP_BY.
         $currencyExpression = "UPPER(COALESCE(NULLIF(refunds.currency_code, ''), NULLIF(refund_orders.curr_type, ''), 'USD'))";
-        $totalsByCurrency = (clone $refunds)
+        $refundAmounts = (clone $refunds)
             ->reorder()
             ->join('order_items as refund_order_items', 'refunds.order_item_id', '=', 'refund_order_items.id')
             ->join('orders as refund_orders', 'refund_order_items.order_id', '=', 'refund_orders.id')
             ->selectRaw("{$currencyExpression} as report_currency")
-            ->selectRaw('SUM(CASE WHEN refunds.total_price_paid IS NOT NULL AND refunds.total_price_paid <> 0 THEN refunds.total_price_paid ELSE refunds.total_price * COALESCE(refund_orders.curr_rate, 1) END) as total')
-            ->groupByRaw($currencyExpression)
+            ->selectRaw('CASE WHEN refunds.total_price_paid IS NOT NULL AND refunds.total_price_paid <> 0 THEN refunds.total_price_paid ELSE refunds.total_price * COALESCE(refund_orders.curr_rate, 1) END as refund_amount');
+        $totalsByCurrency = DB::query()
+            ->fromSub($refundAmounts, 'refund_amounts')
+            ->selectRaw('report_currency, SUM(refund_amount) as total')
+            ->groupBy('report_currency')
             ->pluck('total', 'report_currency')
             ->map(function ($total) {
                 return (float) $total;
