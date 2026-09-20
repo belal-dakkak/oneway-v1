@@ -1492,11 +1492,19 @@ class OrderController extends Controller
     private function downloadInvoiceFor(string $source, int $id)
     {
         $data = $this->invoicePayload($source, $id);
-        $date = $data['order']->invoice_date ?: $data['order']->created_at;
-        $fileDate = date('jS F Y', strtotime((string) $date));
-        $pdf = PDF::loadView('includes.invoice_template', $data);
+        $pdf = PDF::loadView('includes.invoice_template', $data, [], [
+            'format' => 'A4',
+            'default_font' => 'dejavusans',
+            'margin_left' => 10,
+            'margin_right' => 10,
+            'margin_top' => 10,
+            'margin_bottom' => 10,
+        ]);
 
-        return $pdf->download('Invoice_' . config('app.name') . '_Order_No # ' . $id . ' Date_' . $fileDate . '.pdf');
+        return response($pdf->output(), 200, [
+            'Content-Type' => 'application/pdf',
+            'Content-Disposition' => 'attachment; filename="Invoice_Order_' . $id . '.pdf"',
+        ]);
     }
 
     private function printInvoiceFor(string $source, int $id)

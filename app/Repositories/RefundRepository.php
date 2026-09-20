@@ -7,6 +7,7 @@ use App\Models\Refund;
 use App\Models\User;
 use App\Models\UserProduct;
 use App\Services\CashboxService;
+use App\Services\CurrencyService;
 use App\Support\Country;
 use Illuminate\Contracts\Pagination\LengthAwarePaginator;
 use Illuminate\Http\Request;
@@ -17,16 +18,26 @@ use Illuminate\Validation\ValidationException;
 class RefundRepository
 {
     private $cashboxes;
+    private $currencies;
 
-    public function __construct(CashboxService $cashboxes)
+    public function __construct(CashboxService $cashboxes, CurrencyService $currencies)
     {
         $this->cashboxes = $cashboxes;
+        $this->currencies = $currencies;
+    }
+
+    public function maxUnitRefundPrice(OrderItem $item): float
+    {
+        $currency = strtoupper((string) ($item->order->curr_type ?: 'USD'));
+        $rate = (float) ($item->order->curr_rate ?: 1);
+        $stored = (float) ($item->item_price_paid ?? 0);
+
+        return $this->currencies->round($stored > 0 ? $stored : (float) $item->item_price * $rate, $currency);
     }
 
     public function add(Request $request): Refund
     {
 
-        $total  = 0;
         $selectedProducts = $request->get('selected_products');
 
 		//dd($selectedProducts);
@@ -37,7 +48,7 @@ class RefundRepository
         $touchedOrderIds = [];
         $lastRefundByOrder = [];
 
-        foreach ($selectedProducts as $product){
+        foreach ($selectedProducts as $index => $product){
 
 			//dd($product);
 
@@ -73,6 +84,20 @@ class RefundRepository
                     ]);
                 }
 
+                $currency = strtoupper((string) ($orderItem->order->curr_type ?: 'USD'));
+                $maxUnitPrice = $this->maxUnitRefundPrice($orderItem);
+                $unitPrice = $maxUnitPrice;
+                if (array_key_exists('price', $product)) {
+                    $rawPrice = (string) $product['price'];
+                    $pattern = $currency === 'SYP' ? '/^\d+$/' : '/^\d+(?:\.\d{1,2})?$/';
+                    if (!preg_match($pattern, $rawPrice) || (float) $rawPrice > $maxUnitPrice + 0.000001) {
+                        throw ValidationException::withMessages([
+                            "selected_products.{$index}.price" => 'سعر المرتجع يجب أن يكون بين الصفر وسعر بيع القطعة وبالدقة الصحيحة للعملة.',
+                        ]);
+                    }
+                    $unitPrice = (float) $rawPrice;
+                }
+
 				$itemBarcode = $orderItem->product->productColor->barcode;
 				$orderBarcode = $orderItem->order->barcode;
 
@@ -94,44 +119,52 @@ class RefundRepository
 				$new_qty = $orderItem->qty - $refundQty;
 				$rateAux = (float) $orderItem->order->curr_rate ?: 1;
 				$productPrice = (float) $orderItem->item_price;
+                $paidAmount = $this->currencies->round($unitPrice * $refundQty, $currency);
+                $baseAmount = round($paidAmount / $rateAux, 4);
+                $originalPaidUnit = (float) ($orderItem->item_price_paid ?: $productPrice * $rateAux);
+                $originalTaxUnit = (float) ($orderItem->tax_value_paid ?: 0);
+                $taxAmount = $originalPaidUnit > 0
+                    ? $this->currencies->round($paidAmount * $originalTaxUnit / $originalPaidUnit, $currency)
+                    : 0;
+                $taxAmount = min($paidAmount, max(0, $taxAmount));
 
                 $orderItem->update([
                     'qty' => $new_qty,
                     'total_price' => $productPrice * $new_qty,
-                    'total_price_paid' => $productPrice * $new_qty * $rateAux,
+                    'total_price_paid' => $this->currencies->round($originalPaidUnit * $new_qty, $currency),
                 ]);
 
 				$refund = new Refund([
 					'order_item_id' => $product['product_id'],
 					'qty' => $refundQty,
-					'item_price' => $productPrice,
-					'total_price' => $productPrice * $refundQty,
-                    'total_price_paid' => $productPrice * $refundQty * $rateAux,
-                    'currency_code' => strtoupper((string) ($orderItem->order->curr_type ?: 'USD')),
-                    'net_amount' => (float) ($orderItem->price_without_tax_paid ?: $orderItem->item_price_paid ?: ($productPrice * $rateAux)) * $refundQty,
-                    'tax_amount' => (float) ($orderItem->tax_value_paid ?: 0) * $refundQty,
+					'item_price' => round($unitPrice / $rateAux, 4),
+					'total_price' => $baseAmount,
+                    'total_price_paid' => $paidAmount,
+                    'currency_code' => $currency,
+                    'net_amount' => $paidAmount - $taxAmount,
+                    'tax_amount' => $taxAmount,
                     'cost_amount' => (float) ($orderItem->unit_cost ?: $orderItem->product->wholesale_price ?: 0) * $rateAux * $refundQty,
 					'item_barcode' => $itemBarcode,
 					'order_barcode' => $orderBarcode,
 				]);
 				$refund->save();
 				$lastRefundByOrder[(int) $orderItem->order_id] = $refund;
-				$total += $productPrice * $refundQty;
 
-                $currency = strtoupper((string) ($orderItem->order->curr_type ?: 'USD'));
-                $this->cashboxes->debit(
-                    (int) $orderItem->order->seller_id,
-                    (float) $refund->total_price_paid,
-                    $currency,
-                    "refund:{$refund->id}",
-                    [
-                        'exchange_rate' => $currency === 'USD' ? 1 : $rateAux,
-                        'payment_method' => 'refund',
-                        'source_type' => Refund::class,
-                        'source_id' => $refund->id,
-                        'note' => "Refund for order #{$orderBarcode}",
-                    ]
-                );
+                if ($paidAmount > 0) {
+                    $this->cashboxes->debit(
+                        (int) $orderItem->order->seller_id,
+                        (float) $refund->total_price_paid,
+                        $currency,
+                        "refund:{$refund->id}",
+                        [
+                            'exchange_rate' => $currency === 'USD' ? 1 : $rateAux,
+                            'payment_method' => 'refund',
+                            'source_type' => Refund::class,
+                            'source_id' => $refund->id,
+                            'note' => "Refund for order #{$orderBarcode}",
+                        ]
+                    );
+                }
 				
 				/////////////////////////////////////////////////////////////
                 /////////////////////////////////////////////////////////////
@@ -158,7 +191,7 @@ class RefundRepository
 
             $hasRemainingItems = $touchedOrder->items()->where('qty', '>', 0)->exists();
 
-            if (!$hasRemainingItems) {
+            if (!$hasRemainingItems && (float) ($lastRefundByOrder[(int) $orderId]->total_price_paid ?? 0) > 0) {
                 // All items have been refunded — refund shipping and COD fees too.
                 $feesToRefund = (float)($touchedOrder->shipping_fee ?? 0)
                               + (float)($touchedOrder->cod_fee ?? 0);
@@ -167,8 +200,6 @@ class RefundRepository
                     // Convert fees to base currency (same logic as item prices)
                     $rate = $touchedOrder->curr_rate ?: 1;
                     $feesToRefundBase = $feesToRefund / $rate;
-                    $total += $feesToRefundBase;
-
                     $feeCurrency = strtoupper((string) ($touchedOrder->curr_type ?: 'USD'));
                     $this->cashboxes->debit(
                         (int) $touchedOrder->seller_id,

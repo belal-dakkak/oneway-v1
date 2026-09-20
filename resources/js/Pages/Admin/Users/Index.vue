@@ -154,16 +154,14 @@
       },
       methods: {
           formatCashboxBalance(user, code) {
-              const wallet = (user.wallets || []).find(item => String(item.currency_code || 'USD').toUpperCase() === code)
-              const balance = Number(wallet?.credit || 0) - Number(wallet?.debit || 0)
+              const balance = Number(user.cashbox_balances?.[code]?.balance || 0)
               return balance.toLocaleString(undefined, {
                   minimumFractionDigits: code === 'SYP' ? 0 : 2,
                   maximumFractionDigits: code === 'SYP' ? 0 : 2,
               })
           },
           cashboxCodes(user) {
-              const codes = (user.wallets || [])
-                  .map(item => String(item.currency_code || 'USD').toUpperCase())
+              const codes = Object.keys(user.cashbox_balances || {})
               if (!codes.includes(this.defaultCashboxCode)) codes.unshift(this.defaultCashboxCode)
               return [...new Set(codes)]
           },

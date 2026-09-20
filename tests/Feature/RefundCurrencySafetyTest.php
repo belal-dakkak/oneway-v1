@@ -8,11 +8,14 @@ use App\Models\ProductColor;
 use App\Models\Refund;
 use App\Models\User;
 use App\Models\UserProduct;
+use App\Models\Wallet;
+use App\Models\WalletMovement;
 use App\Repositories\RefundRepository;
 use Illuminate\Database\Schema\Blueprint;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Schema;
+use Illuminate\Validation\ValidationException;
 use Tests\TestCase;
 
 class RefundCurrencySafetyTest extends TestCase
@@ -75,6 +78,7 @@ class RefundCurrencySafetyTest extends TestCase
             $table->unsignedBigInteger('product_color_id');
             $table->unsignedBigInteger('user_id');
             $table->unsignedInteger('country_id');
+            $table->string('barcode')->nullable();
             $table->integer('stock')->default(0);
             $table->decimal('wholesale_price', 20, 4)->default(0);
             $table->decimal('retail_price', 20, 4)->default(0);
@@ -189,7 +193,6 @@ class RefundCurrencySafetyTest extends TestCase
             'selected_products' => [[
                 'product_id' => $item->id,
                 'qty' => 1,
-                'price' => 999999,
             ]],
         ]);
 
@@ -230,5 +233,125 @@ class RefundCurrencySafetyTest extends TestCase
         $this->assertSame(10.0, (float) $order->fresh()->shipping_fee);
         $this->assertSame(5.0, (float) $order->fresh()->cod_fee);
         $this->assertSame(120.0, (float) $seller->wallet->fresh()->debit);
+    }
+
+    public function test_custom_price_changes_the_cash_refund_but_preserves_the_original_invoice(): void
+    {
+        [$seller, $stock, $order, $item] = $this->refundFixture();
+        $this->actingAs($seller);
+
+        $refund = DB::transaction(function () use ($item) {
+            return app(RefundRepository::class)->add(Request::create('/admin/refunds', 'POST', [
+                'selected_products' => [['product_id' => $item->id, 'qty' => 1, 'price' => '25.00']],
+            ]));
+        });
+
+        $this->assertSame(25.0, (float) $refund->total_price_paid);
+        $this->assertSame(25.0, (float) $refund->item_price);
+        $this->assertSame(1.19, (float) $refund->tax_amount);
+        $this->assertSame(23.81, (float) $refund->net_amount);
+        $this->assertSame(1, (int) $item->fresh()->qty);
+        $this->assertSame(52.5, (float) $item->fresh()->total_price);
+        $this->assertSame(120.0, (float) $order->fresh()->total_price);
+        $this->assertSame(25.0, (float) $seller->wallet->fresh()->debit);
+
+        $zeroRefund = DB::transaction(function () use ($item) {
+            return app(RefundRepository::class)->add(Request::create('/admin/refunds', 'POST', [
+                'selected_products' => [['product_id' => $item->id, 'qty' => 1, 'price' => '0']],
+            ]));
+        });
+
+        $this->assertSame(0.0, (float) $zeroRefund->total_price_paid);
+        $this->assertSame(0.0, (float) $zeroRefund->net_amount);
+        $this->assertSame(0.0, (float) $zeroRefund->tax_amount);
+        $this->assertSame(0, (int) $item->fresh()->qty);
+        $this->assertSame(2, (int) $stock->fresh()->stock);
+        $this->assertSame(25.0, (float) $seller->wallet->fresh()->debit);
+        $this->assertSame(1, WalletMovement::query()->where('payment_method', 'refund')->count());
+        $this->assertSame(10.0, (float) $order->fresh()->shipping_fee);
+        $this->assertSame(5.0, (float) $order->fresh()->cod_fee);
+    }
+
+    public function test_custom_price_is_rejected_above_the_invoice_price_or_with_invalid_precision(): void
+    {
+        [$seller, $stock, $order, $item] = $this->refundFixture();
+        $this->actingAs($seller);
+
+        foreach (['52.51', '-1', '25.001', ''] as $price) {
+            try {
+                DB::transaction(function () use ($item, $price) {
+                    app(RefundRepository::class)->add(Request::create('/admin/refunds', 'POST', [
+                        'selected_products' => [['product_id' => $item->id, 'qty' => 1, 'price' => $price]],
+                    ]));
+                });
+                $this->fail("Price {$price} should have been rejected.");
+            } catch (ValidationException $exception) {
+                $this->assertArrayHasKey('selected_products.0.price', $exception->errors());
+            }
+        }
+
+        $this->assertSame(2, (int) $item->fresh()->qty);
+        $this->assertSame(0, (int) $stock->fresh()->stock);
+        $this->assertSame(0.0, (float) $seller->wallet->fresh()->debit);
+        $this->assertSame(0, Refund::query()->count());
+        $this->assertSame(0, WalletMovement::query()->count());
+    }
+
+    public function test_syp_refund_price_must_be_an_integer_in_the_invoice_currency(): void
+    {
+        [$seller, $stock, $order, $item] = $this->refundFixture('SYP', 1000);
+        $this->actingAs($seller);
+
+        try {
+            app(RefundRepository::class)->add(Request::create('/admin/refunds', 'POST', [
+                'selected_products' => [['product_id' => $item->id, 'qty' => 1, 'price' => '25000.50']],
+            ]));
+            $this->fail('SYP refund price must be an integer.');
+        } catch (ValidationException $exception) {
+            $this->assertArrayHasKey('selected_products.0.price', $exception->errors());
+        }
+
+        $refund = DB::transaction(function () use ($item) {
+            return app(RefundRepository::class)->add(Request::create('/admin/refunds', 'POST', [
+                'selected_products' => [['product_id' => $item->id, 'qty' => 1, 'price' => '25000']],
+            ]));
+        });
+        $this->assertSame(25000.0, (float) $refund->total_price_paid);
+        $this->assertSame(25.0, (float) $refund->total_price);
+        $this->assertSame('SYP', $refund->currency_code);
+        $this->assertSame(25000.0, (float) Wallet::query()->where('user_id', $seller->id)->where('currency_code', 'SYP')->first()->debit);
+    }
+
+    private function refundFixture(string $currency = 'USD', float $rate = 1): array
+    {
+        $seller = User::query()->create([
+            'name' => 'Refund shop', 'email' => uniqid('refund-', true) . '@example.test',
+            'password' => 'x', 'role_id' => User::ROLE_SHOP, 'country_id' => User::COUNTRY_SYRIA,
+        ]);
+        Wallet::query()->updateOrCreate(
+            ['user_id' => $seller->id, 'currency_code' => $currency],
+            ['credit' => 1000 * $rate, 'debit' => 0]
+        );
+        $color = ProductColor::query()->create(['barcode' => 'MODEL-2', 'country_id' => User::COUNTRY_SYRIA]);
+        $stock = UserProduct::query()->create([
+            'product_color_id' => $color->id, 'user_id' => $seller->id,
+            'country_id' => User::COUNTRY_SYRIA, 'barcode' => 'STOCK-2', 'stock' => 0,
+            'wholesale_price' => 40, 'retail_price' => 60,
+        ]);
+        $order = Order::query()->create([
+            'seller_id' => $seller->id, 'barcode' => 'REFUND-FIXTURE', 'type' => Order::TYPE_CASH,
+            'curr_type' => $currency, 'curr_rate' => $rate,
+            'total_price' => 120 * $rate, 'paid_price' => 120 * $rate, 'remain_price' => 0,
+            'shipping_fee' => 10, 'cod_fee' => 5,
+        ]);
+        $item = OrderItem::query()->create([
+            'order_id' => $order->id, 'user_product_id' => $stock->id, 'qty' => 2,
+            'sold_qty' => 2, 'unit_cost' => 40, 'item_price' => 52.5, 'total_price' => 105,
+            'tax_ratio' => 5, 'tax_value' => 2.5, 'price_without_tax' => 50,
+            'item_price_paid' => 52.5 * $rate, 'total_price_paid' => 105 * $rate,
+            'tax_value_paid' => 2.5 * $rate, 'price_without_tax_paid' => 50 * $rate,
+        ]);
+
+        return [$seller, $stock, $order, $item];
     }
 }

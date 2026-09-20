@@ -43,6 +43,9 @@ class UserController extends Controller
         ]);
 
         $users = $this->userRepository->getUsers($request);
+        $users->getCollection()->each(function (User $user) {
+            $user->setAttribute('cashbox_balances', $this->cashboxes->balancesForUser((int) $user->id));
+        });
 
         if ($request->wantsJson()){
             return $users;

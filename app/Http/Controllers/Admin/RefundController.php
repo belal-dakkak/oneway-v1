@@ -93,6 +93,7 @@ class RefundController extends Controller
             'selected_products' => ['required', 'array', 'min:1'],
             'selected_products.*.product_id' => ['required', 'integer', 'exists:order_items,id'],
             'selected_products.*.qty' => ['required', 'integer', 'min:1'],
+            'selected_products.*.price' => ['sometimes', 'required', 'numeric', 'min:0'],
         ]);
 
         DB::transaction(function () use ($request) {
@@ -116,14 +117,20 @@ class RefundController extends Controller
         ->orderBy('id','desc')->first();
 
         if ($item){
-            $rate = (float) ($item->order->curr_rate ?? 1);
-            $result = $item->product;
-            $result->product_color = $item->product->productColor;
-            $result->stock = $item->qty;
-            $result->price = currencyExchange($item->item_price, $rate);
-            $result->currency_code = strtoupper($item->order->curr_type ?: 'USD');
-            $result->id = $item->id;
-            return $result;
+            $color = $item->product->productColor;
+            $price = $this->refundRepository->maxUnitRefundPrice($item);
+
+            return [
+                'id' => $item->id,
+                'stock' => $item->qty,
+                'price' => $price,
+                'max_refund_unit_price' => $price,
+                'currency_code' => strtoupper($item->order->curr_type ?: 'USD'),
+                'product_color' => [
+                    'photo_url' => $color->photo_url,
+                    'product_name' => $color->product_name,
+                ],
+            ];
         }
         return false;
     }

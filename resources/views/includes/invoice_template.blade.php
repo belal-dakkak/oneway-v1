@@ -28,9 +28,8 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Invoice {{ $order->barcode }}</title>
     <style>
-        @page { size: A4; margin: 17px 24px; }
         * { box-sizing: border-box; }
-        body { margin: 0; color: #202735; font: 11px/1.35 "DejaVu Sans", sans-serif; }
+        body { margin: 0; color: #202735; font: 11px/1.35 dejavusans, sans-serif; }
         table { width: 100%; border-collapse: collapse; table-layout: fixed; }
         td, th { vertical-align: top; }
         .header { margin-bottom: 8px; }
@@ -38,7 +37,7 @@
         .header .contact { width: 32%; padding-left: 0; }
         .header .brand { width: 36%; text-align: center; padding: 0 6px; }
         .header .customer { width: 32%; padding-right: 0; }
-        .brand img { display: block; width: 100px; height: 100px; margin: 0 auto 3px; }
+        .brand img { display: block; width: 25mm; height: 25mm; margin: 0 auto 3px; }
         .brand-name { font-size: 14px; font-weight: bold; line-height: 1.25; word-wrap: break-word; }
         .eyebrow { color: #9d4559; font-size: 8px; font-weight: bold; letter-spacing: .7px; text-transform: uppercase; }
         .section-name { margin-bottom: 4px; padding: 4px 7px; background: #f9d7df; font-size: 10px; font-weight: bold; }
@@ -59,6 +58,7 @@
         .items { margin-bottom: 10px; }
         .items thead { display: table-header-group; }
         .items tr { page-break-inside: avoid; }
+        .items .repeated-reference th { padding: 2px 0 4px; border: 0; background: #fff; color: #606776; text-align: right; font-size: 8px; }
         .items th { padding: 5px 5px; border: 1px solid #aeb4bf; background: #f9d7df; text-align: left; font-size: 10px; }
         .items td { padding: 5px 5px; border: 1px solid #c7cbd3; }
         .items .number { width: 7%; text-align: center; }
@@ -73,6 +73,8 @@
         .items.tax .amount { width: 17%; }
         .items.tax .tax-amount { width: 13%; }
         .items.tax .tax-base { width: 14%; }
+        .closing { page-break-inside: avoid; }
+        .summary-reference { margin: 0 0 4px; color: #606776; font-size: 8px; text-align: right; }
         .lower { margin-bottom: 7px; }
         .lower > tbody > tr > td { vertical-align: top; }
         .totals-column { width: 35%; padding-right: 13px; }
@@ -115,7 +117,7 @@
                 <p class="detail"><span class="detail-label">Website / الموقع</span><br><span class="detail-value">www.oneway.fashion</span></p>
             </td>
             <td class="brand">
-                <img src="{{ $invoiceLogoSrc ?? public_path('custom/logo-icon-black.png') }}" alt="">
+                <img src="{{ $invoiceLogoSrc ?? public_path('custom/logo-icon-black.png') }}" width="95" height="95" alt="">
                 <div class="brand-name">{{ $invoiceIdentity['name'] }}</div>
             </td>
             <td class="customer" dir="ltr">
@@ -156,6 +158,7 @@
 
     <table class="items{{ $taxEnabled ? ' tax' : '' }}" dir="ltr">
         <thead>
+            <tr class="repeated-reference"><th colspan="{{ $taxEnabled ? 7 : 5 }}">Invoice # {{ $order->barcode }} · {{ $currencyCode }}</th></tr>
             <tr>
                 <th class="number">NO.</th>
                 <th class="description">DESCRIPTION / الوصف</th>
@@ -185,6 +188,8 @@
         </tbody>
     </table>
 
+    <div class="closing">
+    <div class="summary-reference">Invoice # {{ $order->barcode }} · Summary</div>
     <table class="lower">
         <tr>
             <td class="totals-column">
@@ -237,6 +242,7 @@
         <div>If you have any questions about this invoice, please contact us.</div>
         <div class="footer-contact">{{ $invoiceIdentity['name'] }}@if(!empty($invoiceIdentity['phone'])) · {{ $invoiceIdentity['phone'] }}@endif @if(!empty($invoiceIdentity['email'])) · {{ $invoiceIdentity['email'] }}@endif</div>
         <strong>Thank You For Your Business!</strong>
+    </div>
     </div>
 @if(!empty($autoPrint))
 <script>window.addEventListener('load', function () { window.print(); });</script>
