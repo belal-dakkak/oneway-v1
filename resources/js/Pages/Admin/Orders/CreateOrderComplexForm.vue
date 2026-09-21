@@ -7,7 +7,7 @@
                 </h2>
                 <div class="flex justify-around">
                     <inertia-link :href="route('orders.simple')" class="mx-2">
-                        <h3 class="text-rose-500 group-hover:text-white text-2xl font-semibold underline">ط·ظ„ط¨ ط³ط±ظٹط¹</h3>
+                        <h3 class="text-rose-500 group-hover:text-white text-2xl font-semibold underline">طلب سريع</h3>
                     </inertia-link>
                 </div>
             </div>
@@ -61,9 +61,9 @@
                     <div class="w-full px-6" dir="rtl">
                         <jet-label for="currency" :value="__('Currency Type')" />
                         <div v-if="currencies.length === 1 && currencies[0].locked" class="mt-1 rounded-md border border-teal-200 bg-teal-50 px-4 py-3 font-bold text-teal-700">
-                            {{ currencies[0].code }} â€” ط§ظ„ط¹ظ…ظ„ط© ظ…ط­ط¯ط¯ط© طھظ„ظ‚ط§ط¦ظٹظ‹ط§ ط­ط³ط¨ ظ†ظˆط¹ ط§ظ„ط·ظ„ط¨
+                            {{ currencies[0].code }} — العملة محددة تلقائيًا حسب نوع الطلب
                         </div>
-                        <Multiselect v-else v-model="form.currency" :options="currencies" :multiple="false" :close-on-select="true" placeholder="ط§ط®طھط± ظ†ظˆط¹ ط§ظ„ط¹ظ…ظ„ط© ط§ظ„طھظٹ طھظ… ط¨ظ‡ط§ ط§ظ„ط¯ظپط¹" label="name" @tag="asyncFind" @search-change="asyncFind"
+                        <Multiselect v-else v-model="form.currency" :options="currencies" :multiple="false" :close-on-select="true" placeholder="اختر نوع العملة التي تم بها الدفع" label="name" @tag="asyncFind" @search-change="asyncFind"
                              track-by="value" />
                         <jet-input-error :message="form.errors.currency" class="mt-2" />
                     </div>
@@ -75,29 +75,29 @@
                     <p class="text-2xl flex justify-between my-2 text-center"><span class="rounded-md px-3 py-1 bg-gray-800 text-white">{{ form.total_price_before_discount }}</span> <span class="mt-1 ml-4">{{ __('Total Price')}}</span> </p>
 
                     <p class="text-2xl flex justify-between my-2 text-center"><span class="rounded-md px-3 py-1 bg-rose-400 text-white">{{ form.discount }}</span> <span class="mt-1 ml-4">{{ __('Discount')}}</span> </p>
-                    <p class="text-2xl flex justify-between my-2 text-center" v-if="form.enable_shipping"><span class="rounded-md px-3 py-1 bg-blue-400 text-white">{{ form.shipping_fee }}</span> <span class="mt-1 ml-4">ط±ط³ظˆظ… ط§ظ„ط´ط­ظ†</span> </p>
-                    <p class="text-2xl flex justify-between my-2 text-center" v-if="form.enable_cod"><span class="rounded-md px-3 py-1 bg-blue-400 text-white">{{ form.cod_fee }}</span> <span class="mt-1 ml-4">ط±ط³ظˆظ… COD</span> </p>
-                    <p class="text-2xl flex justify-between my-2 text-center"><span class="rounded-md px-3 py-1 bg-gray-800 text-white">{{ form.total_price }}</span> <span class="mt-1 ml-4">{{ __('Total Price After Discount')}} + ط§ظ„ط±ط³ظˆظ…</span> </p>
+                    <p class="text-2xl flex justify-between my-2 text-center" v-if="form.enable_shipping"><span class="rounded-md px-3 py-1 bg-blue-400 text-white">{{ form.shipping_fee }}</span> <span class="mt-1 ml-4">رسوم الشحن</span> </p>
+                    <p class="text-2xl flex justify-between my-2 text-center" v-if="form.enable_cod"><span class="rounded-md px-3 py-1 bg-blue-400 text-white">{{ form.cod_fee }}</span> <span class="mt-1 ml-4">رسوم COD</span> </p>
+                    <p class="text-2xl flex justify-between my-2 text-center"><span class="rounded-md px-3 py-1 bg-gray-800 text-white">{{ form.total_price }}</span> <span class="mt-1 ml-4">{{ __('Total Price After Discount')}} + الرسوم</span> </p>
                     <p class="text-xl mt-2 flex justify-between my-2 text-center"><span class="rounded-md px-3 py-1 bg-black text-white">{{ form.total_qty }}</span> <span class="mt-1 ml-4">{{ __('Total Quantity')}}</span> </p>
 
                     <div class="max-w-7xl mx-auto py-10 sm:px-6 lg:px-8 flex justify-around">
 
                         <div class="w-full px-6" dir="rtl">
                             <jet-label for="user" :value="__('Shipping Company')" />
-                            <Multiselect v-model="form.shipper" :options="shippers" :multiple="false" :close-on-select="true" placeholder="ط§ط®طھط± ظ…ط­ظ„ ظ…ظ† ظ‚ط§ط¦ظ…ط© ط´ط±ظƒط§طھ ط§ظ„ط´ط­ظ†" label="full_name"
+                            <Multiselect v-model="form.shipper" :options="shippers" :multiple="false" :close-on-select="true" placeholder="اختر محل من قائمة شركات الشحن" label="full_name"
                                          track-by="id" />
                             <jet-input-error :message="form.errors.shipper" class="mt-2" />
                         </div>
 
                         <div class="w-full px-6" dir="rtl">
                             <jet-label for="user" :value="__('Client')" />
-                            <Multiselect v-model="form.user" :options="users" :multiple="false" :close-on-select="true" placeholder="ط§ط®طھط± ظ…ط­ظ„ ظ…ظ† ظ‚ط§ط¦ظ…ط© ط§ظ„ط²ط¨ط§ط¦ظ†" label="full_name"
+                            <Multiselect v-model="form.user" :options="users" :multiple="false" :close-on-select="true" placeholder="اختر محل من قائمة الزبائن" label="full_name"
                                          track-by="id" />
                             <jet-input-error :message="form.errors.user" class="mt-2" />
                         </div>
                         <div class="w-full px-6" dir="rtl">
                             <jet-label for="payment" :value="__('PAY Type')" />
-                            <Multiselect v-model="form.payment" :options="[{ name: 'Pay Cash', value: '0' },{ name: 'Pay by Visa/Debit Card', value: '1' },{ name: 'Pay by Cheque', value: '2' }]" :multiple="false" :close-on-select="true" placeholder="ط§ط®طھط± ظˆط³ظٹظ„ط© ط¯ظپط¹" label="name"
+                            <Multiselect v-model="form.payment" :options="[{ name: 'Pay Cash', value: '0' },{ name: 'Pay by Visa/Debit Card', value: '1' },{ name: 'Pay by Cheque', value: '2' }]" :multiple="false" :close-on-select="true" placeholder="اختر وسيلة دفع" label="name"
                              track-by="value" />
                             <jet-input-error :message="form.errors.payment" class="mt-2" />
                         </div>
@@ -119,7 +119,7 @@
                         <div class="w-full px-6" dir="rtl">
                             <label class="flex items-center mt-6">
                                 <input type="checkbox" class="form-checkbox text-indigo-600" v-model="form.enable_shipping">
-                                <span class="ml-2 mr-2">ط¥ط¶ط§ظپط© ط±ط³ظˆظ… ط§ظ„ط´ط­ظ†</span>
+                                <span class="ml-2 mr-2">إضافة رسوم الشحن</span>
                             </label>
                             <div v-if="form.enable_shipping" class="mt-2">
                                 <jet-input id="shipping_fee" type="number" min="0" :step="form.currency?.code === 'SYP' ? 1 : 0.01" class="block w-full" v-model="form.shipping_fee" />
@@ -129,7 +129,7 @@
                         <div class="w-full px-6" dir="rtl">
                             <label class="flex items-center mt-6">
                                 <input type="checkbox" class="form-checkbox text-indigo-600" v-model="form.enable_cod">
-                                <span class="ml-2 mr-2">ط¥ط¶ط§ظپط© ط±ط³ظˆظ… ط§ظ„ط¯ظپط¹ ط¹ظ†ط¯ ط§ظ„ط§ط³طھظ„ط§ظ… (COD)</span>
+                                <span class="ml-2 mr-2">إضافة رسوم الدفع عند الاستلام (COD)</span>
                             </label>
                             <div v-if="form.enable_cod" class="mt-2">
                                 <jet-input id="cod_fee" type="number" class="block w-full" v-model="form.cod_fee" />
@@ -147,8 +147,8 @@
 
                     <div class="max-w-7xl mx-auto py-10 sm:px-6 lg:px-8 flex justify-around">
                         <div class="w-full px-6">
-                            <label style="display: block;width: 100%;direction: rtl !important;"> ط§ظ„ظ…ظ„ط§ط­ط¸ط§طھ </label>
-                            <textarea v-model="notes" rows="3" class="form-control" style="width: 100%;direction: rtl !important;" placeholder="ظ…ظ† ظپط¶ظ„ظƒ ط§ط¯ط®ظ„ ط§ظ„ظ…ظ„ط§ط­ط¸ط§طھ"></textarea>
+                            <label style="display: block;width: 100%;direction: rtl !important;"> الملاحظات </label>
+                            <textarea v-model="notes" rows="3" class="form-control" style="width: 100%;direction: rtl !important;" placeholder="من فضلك ادخل الملاحظات"></textarea>
                         </div>
                     </div>
 
@@ -234,7 +234,7 @@ export default defineComponent({
         MeeForm,
         JetButton,
         TaxPriceNotice,
-        SalesCashboxCard
+        SalesCashboxCard,
     },
     props: {
         users: Object,
@@ -336,16 +336,16 @@ export default defineComponent({
 
 								await Receipt.printOrder(response.data);
 
-								this.showSuccessMessage('طھظ…طھ ط¹ظ…ظ„ظٹط© ط§ظ„ط·ط¨ط§ط¹ط© ط¨ظ†ط¬ط§ط­')
+								this.showSuccessMessage('تمت عملية الطباعة بنجاح')
 							})
 								.catch(error => {
 
-								this.showErrorMessage('ظپط´ظ„ ط¹ظ…ظ„ظٹط© ط§ظ„ط·ط¨ط§ط¹ط©, ط­ط§ظˆظ„ ظ„ط§ط­ظ‚ط§ظ‹ ط±ط¬ط§ط،ظ‹')
+								this.showErrorMessage('فشل عملية الطباعة, حاول لاحقاً رجاءً')
 							})
 
 						}
 
-						this.showSuccessMessage('طھظ…طھ ط¥ط¶ط§ظپط© ط§ظ„ط·ظ„ط¨ظٹط© ط¨ظ†ط¬ط§ط­');
+						this.showSuccessMessage('تمت إضافة الطلبية بنجاح');
                     }
                 },
                 onError: (res) => undefined
@@ -396,17 +396,17 @@ export default defineComponent({
 
 								await Receipt.printOrder(response.data);
 
-								this.showSuccessMessage('طھظ…طھ ط¹ظ…ظ„ظٹط© ط§ظ„ط·ط¨ط§ط¹ط© ط¨ظ†ط¬ط§ط­')
+								this.showSuccessMessage('تمت عملية الطباعة بنجاح')
 							})
 								.catch(error => {
 
-								this.showErrorMessage('ظپط´ظ„ ط¹ظ…ظ„ظٹط© ط§ظ„ط·ط¨ط§ط¹ط©, ط­ط§ظˆظ„ ظ„ط§ط­ظ‚ط§ظ‹ ط±ط¬ط§ط،ظ‹')
+								this.showErrorMessage('فشل عملية الطباعة, حاول لاحقاً رجاءً')
 							})
                             */
 
 						}
 
-						this.showSuccessMessage('طھظ…طھ ط¥ط¶ط§ظپط© ط§ظ„ط·ظ„ط¨ظٹط© ط¨ظ†ط¬ط§ط­');
+						this.showSuccessMessage('تمت إضافة الطلبية بنجاح');
                     }
                 },
                 onError: (res) => undefined
@@ -415,7 +415,7 @@ export default defineComponent({
         },
         checkQty(product){
             if (product.qty > product.qty_limit){
-                this.showErrorMessage('ط§ظ†طھط¨ظ‡ ظ„ظ‚ط¯ طھط¬ط§ظˆط²طھ ط§ظ„ط­ط¯ ط§ظ„ط£ظ‚طµظ‰')
+                this.showErrorMessage('انتبه لقد تجاوزت الحد الأقصى')
                 product.qty = product.qty_limit
             }
         },
@@ -441,7 +441,7 @@ export default defineComponent({
                         ).focus();
                     }else{
                         element.value = ''
-                        this.showErrorMessage('ظ„ظ‚ط¯ ظˆطµظ„طھ ط§ظ„ظ‰ ط§ظ„ط­ط¯ ط§ظ„ط£ظ‚طµظ‰')
+                        this.showErrorMessage('لقد وصلت الى الحد الأقصى')
                     }
 
                 } else{
