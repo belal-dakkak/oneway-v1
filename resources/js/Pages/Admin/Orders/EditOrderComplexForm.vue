@@ -3,7 +3,7 @@
         <template #header>
             <div class="flex justify-between gap-4">
                 <h2 class="mx-2 font-semibold text-xl text-gray-800">
-                    تعديل طلبية زبون
+                    طھط¹ط¯ظٹظ„ ط·ظ„ط¨ظٹط© ط²ط¨ظˆظ†
                 </h2>
             </div>
         </template>
@@ -22,7 +22,7 @@
                         </div>
 
                         <div class="px-4" dir="rtl">
-                            <jet-label for="product" value="المنتج" />
+                            <jet-label for="product" value="ط§ظ„ظ…ظ†طھط¬" />
                             <jet-input autofocus v-on:keyup.prevent="controlProduct" ref="product" v-model="product.barcode" class="mt-1 block w-full" type="text"></jet-input>
                             <jet-input-error :message="form.errors.product" class="mt-2" />
                             <input type="hidden" name="product_id" v-model="product.product_id">
@@ -31,14 +31,14 @@
 
                         <div class="px-4 flex justify-around">
                             <div class="">
-                                <jet-label for="retail_price" value="سعر المبيع" dir="rtl" />
+                                <jet-label for="retail_price" value="ط³ط¹ط± ط§ظ„ظ…ط¨ظٹط¹" dir="rtl" />
                                 <jet-input ref="price" id="retail_price" type="number" min="0" :step="order.curr_type === 'SYP' ? 1 : 0.01" class="mt-1 block w-full" v-model="product.price" autocomplete="retail_price" />
                                 <jet-input-error :message="form.errors.retail_price" class="mt-2" />
                             </div>
 
                             <div>
-                                <jet-label v-if="product.qty_limit" for="qty" :value="' العدد المسموح '+product.qty_limit" dir="rtl" />
-                                <jet-label v-else for="qty" value="العدد" dir="rtl" />
+                                <jet-label v-if="product.qty_limit" for="qty" :value="' ط§ظ„ط¹ط¯ط¯ ط§ظ„ظ…ط³ظ…ظˆط­ '+product.qty_limit" dir="rtl" />
+                                <jet-label v-else for="qty" value="ط§ظ„ط¹ط¯ط¯" dir="rtl" />
                                 <jet-input id="qty" type="number" @change="checkQty(product)" :max="product.qty_limit??1" class="mt-1 block w-full" v-model="product.qty" autocomplete="qty" />
                                 <jet-input-error :message="form.errors.qty" class="mt-2" />
 
@@ -54,10 +54,10 @@
 
                     <jet-section-border />
 
-                    <!-- <p class="text-2xl flex justify-between my-2 text-center"><span class="rounded-md px-3 py-1 bg-gray-800 text-white">{{ form.total_price_before_discount }}</span> <span class="mt-1 ml-4">السعر الكلي</span> </p>
-                    <p class="text-2xl flex justify-between my-2 text-center"><span class="rounded-md px-3 py-1 bg-rose-400 text-white">{{ form.discount }}</span> <span class="mt-1 ml-4">الخصم</span> </p>
-                    <p class="text-2xl flex justify-between my-2 text-center"><span class="rounded-md px-3 py-1 bg-gray-800 text-white">{{ form.total_price }}</span> <span class="mt-1 ml-4">السعر الكلي بعد الخصم</span> </p>
-                    <p class="text-xl mt-2 flex justify-between my-2 text-center"><span class="rounded-md px-3 py-1 bg-black text-white">{{ form.total_qty }}</span> <span class="mt-1 ml-4">العدد الكلي</span> </p> -->
+                    <!-- <p class="text-2xl flex justify-between my-2 text-center"><span class="rounded-md px-3 py-1 bg-gray-800 text-white">{{ form.total_price_before_discount }}</span> <span class="mt-1 ml-4">ط§ظ„ط³ط¹ط± ط§ظ„ظƒظ„ظٹ</span> </p>
+                    <p class="text-2xl flex justify-between my-2 text-center"><span class="rounded-md px-3 py-1 bg-rose-400 text-white">{{ form.discount }}</span> <span class="mt-1 ml-4">ط§ظ„ط®طµظ…</span> </p>
+                    <p class="text-2xl flex justify-between my-2 text-center"><span class="rounded-md px-3 py-1 bg-gray-800 text-white">{{ form.total_price }}</span> <span class="mt-1 ml-4">ط§ظ„ط³ط¹ط± ط§ظ„ظƒظ„ظٹ ط¨ط¹ط¯ ط§ظ„ط®طµظ…</span> </p>
+                    <p class="text-xl mt-2 flex justify-between my-2 text-center"><span class="rounded-md px-3 py-1 bg-black text-white">{{ form.total_qty }}</span> <span class="mt-1 ml-4">ط§ظ„ط¹ط¯ط¯ ط§ظ„ظƒظ„ظٹ</span> </p> -->
 
 
                     <p class="text-2xl flex justify-between my-2 text-center"><span class="rounded-md px-3 py-1 bg-gray-800 text-white">{{ form.total_price_without_vat }}</span> <span class="mt-1 ml-4">{{ __('Total Price Without Vat')}}</span> </p>
@@ -74,15 +74,15 @@
                     <div class="max-w-7xl mx-auto py-10 sm:px-6 lg:px-8 flex justify-around">
 
                         <div class="w-full px-6" dir="rtl">
-                            <jet-label for="user" value="شركة الشحن" />
-                            <Multiselect v-model="form.shipper" :options="shippers" :multiple="false" :close-on-select="true" placeholder="اختر محل من قائمة شركات الشحن" label="full_name"
+                            <jet-label for="user" value="ط´ط±ظƒط© ط§ظ„ط´ط­ظ†" />
+                            <Multiselect v-model="form.shipper" :options="shippers" :multiple="false" :close-on-select="true" placeholder="ط§ط®طھط± ظ…ط­ظ„ ظ…ظ† ظ‚ط§ط¦ظ…ط© ط´ط±ظƒط§طھ ط§ظ„ط´ط­ظ†" label="full_name"
                                          track-by="id" />
                             <jet-input-error :message="form.errors.shipper" class="mt-2" />
                         </div>
 
                         <div class="w-full px-6" dir="rtl">
-                            <jet-label for="user" value="الزبون" />
-                            <Multiselect v-model="form.user" :options="users" :multiple="false" :close-on-select="true" placeholder="اختر محل من قائمة الزبائن" label="full_name"
+                            <jet-label for="user" value="ط§ظ„ط²ط¨ظˆظ†" />
+                            <Multiselect v-model="form.user" :options="users" :multiple="false" :close-on-select="true" placeholder="ط§ط®طھط± ظ…ط­ظ„ ظ…ظ† ظ‚ط§ط¦ظ…ط© ط§ظ„ط²ط¨ط§ط¦ظ†" label="full_name"
                                          track-by="id" />
                             <jet-input-error :message="form.errors.user" class="mt-2" />
                         </div>
@@ -92,13 +92,13 @@
                     <div class="max-w-7xl mx-auto py-10 sm:px-6 lg:px-8 flex justify-around">
 
                         <div class="w-full px-6">
-                            <jet-label for="discount" value="الخصم" dir="rtl" />
+                            <jet-label for="discount" value="ط§ظ„ط®طµظ…" dir="rtl" />
                             <jet-input ref="discount" id="discount" type="number" class="mt-1 block w-full" v-model="form.discount" autocomplete="discount" />
                             <jet-input-error :message="form.errors.discount" class="mt-2" />
                         </div>
 
                         <div class="w-full px-6">
-                            <jet-label for="paid_price" value="المبلغ المدفوع" dir="rtl" />
+                            <jet-label for="paid_price" value="ط§ظ„ظ…ط¨ظ„ط؛ ط§ظ„ظ…ط¯ظپظˆط¹" dir="rtl" />
                             <jet-input ref="price" id="paid_price" type="number" class="mt-1 block w-full" v-model="form.paid_price" autocomplete="paid_price" />
                             <jet-input-error :message="form.errors.paid_price" class="mt-2" />
                         </div>
@@ -106,33 +106,17 @@
                     </div>
 
                     <jet-button :type="'button'" @click="editOrderSimple" v-if="form.total_qty > 0">
-                        حفظ
+                        ط­ظپط¸
                     </jet-button>
 
                     <button v-else type="button" class="inline-flex items-center px-4 py-2 bg-gray-500 border border-transparent rounded-md font-semibold text-xs text-white uppercase tracking-widest hover:bg-gray-300 active:bg-gray-500 focus:outline-none focus:border-gray-500 focus:ring focus:ring-gray-300 disabled:opacity-25 transition">
-                        أدخل البضاعة
+                        ط£ط¯ط®ظ„ ط§ظ„ط¨ط¶ط§ط¹ط©
                     </button>
 
 
                 </form>
 
-                <div class="flex justify-between block bg-white text-black-500 hover:text-white hover:bg-gray-800 max-w-xs mx-auto rounded-lg p-6 m-8 ring-1 ring-black-400">
-                    <div>
-                        <div class="flex items-center space-x-3">
-                            <h3 class="p-2 text-2xl font-bold">الصندوق</h3>
-                        </div>
-                        <p class="p-2 text-4xl font-bold">
-                            <template v-if="Number(admin.country_id) === 4">
-                                <span class="block text-xl">{{ Number(admin.cashboxes?.USD?.balance || 0).toFixed(2) }} USD</span>
-                                <span class="block text-xl">{{ Number(admin.cashboxes?.SYP?.balance || 0).toLocaleString(undefined, { maximumFractionDigits: 0 }) }} SYP</span>
-                            </template>
-                            <template v-else>{{ admin.credit }}</template>
-                        </p>
-                    </div>
-                    <div>
-                        <vue-feather :type="'credit-card'" stroke-width="2" class="h-12 w-24 p-1 place-self-center inline-block"></vue-feather>
-                    </div>
-                </div>
+                <sales-cashbox-card title="ط§ظ„طµظ†ط¯ظˆظ‚" />
 
 
             </div>
@@ -156,9 +140,8 @@ import JetInputError from '@/Jetstream/InputError'
 import JetButton from '@/Jetstream/Button.vue'
 
 import {MeeForm} from "@/Shared/Ui";
-import {computed} from "vue";
-import {usePage} from "@inertiajs/inertia-vue3";
 import TaxPriceNotice from '@/Components/Admin/TaxPriceNotice.vue';
+import SalesCashboxCard from '@/Components/Admin/SalesCashboxCard.vue';
 
 export default defineComponent({
     components: {
@@ -170,7 +153,8 @@ export default defineComponent({
         Multiselect,
         MeeForm,
         JetButton,
-        TaxPriceNotice
+        TaxPriceNotice,
+        SalesCashboxCard
     },
     props: {
         users: Object,
@@ -240,14 +224,14 @@ export default defineComponent({
                         this.form.user = ''
                         this.form.shipper = ''
 
-                        this.showSuccessMessage('تمت إضافة الطلبية بنجاح');
+                        this.showSuccessMessage('طھظ…طھ ط¥ط¶ط§ظپط© ط§ظ„ط·ظ„ط¨ظٹط© ط¨ظ†ط¬ط§ط­');
                     }
                 },
             });
         },
         checkQty(product){
             if (product.qty > product.qty_limit){
-                this.showErrorMessage('انتبه لقد تجاوزت الحد الأقصى')
+                this.showErrorMessage('ط§ظ†طھط¨ظ‡ ظ„ظ‚ط¯ طھط¬ط§ظˆط²طھ ط§ظ„ط­ط¯ ط§ظ„ط£ظ‚طµظ‰')
                 product.qty = product.qty_limit
             }
         },
@@ -273,7 +257,7 @@ export default defineComponent({
                                 0
                         ).focus();
                     }else{
-                        this.showErrorMessage('لقد وصلت الى الحد الأقصى')
+                        this.showErrorMessage('ظ„ظ‚ط¯ ظˆطµظ„طھ ط§ظ„ظ‰ ط§ظ„ط­ط¯ ط§ظ„ط£ظ‚طµظ‰')
                         element.value = ''
                     }
 
@@ -420,10 +404,6 @@ export default defineComponent({
                 this.form.paid_price = priceAfterDiscount;
             })
         }
-    },
-    setup() {
-        const admin = computed(() => usePage().props.value.auth.user)
-        return { admin }
     },
 })
 </script>

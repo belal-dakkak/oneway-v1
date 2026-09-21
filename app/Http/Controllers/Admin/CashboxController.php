@@ -8,6 +8,7 @@ use App\Services\CashboxService;
 use App\Services\CurrencyService;
 use App\Support\Country;
 use Illuminate\Http\Request;
+use Illuminate\Http\JsonResponse;
 use Illuminate\Support\Facades\Redirect;
 use Inertia\Inertia;
 use Inertia\Response;
@@ -46,6 +47,17 @@ class CashboxController extends Controller
                 ->paginate(30),
             'canExchange' => (int) auth()->user()->country_id === Country::SYRIA,
             'exchangeRate' => $exchangeRate,
+            'defaultCurrency' => Country::defaultCurrency((int) auth()->user()->country_id),
+        ]);
+    }
+
+    public function balances(): JsonResponse
+    {
+        $userId = (int) auth()->id();
+
+        return response()->json([
+            'walletOwnerId' => $userId,
+            'balances' => $this->cashboxes->balancesForUser($userId),
             'defaultCurrency' => Country::defaultCurrency((int) auth()->user()->country_id),
         ]);
     }

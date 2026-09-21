@@ -108,6 +108,58 @@ class CashboxClosureTest extends TestCase
                 ->etc());
     }
 
+    public function test_uae_simple_order_and_balance_endpoint_use_the_net_cashbox_after_refund_and_closure(): void
+    {
+        Currency::query()->updateOrCreate(['name' => 'aed'], ['label' => 'AED', 'rate' => 3.67]);
+        $admin = $this->user(User::ROLE_ADMIN, 'uae-sync-admin@example.test', User::COUNTRY_UAE);
+        $shop = $this->user(User::ROLE_SHOP, 'uae-sync-shop@example.test', User::COUNTRY_UAE);
+        $cashboxes = app(CashboxService::class);
+
+        $cashboxes->credit($shop->id, 3312, 'AED', 'test:uae-sale', [
+            'payment_method' => 'cash',
+        ]);
+        $cashboxes->debit($shop->id, 150, 'AED', 'test:uae-refund', [
+            'payment_method' => 'refund',
+        ]);
+
+        $this->actingAs($shop)->get(route('orders.simple'))
+            ->assertOk()
+            ->assertInertia(fn (Assert $page) => $page
+                ->component('Admin/Orders/CreateOrderSimpleForm')
+                ->where('auth.user.cashboxes.AED.credit', 3312)
+                ->where('auth.user.cashboxes.AED.debit', 150)
+                ->where('auth.user.cashboxes.AED.balance', 3162)
+                ->etc());
+
+        $this->getJson(route('cashboxes.balances'))
+            ->assertOk()
+            ->assertJsonPath('walletOwnerId', $shop->id)
+            ->assertJsonPath('defaultCurrency', 'AED')
+            ->assertJsonPath('balances.AED.balance', 3162);
+
+        $this->actingAs($admin)
+            ->post(route('users.wallet.close', $shop->id), ['return_type' => User::ROLE_SHOP])
+            ->assertRedirect(route('users.index', ['type' => User::ROLE_SHOP]));
+
+        $this->actingAs($shop)->getJson(route('cashboxes.balances'))
+            ->assertOk()
+            ->assertJsonPath('walletOwnerId', $shop->id)
+            ->assertJsonPath('defaultCurrency', 'AED')
+            ->assertJsonPath('balances.AED.balance', 0);
+
+        $this->actingAs($admin)->getJson(route('cashboxes.balances'))
+            ->assertOk()
+            ->assertJsonPath('balances.AED.balance', 3162);
+
+        $this->assertDatabaseHas('wallet_movements', [
+            'user_id' => $shop->id,
+            'currency_code' => 'AED',
+            'direction' => 'debit',
+            'payment_method' => 'refund',
+            'amount' => 150,
+        ]);
+    }
+
     public function test_only_the_country_admin_can_receive_a_sales_closure(): void
     {
         $warehouse = $this->user(User::ROLE_WAREHOUSE, 'receiver-warehouse@example.test');
@@ -225,11 +277,11 @@ class CashboxClosureTest extends TestCase
         ]));
     }
 
-    private function user(int $role, string $email): User
+    private function user(int $role, string $email, int $country = User::COUNTRY_SYRIA): User
     {
         return User::query()->create([
             'name' => $email, 'email' => $email, 'password' => 'secret',
-            'role_id' => $role, 'country_id' => User::COUNTRY_SYRIA,
+            'role_id' => $role, 'country_id' => $country,
         ]);
     }
 

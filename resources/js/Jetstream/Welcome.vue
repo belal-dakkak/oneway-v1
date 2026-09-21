@@ -2,19 +2,7 @@
     <div dir="rtl">
 
        <div class="flex justify-between">
-           <div class="flex justify-between block bg-white text-teal-500 hover:text-white hover:bg-teal-400 max-w-xs mx-auto rounded-lg p-6 m-8 ring-1 ring-teal-400">
-               <div>
-                   <div class="flex items-center space-x-3">
-                       <h3 class="p-2 text-2xl font-bold">الصندوق</h3>
-                   </div>
-                   <p class="p-2 text-xl font-bold">
-                       {{ user.credit }}
-                   </p>
-               </div>
-               <div>
-                   <vue-feather :type="'credit-card'" stroke-width="2" class="h-12 w-24 p-1 place-self-center inline-block"></vue-feather>
-               </div>
-           </div>
+           <sales-cashbox-card title="الصندوق" />
            <div class="flex justify-between block bg-white text-rose-500 hover:text-white hover:bg-rose-400 max-w-xs mx-auto rounded-lg p-6 m-8 ring-1 ring-rose-400">
                <div>
                    <div class="flex items-center space-x-3">
@@ -50,8 +38,9 @@
 <script>
 import {computed} from "vue";
 import {usePage} from "@inertiajs/inertia-vue3";
+import SalesCashboxCard from '@/Components/Admin/SalesCashboxCard.vue';
 
-const components = {}
+const components = { SalesCashboxCard }
 
 export default {
     name: 'DashboardWelcome',

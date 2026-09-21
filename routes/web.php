@@ -180,6 +180,7 @@ Route::middleware(['auth:sanctum'])
 
     Route::prefix('/cashboxes')->name('cashboxes.')->middleware(['guard:admin|warehouse|shop'])->group(function () {
         Route::get('/', [CashboxController::class, 'index'])->name('index');
+        Route::get('/balances', [CashboxController::class, 'balances'])->name('balances');
         Route::post('/exchange', [CashboxController::class, 'exchange'])->name('exchange');
     });
 
