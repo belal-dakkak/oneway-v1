@@ -1,6 +1,45 @@
 <?php
 
 return [
+    'one_way' => [
+        'branches' => [
+            [
+                'country' => 'United Arab Emirates',
+                'details' => [
+                    ['label' => 'Branch 1', 'value' => 'Ajman Industrial 2 Beirut Street'],
+                    ['label' => 'Phone', 'value' => '+971 545 516 995'],
+                    ['label' => 'Phone', 'value' => '+971 564 533 655'],
+                ],
+            ],
+            [
+                'country' => 'Syria (Aleppo)',
+                'details' => [
+                    ['label' => 'Branch 2', 'value' => 'Aleppo'],
+                    ['label' => 'Phone', 'value' => '+963 947 900 555'],
+                    ['label' => 'Phone', 'value' => '+963 958 900 555'],
+                ],
+            ],
+            [
+                'country' => 'Lebanon, Beirut',
+                'details' => [
+                    ['label' => 'Branch 3', 'value' => 'Lebanon Beirut'],
+                    ['label' => 'Phone', 'value' => '+961 81 730 725'],
+                ],
+            ],
+            [
+                'country' => 'Türkiye',
+                'details' => [
+                    ['label' => 'Branch 4', 'value' => 'Türkiye Istanbul Merter'],
+                    ['label' => 'Phone', 'value' => '+905 004 001 621'],
+                ],
+            ],
+        ],
+        'website' => 'www.oneway.fashion',
+        'website_url' => 'http://www.oneway.fashion',
+        'email' => 'theoneway.fashion@gmail.com',
+        'footer_name' => 'ONE WAY CLOTHING TRADING',
+    ],
+
     'date' => [
         /*
          * Carbon date format

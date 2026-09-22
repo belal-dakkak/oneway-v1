@@ -16,9 +16,9 @@ class InvoicePdfPaginationTest extends TestCase
 {
     use RefreshDatabase;
 
-    public function test_download_button_route_renders_short_and_long_invoices_for_both_countries(): void
+    public function test_download_button_route_renders_short_and_long_invoices_for_all_supported_countries(): void
     {
-        foreach ([User::COUNTRY_UAE, User::COUNTRY_SYRIA] as $country) {
+        foreach ([User::COUNTRY_LB, User::COUNTRY_UAE, User::COUNTRY_SYRIA] as $country) {
             foreach ([false, true] as $taxable) {
                 foreach ([9, 26, 50] as $count) {
                     $order = $this->orderWithItems($country, $taxable, $count);
@@ -53,7 +53,8 @@ class InvoicePdfPaginationTest extends TestCase
     private function orderWithItems(int $country, bool $taxable, int $count): Order
     {
         $currency = $country === User::COUNTRY_UAE ? 'AED' : 'USD';
-        $code = ($country === User::COUNTRY_UAE ? 'AE' : 'SY') . '-' . ($taxable ? 'TAX' : 'NORMAL') . '-' . $count;
+        $countryCode = $country === User::COUNTRY_UAE ? 'AE' : ($country === User::COUNTRY_SYRIA ? 'SY' : 'LB');
+        $code = $countryCode . '-' . ($taxable ? 'TAX' : 'NORMAL') . '-' . $count;
         $seller = User::query()->create([
             'name' => 'One Way ' . $code, 'email' => strtolower($code) . '@example.test',
             'phone' => '+971 500 000 001', 'address' => 'Main branch', 'password' => 'secret',

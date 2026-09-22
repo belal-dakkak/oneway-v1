@@ -20,6 +20,7 @@
         : (in_array($paymentType, ['1', 'card', 'pay_by_card'], true) ? 'Credit / debit card'
         : ($paymentType === 'cod' ? 'Cash on delivery' : 'Cash'));
     $policy = getRefundPolicy();
+    $brandContacts = config('invoices.one_way');
 @endphp
 <!DOCTYPE html>
 <html lang="en">
@@ -29,38 +30,41 @@
     <title>Invoice {{ $order->barcode }}</title>
     <style>
         * { box-sizing: border-box; }
-        body { margin: 0; color: #202735; font: 11px/1.35 dejavusans, sans-serif; }
+        body { margin: 0; color: #202735; font: 10px/1.28 dejavusans, sans-serif; }
         table { width: 100%; border-collapse: collapse; table-layout: fixed; }
         td, th { vertical-align: top; }
-        .header { margin-bottom: 8px; }
-        .header td { padding: 3px 8px; }
-        .header .contact { width: 32%; padding-left: 0; }
-        .header .brand { width: 36%; text-align: center; padding: 0 6px; }
-        .header .customer { width: 32%; padding-right: 0; }
-        .brand img { display: block; width: 25mm; height: 25mm; margin: 0 auto 3px; }
-        .brand-name { font-size: 14px; font-weight: bold; line-height: 1.25; word-wrap: break-word; }
-        .eyebrow { color: #9d4559; font-size: 8px; font-weight: bold; letter-spacing: .7px; text-transform: uppercase; }
-        .section-name { margin-bottom: 4px; padding: 4px 7px; background: #f9d7df; font-size: 10px; font-weight: bold; }
-        .contact-name { margin-bottom: 4px; font-size: 11px; font-weight: bold; }
-        .detail { margin: 0 0 3px; word-wrap: break-word; }
-        .detail-label { color: #9d4559; font-size: 9px; font-weight: bold; }
+        a { color: inherit; text-decoration: none; }
+        .header { margin-bottom: 7px; }
+        .header > tbody > tr > td { padding: 0 7px; }
+        .header .contact { width: 35%; padding-left: 0; }
+        .header .brand { width: 40%; text-align: center; }
+        .header .customer { width: 25%; padding-right: 0; }
+        .contact-directory { direction: ltr; font-size: 8.5px; line-height: 1.18; }
+        .contact-group { margin: 0 0 3px; }
+        .contact-country { font-size: 9px; font-weight: bold; }
+        .contact-line { margin: 0; white-space: nowrap; }
+        .contact-label { color: #d13d58; font-weight: bold; }
+        .contact-online { margin-top: 5px; }
+        .brand img { display: block; width: 30mm; height: 30mm; margin: 0 auto 3px; object-fit: contain; }
+        .brand-name { font-size: 14px; font-weight: bold; line-height: 1.25; text-transform: uppercase; word-wrap: break-word; }
+        .brand-trn { margin-top: 4px; font-size: 9px; }
+        .invoice-title { margin: 9px 0 0; font-size: 20px; letter-spacing: .7px; line-height: 1.05; }
+        .invoice-subtitle { margin-top: 2px; font-size: 9px; font-weight: normal; }
+        .section-name { display: inline-block; margin-bottom: 4px; padding: 3px 7px; background: #f4bdca; font-size: 10px; font-weight: bold; }
+        .detail { margin: 0 0 4px; word-wrap: break-word; }
+        .detail-label { color: #202735; font-size: 9px; font-weight: bold; }
         .detail-value { color: #202735; }
-        .empty { color: #7c8290; }
         .ltr { direction: ltr; unicode-bidi: embed; }
-        .document-heading { margin: 2px 0 7px; text-align: center; }
-        .document-heading h1 { margin: 0; font-size: 20px; letter-spacing: 1px; line-height: 1.2; }
-        .document-heading .subtitle { color: #7c8290; font-size: 9px; }
-        .meta { margin-bottom: 10px; border: 1px solid #c7cbd3; }
-        .meta td { width: 25%; padding: 4px 6px; border-right: 1px solid #c7cbd3; }
-        .meta td:last-child { border-right: 0; }
-        .meta .label { display: block; color: #9d4559; font-size: 8px; font-weight: bold; text-transform: uppercase; }
-        .meta .value { display: block; font-size: 10px; font-weight: bold; word-wrap: break-word; }
+        .meta { margin-top: 11px; border: 1px solid #747b86; }
+        .meta td { padding: 3px 5px; border: 1px solid #747b86; vertical-align: middle; }
+        .meta .label { width: 43%; background: #f4bdca; font-size: 8.5px; font-weight: bold; }
+        .meta .value { width: 57%; font-size: 8.5px; font-weight: bold; word-wrap: break-word; }
         .items { margin-bottom: 10px; }
         .items thead { display: table-header-group; }
         .items tr { page-break-inside: avoid; }
         .items .repeated-reference th { padding: 2px 0 4px; border: 0; background: #fff; color: #606776; text-align: right; font-size: 8px; }
-        .items th { padding: 5px 5px; border: 1px solid #aeb4bf; background: #f9d7df; text-align: left; font-size: 10px; }
-        .items td { padding: 5px 5px; border: 1px solid #c7cbd3; }
+        .items th { padding: 5px; border: 1px solid #747b86; background: #f4bdca; text-align: left; font-size: 10px; }
+        .items td { padding: 5px; border: 1px solid #8b929d; }
         .items .number { width: 7%; text-align: center; }
         .items .description { width: 43%; overflow-wrap: break-word; }
         .items .qty { width: 10%; text-align: center; }
@@ -79,8 +83,8 @@
         .lower > tbody > tr > td { vertical-align: top; }
         .totals-column { width: 35%; padding-right: 13px; }
         .terms-column { width: 65%; }
-        .totals td { padding: 4px 5px; border: 1px solid #c7cbd3; vertical-align: middle; }
-        .totals .total-label { width: 55%; background: #f9d7df; font-size: 10px; }
+        .totals td { padding: 4px 5px; border: 1px solid #8b929d; vertical-align: middle; }
+        .totals .total-label { width: 55%; background: #f4bdca; font-size: 10px; }
         .totals .total-value { text-align: right; font-size: 10px; word-wrap: break-word; }
         .totals .due { color: #aa344b; font-weight: bold; }
         .terms-title { margin: 0 0 4px; font-size: 11px; text-align: right; }
@@ -88,8 +92,8 @@
         .terms-list li { margin-bottom: 2px; }
         .terms-list.ar { direction: rtl; text-align: right; padding: 0 21px 0 16px; }
         .note { width: 100%; margin-bottom: 10px; }
-        .note td { padding: 5px 7px; border: 1px solid #c7cbd3; }
-        .note .note-label { width: 20%; background: #f9d7df; font-weight: bold; }
+        .note td { padding: 5px 7px; border: 1px solid #8b929d; }
+        .note .note-label { width: 20%; background: #f4bdca; font-weight: bold; }
         .signatures { margin-bottom: 7px; }
         .signatures td { width: 50%; padding: 0 8px 13px; border-bottom: 1px solid #c7cbd3; font-size: 10px; font-weight: bold; }
         .signatures td:first-child { padding-left: 0; }
@@ -102,56 +106,49 @@
 <body>
     <table class="header">
         <tr>
-            <td class="contact" dir="ltr">
-                <div class="eyebrow">From / بيانات البائع</div>
-                <div class="contact-name">{{ $invoiceIdentity['name'] }}</div>
-                @if(!empty($invoiceIdentity['address']))
-                    <p class="detail"><span class="detail-label">Address / العنوان</span><br><span class="detail-value">{{ $invoiceIdentity['address'] }}</span></p>
-                @endif
-                @if(!empty($invoiceIdentity['phone']))
-                    <p class="detail"><span class="detail-label">Phone / الهاتف</span><br><span class="detail-value ltr">{{ $invoiceIdentity['phone'] }}</span></p>
-                @endif
-                @if(!empty($invoiceIdentity['email']))
-                    <p class="detail"><span class="detail-label">Email / البريد</span><br><span class="detail-value">{{ $invoiceIdentity['email'] }}</span></p>
-                @endif
-                <p class="detail"><span class="detail-label">Website / الموقع</span><br><span class="detail-value">www.oneway.fashion</span></p>
+            <td class="contact">
+                <div class="contact-directory">
+                    @foreach($brandContacts['branches'] as $branch)
+                        <div class="contact-group">
+                            <div class="contact-country">{{ $branch['country'] }}</div>
+                            @foreach($branch['details'] as $detail)
+                                <div class="contact-line"><span class="contact-label">{{ $detail['label'] }} :</span> {{ $detail['value'] }}</div>
+                            @endforeach
+                        </div>
+                    @endforeach
+                    <div class="contact-online">
+                        <div class="contact-line"><span class="contact-label">Website :</span> <a href="{{ $brandContacts['website_url'] }}">{{ $brandContacts['website'] }}</a></div>
+                        <div class="contact-line"><span class="contact-label">Email :</span> <a href="mailto:{{ $brandContacts['email'] }}">{{ $brandContacts['email'] }}</a></div>
+                    </div>
+                </div>
             </td>
             <td class="brand">
                 <img src="{{ $invoiceLogoSrc ?? public_path('custom/logo-icon-black.png') }}" width="95" height="95" alt="">
                 <div class="brand-name">{{ $invoiceIdentity['name'] }}</div>
+                @if($taxEnabled && !empty($invoiceIdentity['trn']))
+                    <div class="brand-trn"><strong>TRN:</strong> {{ $invoiceIdentity['trn'] }}</div>
+                @endif
+                <h1 class="invoice-title">{{ $taxEnabled ? 'TAX INVOICE' : 'INVOICE' }}</h1>
+                <div class="invoice-subtitle">{{ $taxEnabled ? 'فاتورة ضريبية' : 'فاتورة' }}</div>
             </td>
             <td class="customer" dir="ltr">
                 <div class="section-name">BILL TO / بيانات العميل</div>
-                <p class="detail"><span class="detail-label">Name / الاسم</span><br><span class="detail-value">{{ $buyerName ?: '—' }}</span></p>
+                <p class="detail"><span class="detail-label">Name / الاسم:</span> <span class="detail-value">{{ $buyerName ?: '—' }}</span></p>
                 @if($buyerPhone)
-                    <p class="detail"><span class="detail-label">Phone / الهاتف</span><br><span class="detail-value ltr">{{ $buyerPhone }}</span></p>
+                    <p class="detail"><span class="detail-label">Phone / الهاتف:</span> <span class="detail-value ltr">{{ $buyerPhone }}</span></p>
                 @endif
                 @if($buyerAddress)
-                    <p class="detail"><span class="detail-label">Address / العنوان</span><br><span class="detail-value">{{ $buyerAddress }}</span></p>
+                    <p class="detail"><span class="detail-label">Address / العنوان:</span> <span class="detail-value">{{ $buyerAddress }}</span></p>
                 @endif
                 @if($taxEnabled && !empty($order->trn))
-                    <p class="detail"><span class="detail-label">Customer TRN / الرقم الضريبي للعميل</span><br><span class="detail-value">{{ $order->trn }}</span></p>
+                    <p class="detail"><span class="detail-label">Customer TRN:</span> <span class="detail-value">{{ $order->trn }}</span></p>
                 @endif
-            </td>
-        </tr>
-    </table>
-
-    <div class="document-heading">
-        <h1>{{ $taxEnabled ? 'TAX INVOICE' : 'INVOICE' }}</h1>
-        <div class="subtitle">{{ $taxEnabled ? 'فاتورة ضريبية' : 'فاتورة' }}</div>
-    </div>
-
-    <table class="meta">
-        <tr>
-            <td><span class="label">Date / التاريخ</span><span class="value">{{ $invoiceDate ? date('Y-m-d', strtotime((string) $invoiceDate)) : '—' }}</span></td>
-            <td><span class="label">Invoice # / رقم الفاتورة</span><span class="value">{{ $order->barcode }}</span></td>
-            <td><span class="label">Order ID / رقم الطلب</span><span class="value">{{ $order->id }}</span></td>
-            <td>
-                @if($taxEnabled && !empty($invoiceIdentity['trn']))
-                    <span class="label">TRN / الرقم الضريبي</span><span class="value">{{ $invoiceIdentity['trn'] }}</span>
-                @else
-                    <span class="label">Currency / العملة</span><span class="value">{{ $currencyCode }}</span>
-                @endif
+                <table class="meta">
+                    <tr><td class="label">Date</td><td class="value">{{ $invoiceDate ? date('Y-m-d', strtotime((string) $invoiceDate)) : '—' }}</td></tr>
+                    <tr><td class="label">Invoice #</td><td class="value">{{ $order->barcode }}</td></tr>
+                    <tr><td class="label">Order ID</td><td class="value">{{ $order->id }}</td></tr>
+                    <tr><td class="label">Currency</td><td class="value">{{ $currencyCode }}</td></tr>
+                </table>
             </td>
         </tr>
     </table>
@@ -228,9 +225,7 @@
         </tr>
     </table>
 
-    @if(trim((string) ($order->notes ?? '')) !== '')
-        <table class="note"><tr><td class="note-label">ملاحظات<br>Comments</td><td>{{ $order->notes }}</td></tr></table>
-    @endif
+    <table class="note"><tr><td class="note-label">ملاحظات<br>Comments</td><td>{{ $order->notes ?? '' }}</td></tr></table>
 
     <table class="signatures">
         <tr>
@@ -239,8 +234,8 @@
         </tr>
     </table>
     <div class="footer">
-        <div>If you have any questions about this invoice, please contact us.</div>
-        <div class="footer-contact">{{ $invoiceIdentity['name'] }}@if(!empty($invoiceIdentity['phone'])) · {{ $invoiceIdentity['phone'] }}@endif @if(!empty($invoiceIdentity['email'])) · {{ $invoiceIdentity['email'] }}@endif</div>
+        <div>If you have any questions about this invoice, please contact</div>
+        <div class="footer-contact">{{ $brandContacts['footer_name'] }}, {{ $brandContacts['branches'][0]['details'][1]['value'] }}, {{ $brandContacts['email'] }}</div>
         <strong>Thank You For Your Business!</strong>
     </div>
     </div>
