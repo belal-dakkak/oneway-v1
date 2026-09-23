@@ -44,9 +44,11 @@ class InvoiceTemplateRenderingTest extends TestCase
         $this->assertStringContainsString('+963 911 111 111', $html);
         $this->assertStringNotContainsString('shop@example.test', $html);
         $this->assertStringNotContainsString('syria@example.test', $html);
-        $this->assertStringContainsString('DESCRIPTION / الوصف', $html);
-        $this->assertStringContainsString('QTY / الكمية', $html);
-        $this->assertStringContainsString('سياسة الاستبدال / Exchange Policy', $html);
+        $this->assertStringContainsString('الوصف', $html);
+        $this->assertStringContainsString('الكمية', $html);
+        $this->assertStringContainsString('سياسة التبديل', $html);
+        $this->assertStringNotContainsString('DESCRIPTION', $html);
+        $this->assertStringNotContainsString('Exchange Policy', $html);
         $this->assertStringNotContainsString('ط§', $html);
         $this->assertStringNotContainsString('ظ„', $html);
         $this->assertStringNotContainsString("\u{FFFD}", $html);
@@ -97,19 +99,16 @@ class InvoiceTemplateRenderingTest extends TestCase
     private function assertBranchDirectory(string $html): void
     {
         foreach ([
-            'United Arab Emirates',
-            'Branch 1 :</span> Ajman Industrial 2 Beirut Street',
+            'الفرع الأول: الإمارات - عجمان فقط',
+            'الفرع - عجمان - المنطقة الصناعية 2 - بيروت',
             '+971 545 516 995',
             '+971 564 533 655',
-            'Syria (Aleppo)',
-            'Branch 2 :</span> Aleppo',
+            'الفرع الثاني: سوريا - حلب',
             '+963 947 900 555',
             '+963 958 900 555',
-            'Lebanon, Beirut',
-            'Branch 3 :</span> Lebanon Beirut',
+            'الفرع الثالث: لبنان - بيروت',
             '+961 81 730 725',
-            'Türkiye',
-            'Branch 4 :</span> Türkiye Istanbul Merter',
+            'الفرع الرابع: تركيا - اسطنبول - مارتر',
             '+905 004 001 621',
             'href="http://www.oneway.fashion"',
             'href="mailto:theoneway.fashion@gmail.com"',

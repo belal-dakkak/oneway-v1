@@ -1,4 +1,11 @@
 @php
+    $countryId = (int) ($invoiceCountryId ?? ($order instanceof \App\Models\WebsiteOrder ? $order->country_id : optional($order->seller)->country_id));
+    $a4Profile = config('invoices.a4_countries.' . $countryId);
+@endphp
+@if($a4Profile)
+    @include('includes.invoice_country_a4')
+@else
+@php
     $invoiceIdentity = $invoiceIdentity ?? [
         'name' => $settings['title'] ?? config('app.name'),
         'address' => $settings['address'] ?? '',
@@ -244,3 +251,4 @@
 @endif
 </body>
 </html>
+@endif

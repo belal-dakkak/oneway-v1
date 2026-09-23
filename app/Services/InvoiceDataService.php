@@ -130,6 +130,9 @@ class InvoiceDataService
             $this->merge($lines, [
                 'product_id' => $product ? $product->id : 'website-' . $item->id,
                 'name' => $this->name($product, $item->product_color_id),
+                'product_name' => $product ? $product->name : 'Product #' . $item->product_color_id,
+                'product_name_en' => $product ? (trim((string) $product->name_en) ?: $product->name) : 'Product #' . $item->product_color_id,
+                'barcode' => $product ? $product->barcode : '',
                 'qty' => (int) $item->qty,
                 'item_price' => $unitGross,
                 'price_without_tax' => $unitGross,
@@ -154,6 +157,9 @@ class InvoiceDataService
             $this->merge($lines, [
                 'product_id' => $product ? $product->id : 'app-' . $item->id,
                 'name' => $this->name($product, $item->product_color_id),
+                'product_name' => $product ? $product->name : 'Product #' . $item->product_color_id,
+                'product_name_en' => $product ? (trim((string) $product->name_en) ?: $product->name) : 'Product #' . $item->product_color_id,
+                'barcode' => $product ? $product->barcode : '',
                 'qty' => (int) $item->qty,
                 'item_price' => $unitGross,
                 'price_without_tax' => $unitGross,
@@ -182,6 +188,9 @@ class InvoiceDataService
             $this->merge($lines, [
                 'product_id' => $product ? $product->id : 'order-' . $item->id,
                 'name' => $this->name($product, $item->user_product_id),
+                'product_name' => $product ? $product->name : 'Product #' . $item->user_product_id,
+                'product_name_en' => $product ? (trim((string) $product->name_en) ?: $product->name) : 'Product #' . $item->user_product_id,
+                'barcode' => $product ? $product->barcode : '',
                 'qty' => $qty,
                 'item_price' => $unitGross,
                 'price_without_tax' => $unitNet,

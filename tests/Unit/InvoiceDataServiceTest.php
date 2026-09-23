@@ -16,6 +16,22 @@ use PHPUnit\Framework\TestCase;
 
 class InvoiceDataServiceTest extends TestCase
 {
+    public function test_product_names_and_barcodes_are_available_separately_without_changing_legacy_names(): void
+    {
+        $product = new Product(['name' => 'طقم نسائي', 'name_en' => 'Elegant set', 'barcode' => '31586Y43']);
+        $product->id = 10;
+        $order = new Order(['type' => Order::TYPE_CASH, 'curr_type' => 'AED', 'curr_rate' => 1]);
+        $order->setRelation('items', new Collection([$this->orderItem($product, 101, 1, 25, 25, 25, 0)]));
+        $service = new InvoiceDataService();
+        $line = $service->forOrder($order)['items']->first();
+        $this->assertSame('طقم نسائي - 31586Y43', $line->name);
+        $this->assertSame('طقم نسائي', $line->product_name);
+        $this->assertSame('Elegant set', $line->product_name_en);
+        $this->assertSame('31586Y43', $line->barcode);
+        $product->name_en = ' ';
+        $this->assertSame('طقم نسائي', $service->forOrder($order)['items']->first()->product_name_en);
+    }
+
     public function test_it_sums_quantities_and_every_money_total_without_using_max(): void
     {
         $product = new Product(['name' => 'Dress', 'barcode' => 'D-1']);

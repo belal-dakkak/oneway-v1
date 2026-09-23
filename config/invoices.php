@@ -1,6 +1,84 @@
 <?php
 
 return [
+    // A4 presentation only; the receipt and other countries keep their existing policy.
+    'a4_countries' => [
+        2 => [
+            'language' => 'en', 'ink' => '#111111', 'accent' => '#d52040',
+            'pink' => '#fac5d2', 'border' => '#555555', 'footer_phone' => '+971 545 516 995',
+            'labels' => [
+                'title' => 'INVOICE', 'tax_title' => 'TAX INVOICE',
+                'date' => 'Date', 'invoice' => 'Invoice #', 'order' => 'Order ID',
+                'number' => 'NO.', 'description' => 'DESCRIPTION', 'qty' => 'QTY',
+                'rate' => 'RATE', 'amount' => 'AMOUNT', 'excl' => 'EXCL. VAT', 'vat' => 'VAT',
+                'quantity' => ['إجمالي عدد القطع', 'Total Qty'],
+                'payment' => ['طريقة الدفع', 'Payment Method'],
+                'before_discount' => ['قبل الخصم', 'Before Discount'], 'discount' => ['الخصم', 'Discount'],
+                'net' => ['دون الضريبة', 'Excl. VAT'], 'tax' => ['إجمالي الضريبة', 'Total VAT'],
+                'total' => ['إجمالي الفاتورة', 'Total bill'], 'paid' => ['إجمالي المدفوعات', 'Total payments'],
+                'due' => ['الباقي', 'Amount due'], 'approx' => ['للعرض فقط', 'Approx. Value'],
+                'comments' => ['ملاحظات', 'Comments'], 'manager' => 'Manager / المدير',
+                'recipient' => 'Recipient / المستلم', 'summary' => 'Summary',
+                'website' => 'Website', 'email' => 'Email',
+            ],
+            'payments' => ['cash' => 'Pay by Cash', 'card' => 'Pay by Credit/Debit Card', 'cheque' => 'Pay by Cheque', 'cod' => 'Cash on delivery'],
+            'collection_days' => 5,
+            'english_policy' => true,
+            'cheque_notice' => [
+                'en' => 'Important Notice: According to the agreement, the check is due 90 days after the invoice date, and this period is fixed and cannot be modified under any circumstances.',
+                'ar' => 'تنبيه هام: وفقاً للاتفاق، تستحق الشيكات بعد 90 يوماً من تاريخ الفاتورة، وهذه المدة ثابتة لا يمكن تعديلها تحت أي ظرف من الظروف.',
+            ],
+            'footer' => 'If you have any question about this invoice, please contact',
+            'thanks' => 'Thank You For Your Business!',
+        ],
+        4 => [
+            'language' => 'ar', 'ink' => '#13538b', 'accent' => '#b01b7c',
+            'pink' => '#fbd0df', 'border' => '#27678d', 'footer_phone' => '+963 958 900 555',
+            'labels' => [
+                'title' => 'فاتورة', 'tax_title' => 'فاتورة ضريبية',
+                'date' => 'التاريخ', 'invoice' => 'رقم الفاتورة', 'order' => 'رقم الطلب',
+                'number' => 'الرقم', 'description' => 'الوصف', 'qty' => 'الكمية',
+                'rate' => 'سعر الوحدة', 'amount' => 'المبلغ', 'excl' => 'دون الضريبة', 'vat' => 'الضريبة',
+                'quantity' => ['إجمالي عدد القطع'], 'payment' => ['طريقة الدفع'],
+                'before_discount' => ['قبل الخصم'], 'discount' => ['الخصم'],
+                'net' => ['دون الضريبة'], 'tax' => ['إجمالي الضريبة'],
+                'total' => ['إجمالي الفاتورة'], 'paid' => ['إجمالي المدفوعات'], 'due' => ['الباقي'],
+                'approx' => ['للعرض فقط'], 'comments' => ['ملاحظات'],
+                'manager' => 'المدير', 'recipient' => 'المستلم', 'summary' => 'الإجماليات',
+                'website' => 'الموقع الإلكتروني', 'email' => 'البريد الإلكتروني',
+            ],
+            'payments' => ['cash' => 'دفع نقدي', 'card' => 'دفع بالبطاقة', 'cheque' => 'دفع عن طريق الشيك', 'cod' => 'الدفع عند الاستلام'],
+            'collection_days' => 3,
+            'english_policy' => false,
+            'cheque_notice' => [
+                'ar' => 'ملاحظة هامة: وفقاً للاتفاق، تستحق الشيكات بعد 90 يوماً من تاريخ الفاتورة، والمدة لا يمكن تمديدها تحت أي ظرف من الظروف.',
+            ],
+            'footer' => 'إذا كان لديكم أي استفسار حول هذه الفاتورة، يرجى التواصل معنا',
+            'thanks' => 'شكراً لتعاملكم مع وان واي',
+            'branches' => [
+                ['country' => 'الفرع الأول: الإمارات - عجمان فقط', 'address' => 'الفرع - عجمان - المنطقة الصناعية 2 - بيروت', 'phones' => ['+971 545 516 995', '+971 564 533 655']],
+                ['country' => 'الفرع الثاني: سوريا - حلب', 'phones' => ['+963 958 900 555', '+963 947 900 555']],
+                ['country' => 'الفرع الثالث: لبنان - بيروت', 'phones' => ['+961 81 730 725']],
+                ['country' => 'الفرع الرابع: تركيا - اسطنبول - مارتر', 'phones' => ['+905 004 001 621']],
+            ],
+        ],
+    ],
+    'a4_policy' => [
+        'ar' => [
+            'مدة الاستبدال 3 أيام من تاريخ الفاتورة.',
+            'يجب أن تكون البضاعة بحالتها الأصلية مع إرفاق الفاتورة.',
+            'لا يمكن استبدال أو استرجاع البضاعة بعد مرور الفترة المحددة.',
+            'يشمل الاستبدال المنتجات المعيبة فقط.',
+            'يجب استلام البضاعة خلال :days أيام من تاريخ الطلب وإلا يلغى الطلب بدون استرجاع العربون.',
+        ],
+        'en' => [
+            'The replacement period is 3 days from the date of the invoice.',
+            'The goods to be exchanged must be in good condition, presentable with their packaging and label, and accompanied by the original purchase receipt.',
+            'The goods to be replaced must not conform to standard specifications or have a defect that is not apparent upon purchase.',
+            'We do not offer returns or cash refunds.',
+            'The order must be received within a maximum period of :days days from the date of the order, otherwise the order will be canceled without refunding the deposit.',
+        ],
+    ],
     'one_way' => [
         'branches' => [
             [
