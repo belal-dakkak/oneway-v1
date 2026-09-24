@@ -44,11 +44,21 @@ class InvoiceCountryPresentationTest extends TestCase
                                 ->get(route($route, ['source' => $source, 'id' => $order->id]))->assertOk();
                             $response->assertSee('BILL TO')->assertSee('Name:')->assertSee('Phone:')->assertSee('Address:')
                                 ->assertSee('Stored customer')->assertSee('عنوان العميل المخزن')->assertSee('USD');
+                            $response->assertDontSee('class="reference"', false)
+                                ->assertDontSee('summary-reference')->assertDontSee('title-ar')
+                                ->assertSee('color: #111111', false)->assertSee('background: #fac5d2', false)
+                                ->assertSee('solid #555555', false)->assertSee('color: #d52040', false);
+                            $html = $response->getContent();
+                            $body = substr($html, strpos($html, '<body>'));
+                            $this->assertSame(1, substr_count($body, $order->barcode), 'Invoice number belongs only in the metadata box.');
                             if ($country === Country::SYRIA) {
+                                $response->assertSeeInOrder(['class="customer"', 'class="brand"', 'class="directory"', 'class="customer customer-meta"', 'class="brand title-cell"'], false);
+                                $response->assertSee('rowspan="2"', false)->assertDontSee('#13538b')->assertDontSee('#b01b7c')->assertDontSee('#fbd0df');
                                 $response->assertSee('الفرع الثاني: سوريا - حلب')->assertSee('سعر الوحدة')
                                     ->assertSee('إجمالي المدفوعات')->assertDontSee('DESCRIPTION')->assertDontSee('Total payments')
                                     ->assertSee('خلال 3 أيام')->assertDontSee('The replacement period');
                             } else {
+                                $response->assertSeeInOrder(['class="directory"', 'class="brand"', 'class="customer"'], false);
                                 $response->assertSee('Ajman Industrial 2 Beirut Street')->assertSee('DESCRIPTION')
                                     ->assertSee('Total payments')->assertSee('خلال 5 أيام')
                                     ->assertDontSee('سعر الوحدة')->assertDontSee('رقم الطلب');

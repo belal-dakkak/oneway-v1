@@ -18,7 +18,7 @@ return [
                 'total' => ['إجمالي الفاتورة', 'Total bill'], 'paid' => ['إجمالي المدفوعات', 'Total payments'],
                 'due' => ['الباقي', 'Amount due'], 'approx' => ['للعرض فقط', 'Approx. Value'],
                 'comments' => ['ملاحظات', 'Comments'], 'manager' => 'Manager / المدير',
-                'recipient' => 'Recipient / المستلم', 'summary' => 'Summary',
+                'recipient' => 'Recipient / المستلم',
                 'website' => 'Website', 'email' => 'Email',
             ],
             'payments' => ['cash' => 'Pay by Cash', 'card' => 'Pay by Credit/Debit Card', 'cheque' => 'Pay by Cheque', 'cod' => 'Cash on delivery'],
@@ -32,8 +32,8 @@ return [
             'thanks' => 'Thank You For Your Business!',
         ],
         4 => [
-            'language' => 'ar', 'ink' => '#13538b', 'accent' => '#b01b7c',
-            'pink' => '#fbd0df', 'border' => '#27678d', 'footer_phone' => '+963 958 900 555',
+            'language' => 'ar', 'ink' => '#111111', 'accent' => '#d52040',
+            'pink' => '#fac5d2', 'border' => '#555555', 'footer_phone' => '+963 958 900 555',
             'labels' => [
                 'title' => 'فاتورة', 'tax_title' => 'فاتورة ضريبية',
                 'date' => 'التاريخ', 'invoice' => 'رقم الفاتورة', 'order' => 'رقم الطلب',
@@ -44,7 +44,7 @@ return [
                 'net' => ['دون الضريبة'], 'tax' => ['إجمالي الضريبة'],
                 'total' => ['إجمالي الفاتورة'], 'paid' => ['إجمالي المدفوعات'], 'due' => ['الباقي'],
                 'approx' => ['للعرض فقط'], 'comments' => ['ملاحظات'],
-                'manager' => 'المدير', 'recipient' => 'المستلم', 'summary' => 'الإجماليات',
+                'manager' => 'المدير', 'recipient' => 'المستلم',
                 'website' => 'الموقع الإلكتروني', 'email' => 'البريد الإلكتروني',
             ],
             'payments' => ['cash' => 'دفع نقدي', 'card' => 'دفع بالبطاقة', 'cheque' => 'دفع عن طريق الشيك', 'cod' => 'الدفع عند الاستلام'],

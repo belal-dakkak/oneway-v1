@@ -11,7 +11,7 @@ use Tests\TestCase;
 
 class InvoiceTemplateRenderingTest extends TestCase
 {
-    public function test_a4_invoice_uses_the_fixed_branch_directory_and_keeps_seller_identity_before_buyer(): void
+    public function test_syrian_a4_places_the_buyer_before_the_seller_and_branch_directory(): void
     {
         $seller = new User([
             'name' => 'Syrian shop', 'country_id' => User::COUNTRY_SYRIA,
@@ -38,7 +38,8 @@ class InvoiceTemplateRenderingTest extends TestCase
         $data += ['invoiceIdentity' => $identity, 'invoiceCountryId' => User::COUNTRY_SYRIA, 'settings' => [], 'Currency' => 'USD', 'user_role' => 'shop'];
         $html = view('includes.invoice_template', $data)->render();
         $this->assertStringContainsString('dir="ltr"', $html);
-        $this->assertLessThan(strpos($html, 'BILL TO'), strpos($html, 'Syrian shop'));
+        $this->assertLessThan(strpos($html, 'Syrian shop'), strpos($html, 'BILL TO'));
+        $this->assertLessThan(strpos($html, 'الفرع الأول'), strpos($html, 'Syrian shop'));
         $this->assertBranchDirectory($html);
         $this->assertStringContainsString('Buyer street', $html);
         $this->assertStringContainsString('+963 911 111 111', $html);

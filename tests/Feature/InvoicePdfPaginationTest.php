@@ -75,7 +75,7 @@ class InvoicePdfPaginationTest extends TestCase
     {
         foreach ([User::COUNTRY_LB, User::COUNTRY_UAE, User::COUNTRY_SYRIA] as $country) {
             foreach ([false, true] as $taxable) {
-                foreach ([9, 26, 50] as $count) {
+                foreach ([1, 9, 26, 50] as $count) {
                     $order = $this->orderWithItems($country, $taxable, $count);
                     $admin = User::query()->create([
                         'name' => 'Invoice admin', 'email' => uniqid('pdf-admin-', true) . '@example.test',
@@ -96,7 +96,7 @@ class InvoicePdfPaginationTest extends TestCase
                     $this->assertStringStartsWith('%PDF-', $pdf);
                     $this->assertGreaterThan(2000, strlen($pdf));
                     $pageCount = preg_match_all('/\/Type \/Page\s/', $pdf);
-                    if ($count === 9) {
+                    if ($count <= 9) {
                         $this->assertSame(1, $pageCount, $order->barcode);
                     } else {
                         $this->assertGreaterThanOrEqual(2, $pageCount);
@@ -109,7 +109,7 @@ class InvoicePdfPaginationTest extends TestCase
 
     private function orderWithItems(int $country, bool $taxable, int $count): Order
     {
-        $currency = $country === User::COUNTRY_UAE ? 'AED' : ($country === User::COUNTRY_SYRIA ? 'SYP' : 'USD');
+        $currency = $country === User::COUNTRY_UAE ? 'AED' : ($country === User::COUNTRY_SYRIA && $count !== 1 ? 'SYP' : 'USD');
         $unit = $currency === 'SYP' ? 3250000 : 25;
         $net = $taxable ? round($unit / 1.05, $currency === 'SYP' ? 0 : 2) : $unit;
         $tax = $unit - $net;
@@ -130,7 +130,9 @@ class InvoicePdfPaginationTest extends TestCase
             'tax_value' => $count * $tax,
             'price_without_tax' => $count * $net,
             'first_name' => 'Crystal', 'last_name' => 'Gift', 'phone' => '+971 500 000 002',
-            'address' => 'Sharjah',
+            'address' => $country === User::COUNTRY_SYRIA && $count === 1
+                ? 'عجمان الصناعية 2 شارع بيروت خلف محل درة الخليج, Ajman Industrial City, 2 Beirut Street, behind Durrat Al Khaleej Store'
+                : 'Sharjah',
         ]);
         $category = Category::query()->create(['name' => 'PDF ' . $code]);
         $color = Color::query()->create(['name' => 'Black', 'code' => '#000000']);

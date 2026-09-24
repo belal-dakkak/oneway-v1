@@ -68,7 +68,11 @@
         .legal-name { font-size: 12pt; line-height: 1.25; margin: 3mm 0; font-weight: bold; word-wrap: break-word; }
         .trn { font-size: 8pt; margin: 2mm 0; }
         .title { margin: 5mm 0 0; font-size: {{ $arabic ? '24' : '21' }}pt; font-weight: bold; }
-        .title-ar { background: {{ $a4Profile['pink'] }}; padding: 2mm; }
+        .header-syria .directory { padding-right: 0; padding-left: 3mm; }
+        .header-syria .customer { padding-left: 0; padding-right: 2mm; }
+        .header-syria .customer-meta { padding-top: 0; }
+        .header-syria .title-cell { vertical-align: bottom; padding-top: 3mm; }
+        .header-syria .title { margin: 0; }
         .customer { width: 27%; padding-left: 2mm; padding-top: 4mm; }
         .bill-to { background: {{ $a4Profile['pink'] }}; padding: 1mm 2mm; font-size: 11pt; font-weight: bold; }
         .buyer { font-size: 8.5pt; margin-top: 1mm; }
@@ -84,7 +88,6 @@
         .items tr { page-break-inside: avoid; }
         .items th, .items td { border: .65pt solid {{ $a4Profile['border'] }}; padding: 1.6mm 1.3mm; vertical-align: middle; }
         .items th { background: {{ $a4Profile['pink'] }}; font-weight: bold; }
-        .items .reference th { border: 0; background: white; font-size: 7pt; font-weight: normal; text-align: right; padding: 0 0 1mm; }
         .number { width: 7%; text-align: center; }
         .description { width: 41%; text-align: {{ $arabic ? 'right' : 'left' }}; word-wrap: break-word; }
         .qty { width: 10%; text-align: center; font-weight: bold; }
@@ -121,7 +124,6 @@
         .user-notes { word-wrap: break-word; }
         .extended-notes { margin-top: 3mm; font-size: 10pt; line-height: 1.3; }
         .extended-notes h3 { font-size: 11pt; border-bottom: .6pt solid {{ $a4Profile['border'] }}; }
-        .summary-reference { font-size: 7pt; text-align: right; margin-top: 1mm; }
         .summary-group { page-break-inside: avoid; }
         .sign-off { page-break-inside: avoid; margin-top: 2mm; }
         .signatures { font-size: 10pt; font-weight: bold; }
@@ -136,52 +138,32 @@
     </style>
 </head>
 <body>
-    <table class="header" autosize="1"><tr>
-        <td class="directory" align="{{ $arabic ? 'right' : 'left' }}">
-            @if($arabic)
-                @foreach($a4Profile['branches'] as $branch)
-                    <div class="branch">
-                        <div class="branch-name accent" dir="rtl">{{ $branch['country'] }}</div>
-                        @if(isset($branch['address']))<div class="accent" dir="rtl">{{ $branch['address'] }}</div>@endif
-                        @foreach($branch['phones'] as $phone)<div class="phone"><span dir="ltr">{{ $phone }}</span></div>@endforeach
-                    </div>
-                @endforeach
-            @else
-                @foreach($contacts['branches'] as $branch)
-                    <div class="branch">
-                        <div class="branch-name">{{ $branch['country'] }}</div>
-                        @foreach($branch['details'] as $detail)
-                            <div class="branch-line"><span class="accent">{{ $detail['label'] }} :</span> {{ $detail['value'] }}</div>
-                        @endforeach
-                    </div>
-                @endforeach
-            @endif
-            <div class="online">
-                <p><span class="accent">{{ $labels['website'] }} :</span> <a href="{{ $contacts['website_url'] }}" dir="ltr">{{ $contacts['website'] }}</a></p>
-                <p><span class="accent">{{ $labels['email'] }} :</span> <a href="mailto:{{ $contacts['email'] }}" dir="ltr">{{ $contacts['email'] }}</a></p>
-            </div>
-        </td>
-        <td class="brand">
-            <img class="logo" src="{{ $invoiceLogoSrc ?? public_path('custom/logo-icon-black.png') }}" alt="One Way">
-            <div class="legal-name" dir="auto">{{ $identity['name'] }}</div>
-            @if($taxEnabled && !empty($identity['trn']))<div class="trn">{{ $arabic ? 'الرقم الضريبي' : 'TRN' }}: <span dir="ltr">{{ $identity['trn'] }}</span></div>@endif
-            <div class="title{{ $arabic ? ' title-ar' : '' }}" dir="{{ $arabic ? 'rtl' : 'ltr' }}">{{ $taxEnabled ? $labels['tax_title'] : $labels['title'] }}</div>
-        </td>
-        <td class="customer">
-            <div class="bill-to">BILL TO</div>
-            <table class="buyer">
-                <tr><td class="buyer-label">Name:</td><td class="buyer-value" dir="auto">{{ $buyerName ?: '—' }}</td></tr>
-                <tr><td class="buyer-label">Phone:</td><td class="buyer-value" dir="ltr">{{ $buyerPhone ?: '—' }}</td></tr>
-                <tr><td class="buyer-label">Address:</td><td class="buyer-value" dir="auto">{{ $buyerAddress ?: '—' }}</td></tr>
-                @if($taxEnabled && !empty($order->trn))<tr><td>TRN:</td><td dir="ltr">{{ $order->trn }}</td></tr>@endif
-            </table>
-            <table class="meta">
-                <tr><td class="meta-label" dir="{{ $arabic ? 'rtl' : 'ltr' }}">{{ $labels['date'] }}</td><td class="meta-value" dir="ltr">{{ $invoiceDate ? date('Y-m-d', strtotime((string) $invoiceDate)) : '—' }}</td></tr>
-                <tr><td class="meta-label" dir="{{ $arabic ? 'rtl' : 'ltr' }}">{{ $labels['invoice'] }}</td><td class="meta-value" dir="ltr">{{ $order->barcode }}</td></tr>
-                <tr><td class="meta-label" dir="{{ $arabic ? 'rtl' : 'ltr' }}">{{ $labels['order'] }}</td><td class="meta-value" dir="ltr">{{ $order->id }}</td></tr>
-            </table>
-        </td>
-    </tr></table>
+    @if($arabic)
+        <table class="header header-syria" autosize="1" dir="ltr">
+            <colgroup><col style="width: 27%"><col style="width: 39%"><col style="width: 34%"></colgroup>
+            <tr>
+                <td class="customer">@include('includes.invoice_a4.buyer')</td>
+                <td class="brand">@include('includes.invoice_a4.brand')</td>
+                <td class="directory" rowspan="2" align="right">@include('includes.invoice_a4.directory')</td>
+            </tr>
+            <tr>
+                <td class="customer customer-meta">@include('includes.invoice_a4.metadata')</td>
+                <td class="brand title-cell" valign="bottom"><div class="title" dir="rtl">{{ $taxEnabled ? $labels['tax_title'] : $labels['title'] }}</div></td>
+            </tr>
+        </table>
+    @else
+        <table class="header" autosize="1"><tr>
+            <td class="directory" align="left">@include('includes.invoice_a4.directory')</td>
+            <td class="brand">
+                @include('includes.invoice_a4.brand')
+                <div class="title" dir="ltr">{{ $taxEnabled ? $labels['tax_title'] : $labels['title'] }}</div>
+            </td>
+            <td class="customer">
+                @include('includes.invoice_a4.buyer')
+                @include('includes.invoice_a4.metadata')
+            </td>
+        </tr></table>
+    @endif
     <table class="items{{ $taxEnabled ? ' tax' : '' }}" dir="ltr" autosize="1">
         <colgroup>
             <col style="width: 7%"><col style="width: {{ $taxEnabled ? 29 : 41 }}%"><col style="width: {{ $taxEnabled ? 7 : 10 }}%">
@@ -190,7 +172,6 @@
             <col style="width: {{ $taxEnabled ? 15 : 22 }}%">
         </colgroup>
         <thead>
-            <tr class="reference"><th colspan="{{ $taxEnabled ? 7 : 5 }}">{{ $labels['invoice'] }} <span dir="ltr">{{ $order->barcode }} · {{ $code }}</span></th></tr>
             <tr>
                 <th class="number">{{ $labels['number'] }}</th><th class="description">{{ $labels['description'] }}</th>
                 <th class="qty">{{ $labels['qty'] }}</th><th class="rate">{{ $labels['rate'] }}</th>
@@ -212,7 +193,6 @@
         </tbody>
     </table>
     <div class="summary-group">
-    <div class="summary-reference">{{ $labels['invoice'] }} <span dir="ltr">{{ $order->barcode }}</span> · {{ $labels['summary'] }}</div>
     <table class="lower" autosize="1"><tr>
         <td class="totals-column">
             <table class="totals">
