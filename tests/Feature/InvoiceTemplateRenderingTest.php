@@ -47,7 +47,7 @@ class InvoiceTemplateRenderingTest extends TestCase
         $this->assertStringNotContainsString('syria@example.test', $html);
         $this->assertStringContainsString('الوصف', $html);
         $this->assertStringContainsString('الكمية', $html);
-        $this->assertStringContainsString('سياسة التبديل', $html);
+        $this->assertStringContainsString('سياسة الاستبدال', $html);
         $this->assertStringNotContainsString('DESCRIPTION', $html);
         $this->assertStringNotContainsString('Exchange Policy', $html);
         $this->assertStringNotContainsString('ط§', $html);
@@ -100,16 +100,15 @@ class InvoiceTemplateRenderingTest extends TestCase
     private function assertBranchDirectory(string $html): void
     {
         foreach ([
-            'الفرع الأول: الإمارات - عجمان فقط',
-            'الفرع - عجمان - المنطقة الصناعية 2 - بيروت',
+            'الفرع الأول: الإمارات – عجمان',
             '+971 545 516 995',
             '+971 564 533 655',
-            'الفرع الثاني: سوريا - حلب',
+            'الفرع الثاني: سوريا – حلب',
             '+963 947 900 555',
             '+963 958 900 555',
-            'الفرع الثالث: لبنان - بيروت',
+            'الفرع الثالث: لبنان – بيروت',
             '+961 81 730 725',
-            'الفرع الرابع: تركيا - اسطنبول - مارتر',
+            'الفرع الرابع: تركيا – إسطنبول – مارتر',
             '+905 004 001 621',
             'href="http://www.oneway.fashion"',
             'href="mailto:theoneway.fashion@gmail.com"',

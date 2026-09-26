@@ -57,8 +57,7 @@
         .header { margin-bottom: 3mm; }
         .directory { width: 34%; padding-right: 3mm; font-size: 8.5pt; line-height: 1.14; }
         .branch { margin-bottom: 2mm; }
-        .branch-name { font-weight: bold; }
-        .branch-line { margin: 0; }
+        .branch-name { font-weight: {{ $arabic ? 'bold' : 'normal' }}; }
         .accent { color: {{ $a4Profile['accent'] }}; }
         .phone { direction: ltr; white-space: nowrap; }
         .online { margin-top: 3mm; font-size: 8pt; }
@@ -68,7 +67,7 @@
         .legal-name { font-size: 12pt; line-height: 1.25; margin: 3mm 0; font-weight: bold; word-wrap: break-word; }
         .trn { font-size: 8pt; margin: 2mm 0; }
         .title { margin: 5mm 0 0; font-size: {{ $arabic ? '24' : '21' }}pt; font-weight: bold; }
-        .header-syria .directory { padding-right: 0; padding-left: 3mm; }
+        .header-syria .directory { padding-right: 0; padding-left: 3mm; vertical-align: middle; }
         .header-syria .customer { padding-left: 0; padding-right: 2mm; }
         .header-syria .customer-meta { padding-top: 0; }
         .header-syria .title-cell { vertical-align: bottom; padding-top: 3mm; }
@@ -111,6 +110,7 @@
         .total-value { width: 47%; font-weight: bold; word-wrap: break-word; }
         .due { color: #dd142d; }
         .policy-heading { font-size: 11pt; margin: 0 0 1mm; text-align: right; }
+        .policy-heading-en { text-align: left; }
         .policy { font-size: 8pt; margin: 0 0 2mm; line-height: 1.16; }
         .policy td { padding: .35mm 0; }
         .policy-number { width: 4%; text-align: center; }
@@ -144,7 +144,7 @@
             <tr>
                 <td class="customer">@include('includes.invoice_a4.buyer')</td>
                 <td class="brand">@include('includes.invoice_a4.brand')</td>
-                <td class="directory" rowspan="2" align="right">@include('includes.invoice_a4.directory')</td>
+                <td class="directory" rowspan="2" align="right" valign="middle">@include('includes.invoice_a4.directory')</td>
             </tr>
             <tr>
                 <td class="customer customer-meta">@include('includes.invoice_a4.metadata')</td>
@@ -205,13 +205,14 @@
             </table>
         </td>
         <td class="terms-column" align="right">
-            <h2 class="policy-heading" dir="rtl">سياسة التبديل</h2>
+            <h2 class="policy-heading" dir="rtl">{{ config('invoices.a4_policy_headings.ar') }}</h2>
             <table class="policy" dir="ltr">
                 @foreach(config('invoices.a4_policy.ar') as $term)
                     <tr><td class="policy-text arabic-policy" dir="rtl" align="right">{{ str_replace(':days', $a4Profile['collection_days'], $term) }}</td><td class="policy-number">{{ $loop->iteration }}.</td></tr>
                 @endforeach
             </table>
             @if($a4Profile['english_policy'])
+                <table><tr><td align="left"><h2 class="policy-heading policy-heading-en" dir="ltr">{{ config('invoices.a4_policy_headings.en') }}</h2></td></tr></table>
                 <table class="policy" dir="ltr">
                     @foreach(config('invoices.a4_policy.en') as $term)
                         <tr><td class="policy-number" align="left">{{ $loop->iteration }}.</td><td class="policy-text" align="left">{{ str_replace(':days', $a4Profile['collection_days'], $term) }}</td></tr>
@@ -241,7 +242,7 @@
         <div class="footer">
             <div dir="{{ $arabic ? 'rtl' : 'ltr' }}">{{ $a4Profile['footer'] }}</div>
             <div dir="ltr">{{ $contacts['footer_name'] }}, {{ $a4Profile['footer_phone'] }}, {{ $contacts['email'] }}</div>
-            <strong>{{ $a4Profile['thanks'] }}</strong>
+            <strong dir="{{ $arabic ? 'rtl' : 'ltr' }}">{{ $a4Profile['thanks'] }}</strong>
         </div>
     </div>
     @if(!empty($autoPrint))<script>window.addEventListener('load', function () { window.print(); });</script>@endif

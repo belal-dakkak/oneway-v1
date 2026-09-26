@@ -84,7 +84,7 @@ class InvoicePreviewTest extends TestCase
             ->assertOk()
             ->assertSee('BILL TO')
             ->assertSee('One Way UAE')
-            ->assertSee('Ajman Industrial 2 Beirut Street')
+            ->assertSee('Branch 1 : UAE – Ajman')
             ->assertSee('+971 545 516 995')
             ->assertDontSee('uae-shop@example.test')
             ->assertSee('Crystal Gift')

@@ -26,7 +26,7 @@ class InvoiceCountryPresentationTest extends TestCase
             $fields = [
                 'barcode' => 'COUNTRY-' . $country, 'curr_type' => 'USD', 'curr_rate' => 1,
                 'total_price' => 105, 'paid_price' => 0, 'remain_price' => 105,
-                'first_name' => 'Stored customer', 'address' => 'عنوان العميل المخزن', 'phone' => '+963900000000',
+                'first_name' => 'Stored customer', 'address' => 'عنوان العميل المخزن – عجمان الصناعية 2 شارع بيروت – Ajman Industrial 2 Beirut Street', 'phone' => '+963900000000',
             ];
             $orders = [
                 'order' => Order::query()->create($fields + ['seller_id' => $seller->id, 'type' => Order::TYPE_CASH, 'tax_ratio' => 5, 'tax_value' => 5, 'price_without_tax' => 100]),
@@ -43,7 +43,7 @@ class InvoiceCountryPresentationTest extends TestCase
                             $response = $this->actingAs($admin)->withSession(['locale' => $locale])
                                 ->get(route($route, ['source' => $source, 'id' => $order->id]))->assertOk();
                             $response->assertSee('BILL TO')->assertSee('Name:')->assertSee('Phone:')->assertSee('Address:')
-                                ->assertSee('Stored customer')->assertSee('عنوان العميل المخزن')->assertSee('USD');
+                                ->assertSee('Stored customer')->assertSee($fields['address'])->assertSee('USD');
                             $response->assertDontSee('class="reference"', false)
                                 ->assertDontSee('summary-reference')->assertDontSee('title-ar')
                                 ->assertSee('color: #111111', false)->assertSee('background: #fac5d2', false)
@@ -51,16 +51,17 @@ class InvoiceCountryPresentationTest extends TestCase
                             $html = $response->getContent();
                             $body = substr($html, strpos($html, '<body>'));
                             $this->assertSame(1, substr_count($body, $order->barcode), 'Invoice number belongs only in the metadata box.');
+                            $this->assertApprovedCopy($html, $country);
                             if ($country === Country::SYRIA) {
                                 $response->assertSeeInOrder(['class="customer"', 'class="brand"', 'class="directory"', 'class="customer customer-meta"', 'class="brand title-cell"'], false);
                                 $response->assertSee('rowspan="2"', false)->assertDontSee('#13538b')->assertDontSee('#b01b7c')->assertDontSee('#fbd0df');
-                                $response->assertSee('الفرع الثاني: سوريا - حلب')->assertSee('سعر الوحدة')
+                                $response->assertSee('الفرع الثاني: سوريا – حلب')->assertSee('سعر الوحدة')
                                     ->assertSee('إجمالي المدفوعات')->assertDontSee('DESCRIPTION')->assertDontSee('Total payments')
-                                    ->assertSee('خلال 3 أيام')->assertDontSee('The replacement period');
+                                    ->assertSee('rowspan="2" align="right" valign="middle"', false)->assertDontSee('Exchange Policy');
                             } else {
                                 $response->assertSeeInOrder(['class="directory"', 'class="brand"', 'class="customer"'], false);
-                                $response->assertSee('Ajman Industrial 2 Beirut Street')->assertSee('DESCRIPTION')
-                                    ->assertSee('Total payments')->assertSee('خلال 5 أيام')
+                                $response->assertSee('Branch 1 : UAE – Ajman')->assertSee('DESCRIPTION')
+                                    ->assertSee('Total payments')->assertSee('Exchange Policy')
                                     ->assertDontSee('سعر الوحدة')->assertDontSee('رقم الطلب');
                             }
                             if ($source === 'order') {
@@ -71,6 +72,62 @@ class InvoiceCountryPresentationTest extends TestCase
                     }
                 }
             }
+        }
+    }
+
+    private function assertApprovedCopy(string $html, int $country): void
+    {
+        preg_match('/<td class="directory"[^>]*>(.*?)<\/td>/s', $html, $match);
+        $directory = $match[1];
+        $this->assertSame(4, substr_count($directory, 'class="branch"'));
+        $this->assertStringNotContainsString('فقط', $directory);
+        $this->assertStringNotContainsString('الصناعية', $directory);
+        $this->assertStringNotContainsString('Industrial', $directory);
+        $this->assertStringNotContainsString('United Arab Emirates', $directory);
+        foreach (['+971 545 516 995', '+971 564 533 655', '+963 958 900 555', '+963 947 900 555', '+961 81 730 725', '+905 004 001 621'] as $phone) {
+            $this->assertStringContainsString($phone, $directory);
+        }
+        $this->assertLessThan(strpos($directory, '+963 947 900 555'), strpos($directory, '+963 958 900 555'));
+        $this->assertStringContainsString('href="http://www.oneway.fashion"', $directory);
+        $this->assertStringContainsString('href="mailto:theoneway.fashion@gmail.com"', $directory);
+        $branches = $country === Country::SYRIA ? [
+            'الفرع الأول: الإمارات – عجمان', 'الفرع الثاني: سوريا – حلب',
+            'الفرع الثالث: لبنان – بيروت', 'الفرع الرابع: تركيا – إسطنبول – مارتر',
+        ] : [
+            'Branch 1 : UAE – Ajman', 'Branch 2 : Syria – Aleppo',
+            'Branch 3 : Lebanon – Beirut', 'Branch 4 : Turkey – Istanbul – Merter',
+        ];
+        foreach ($branches as $branch) {
+            $this->assertStringContainsString($branch, $directory);
+        }
+        preg_match_all('/<table class="policy"[^>]*>(.*?)<\/table>/s', $html, $policies);
+        $this->assertCount($country === Country::SYRIA ? 1 : 2, $policies[1]);
+        foreach ($policies[1] as $policy) {
+            $this->assertSame(4, substr_count($policy, '<tr>'));
+        }
+        foreach ([
+            'مدة الاستبدال 3 ايام من تاريخ الفاتورة',
+            'يجب أن تكون المنتجات المراد استبدالها بحالة جيدة وقابلة للعرض، مع الغلاف والبطاقة الأصلية وإيصال الشراء.',
+            'لا يوجد لدينا ترجيع أو استرداد نقدي، ويكون الاستبدال وفق الشروط المذكورة أعلاه.',
+            'يجب استلام الطلبية خلال مدة أقصاها 5 أيام من تاريخ الطلب، وفي حال عدم استلامها خلال المدة المحددة تُلغى الطلبية دون استرجاع العربون.',
+        ] as $term) {
+            $this->assertStringContainsString($term, $html);
+        }
+        $this->assertStringNotContainsString('يشمل الاستبدال المنتجات المعيبة فقط', $html);
+        $this->assertStringNotContainsString('The replacement period', $html);
+        $this->assertStringContainsString('سياسة الاستبدال', $html);
+        if ($country === Country::UAE) {
+            foreach ([
+                'Exchange requests are accepted within 3 days from the date of the invoice.',
+                'The products to be exchanged must be in good and resalable condition, with the original packaging, tags, and purchase receipt.',
+                'We do not offer returns or cash refunds. Exchanges are only accepted in accordance with the conditions stated above.',
+                'Orders must be collected within a maximum of 5 days from the order date. If the order is not collected within the specified period, it will be cancelled without a refund of the deposit.',
+                'Thank you for choosing One Way.',
+            ] as $term) {
+                $this->assertStringContainsString($term, $html);
+            }
+        } else {
+            $this->assertStringContainsString('شكرًا لتعاملكم مع One Way', $html);
         }
     }
 
