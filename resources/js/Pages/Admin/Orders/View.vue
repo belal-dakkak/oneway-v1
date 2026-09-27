@@ -118,7 +118,7 @@
                             <vue-feather :type="'cast'" class="w-4 h-4"></vue-feather>
                             <span>{{ __('View Invoice') }}</span>
                         </a>
-                        <a target="_blank" :href="route('invoice.typed.printv2', { source: 'order', id: order.id })" class="p-2 bg-teal-500 text-white rounded hover:bg-teal-600 flex items-center gap-2 shadow-sm">
+                        <a target="_blank" :href="route('invoice.typed.printv2', { source: 'order', id: order.id, format: 'receipt' })" class="p-2 bg-teal-500 text-white rounded hover:bg-teal-600 flex items-center gap-2 shadow-sm">
                             <vue-feather :type="'printer'" class="w-4 h-4"></vue-feather>
                             <span>{{ __('Print Invoice') }}</span>
                         </a>

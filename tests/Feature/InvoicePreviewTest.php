@@ -14,7 +14,7 @@ class InvoicePreviewTest extends TestCase
 {
     use RefreshDatabase;
 
-    public function test_syrian_a4_preview_and_print_use_the_fixed_directory_while_receipt_stays_unchanged(): void
+    public function test_syrian_a4_preview_and_explicit_a4_print_keep_their_design_while_receipt_uses_approved_copy(): void
     {
         $admin = User::query()->create([
             'name' => 'Admin', 'email' => 'invoice-admin@example.test', 'password' => 'secret',
@@ -44,7 +44,7 @@ class InvoicePreviewTest extends TestCase
             ->assertDontSee('shop@example.test');
 
         $this->actingAs($admin)
-            ->get(route('invoice.typed.printv2', ['source' => 'order', 'id' => $order->id]))
+            ->get(route('invoice.typed.printv2', ['source' => 'order', 'id' => $order->id, 'format' => 'a4']))
             ->assertOk()
             ->assertSee('BILL TO')
             ->assertSee('window.print()', false)
@@ -57,7 +57,10 @@ class InvoicePreviewTest extends TestCase
             ->get(route('invoice.typed.printv2', ['source' => 'order', 'id' => $order->id, 'format' => 'receipt']))
             ->assertOk()
             ->assertSee('id="bodyContent"', false)
-            ->assertSee('+963 944 123 456');
+            ->assertSee('+963 958 900 555')
+            ->assertSee('الفرع الأول: الإمارات – عجمان')
+            ->assertSee('Exchange Policy')
+            ->assertDontSee('+963 944 123 456');
     }
 
     public function test_uae_preview_uses_the_a4_invoice_with_legal_seller_and_buyer_identity(): void
@@ -109,7 +112,7 @@ class InvoicePreviewTest extends TestCase
 
         foreach (['invoice.typed.show', 'invoice.typed.printv2'] as $route) {
             $this->actingAs($admin)
-                ->get(route($route, ['source' => 'website', 'id' => $order->id]))
+                ->get(route($route, ['source' => 'website', 'id' => $order->id, 'format' => 'a4']))
                 ->assertOk()
                 ->assertSee('Lebanon, Beirut')
                 ->assertSee('Ajman Industrial 2 Beirut Street')

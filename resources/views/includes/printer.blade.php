@@ -1,637 +1,203 @@
+@php
+    $invoiceIdentity = $invoiceIdentity ?? [
+        'name' => $settings['title'] ?? config('app.name'), 'trn' => '', 'tax_enabled' => false,
+    ];
+    $taxEnabled = (bool) $invoiceIdentity['tax_enabled'];
+    $countryId = (int) ($invoiceCountryId ?? ($order->country_id ?? optional($order->seller)->country_id));
+    $arabicBranches = $countryId === \App\Support\Country::SYRIA;
+    $profile = config('invoices.a4_countries.' . ($arabicBranches ? \App\Support\Country::SYRIA : \App\Support\Country::UAE));
+    $contacts = config('invoices.one_way');
+    $Currency = strtoupper($Currency ?? $currency ?? $order->curr_type ?? 'USD');
+    $moneyDecimals = $Currency === 'SYP' ? 0 : 2;
+    $money = static fn ($value) => number_format((float) $value, $moneyDecimals, '.', ',');
+    $buyerName = optional($order->buyer)->name ?: trim(($order->first_name ?? '') . ' ' . ($order->last_name ?? ''));
+    $taxRatio = $order->tax_ratio ?? optional($order->seller)->tax_ratio;
+    $qty = $items->sum('qty');
+    $payment = (string) ($order->payment_type ?? '0');
+    $paymentKey = $payment === '2' ? 'cheque' : (in_array($payment, ['1', 'card', 'pay_by_card'], true) ? 'card' : ($payment === 'cod' ? 'cod' : 'cash'));
+    $paymentLabel = config('invoices.a4_countries.' . \App\Support\Country::UAE . '.payments.' . $paymentKey);
+    $summarySpan = $taxEnabled ? 3 : 2;
+    $createdAt = \Carbon\Carbon::parse($order->created_at);
+    $summary = [];
+    if ($taxEnabled) {
+        $summary[] = ['الإجمالي بدون الضريبة / Total bill Excl. VAT', $order->price_without_tax ?? ((float) $order->total_price - (float) $order->tax_value)];
+    }
+    foreach (['discount' => 'الخصم / Discount', 'shipping_fee' => 'رسوم الشحن / Shipping Fee', 'cod_fee' => 'رسوم الدفع عند الاستلام / COD Fee'] as $field => $label) {
+        if ((float) $order->{$field} > 0) $summary[] = [$label, $order->{$field}];
+    }
+    if ($taxEnabled) $summary[] = ['إجمالي الضريبة / Total VAT', $order->tax_value];
+    $summary[] = [$taxEnabled ? 'الإجمالي شامل الضريبة / Total bill Incl. VAT' : 'الإجمالي / Total bill', $order->total_price];
+    $summary[] = ['المدفوع / Paid', $order->paid_price];
+    $summary[] = ['المتبقي / Remaining', $order->remain_price];
+@endphp
 <!DOCTYPE html>
-<html lang="ar" dir="rtl">
-
-
+<html lang="ar" dir="ltr">
 <head>
-
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <meta http-equiv="X-UA-Compatible" content="ie=edge">
-    <meta http-equiv="Content-Type" content="text/html; charset=UTF-8"/>
-    <title> Order {{ $order->id }} </title>
-
+    <title>Order {{ $order->id }}</title>
     <style>
-        body {
-            margin: 0;
-            padding: 0;
-            font-family: 'DejaVu Sans', sans-serif;
+        @font-face {
+            font-family: 'Receipt DejaVu';
+            src: url('{{ asset('custom/fonts/DejaVuSans-Bold.ttf') }}') format('truetype');
+            font-weight: 700;
         }
-
-        @page {
-            size: 2.8in 11in;
-            margin-top: 0cm;
-            margin-left: 0cm;
-            margin-right: 0cm;
+        @page { size: 71.12mm 279.4mm; margin: 2mm; }
+        :root { font-size: 24px; }
+        * { box-sizing: border-box; }
+        body { margin: 0; color: #000; background: #fff; font-family: Arial, 'Receipt DejaVu', sans-serif; font-weight: 700; line-height: 1.25; }
+        #bodyContent { width: 595px; max-width: 100%; padding: .4rem; margin: .5rem auto; }
+        p { margin: 0; }
+        a { color: inherit; text-decoration: none; overflow-wrap: anywhere; }
+        h1 { font-size: 1.25rem; text-align: center; margin: 1rem 0; }
+        hr { border: 0; border-top: 2px dotted #000; margin: .8rem 0; }
+        table { width: 100%; border-collapse: collapse; table-layout: fixed; }
+        th, td { font-size: inherit; font-weight: 700; overflow-wrap: anywhere; vertical-align: middle; }
+        .trn { text-align: center; margin: 1.5rem 0; }
+        .brand { width: 27%; text-align: center; padding-right: .3rem; }
+        .brand img { display: block; width: 100%; height: auto; margin-top: 1rem; }
+        .directory { font-size: .9rem; }
+        .branch { margin-bottom: .45rem; }
+        .branch p { margin-bottom: .1rem; }
+        .phone { direction: ltr; unicode-bidi: isolate; white-space: nowrap; }
+        .contact { font-size: .8rem; margin-top: .35rem; }
+        .operation { text-align: center; padding: .6rem 0; }
+        .date-time { text-align: center; font-size: .85rem; }
+        .identity { direction: rtl; margin: .6rem 0; }
+        .identity th { width: 29%; text-align: right; }
+        .identity td { text-align: center; padding: .2rem; }
+        .items { text-align: center; }
+        .items th, .items td { border: 1px solid #000; padding: .25rem .15rem; }
+        .items thead { display: table-header-group; text-transform: uppercase; }
+        .items thead th { font-size: .9rem; }
+        .items .description { text-align: left; }
+        .items .money { direction: ltr; }
+        .summary-label { direction: rtl; }
+        tr { break-inside: avoid; page-break-inside: avoid; }
+        .barcode { margin: .8rem 0; text-align: center; break-inside: avoid; }
+        .barcode img { display: block; width: 32%; height: auto; margin: 0 auto; }
+        .barcode p { font-size: .8rem; letter-spacing: .1rem; margin-top: .25rem; overflow-wrap: anywhere; }
+        .browse { display: flex; align-items: flex-start; gap: .6rem; margin: .8rem 0 2rem; break-inside: avoid; }
+        .qr { flex: 0 0 30%; }
+        .qr img { width: 100%; height: auto; display: block; }
+        .browse-info { flex: 1; min-width: 0; text-align: center; }
+        .browse-info p { margin-bottom: .65rem; }
+        .policy h2 { text-align: center; font-size: 1.15rem; margin: 1rem 0 .5rem; border-bottom: 1px solid #000; padding-bottom: .3rem; break-after: avoid; }
+        .policy ul { padding-inline-start: 1.3rem; margin: .5rem 0 1rem; }
+        .policy li { margin-bottom: .5rem; line-height: 1.4; }
+        .thanks { text-align: center; margin-top: 1rem; break-inside: avoid; }
+        @media print {
+            :root { font-size: 10px; }
+            #bodyContent { width: 100%; max-width: none; margin: 0; padding: 0; }
+            .items thead th { font-size: .85rem; }
         }
-
-        table {
-            width: 100%;
-        }
-
-        tr {
-            width: 100%;
-
-        }
-
-        h1 {
-            text-align: center;
-            vertical-align: middle;
-        }
-
-        #logo {
-            width: 60%;
-            text-align: center;
-            -webkit-align-content: center;
-            align-content: center;
-            padding: 5px;
-            margin: 2px;
-            display: block;
-            margin: 0 auto;
-        }
-
-
-        .items thead {
-            text-align: center;
-        }
-
-        .center-align {
-            text-align: center;
-        }
-
-        .bill-details td {
-            font-size: 12px;
-        }
-
-        .receipt {
-            font-size: medium;
-        }
-
-        .items {
-            border-collapse: collapse
-        }
-
-        .items .heading {
-            font-size: 12.5px;
-            text-transform: uppercase;
-            border-top:1px solid black;
-            margin-bottom: 4px;
-            border-bottom: 1px solid black;
-            vertical-align: middle;
-        }
-
-
-        .items td {
-            font-size: 15px;
-            text-align: center;
-            vertical-align: bottom;
-        }
-
-
-        .line {
-            border-top:1px solid black !important;
-        }
-
-        p {
-            padding: 1px;
-            margin: 0;
-            font-weight: bold !important;
-            font-size:24px !important
-        }
-
-        section, footer {
-            font-size: 12px;
-        }
-
-        #bodyContent {
-            width: 580px;
-            display: block;
-            margin: auto;
-            border: 1px solid #DDD;
-            padding: 10px;
-            margin-top: 20px;
-        }
-
-        td , th {
-            text-align: center;
-            font-size: 24px !important;
-            font-weight: bold !important
-        }
-
-        .items tr td:first-child   {
-            text-align: left !important;
-        }
-
-        .items td, .items th {
-            border: 2px solid #000;
-            vertical-align: middle;
-            padding: 7px 5px;
-            font-weight: bold !important
-        }
-
-        .footer_desc li {
-            list-style-type: disc !important;
-            margin-bottom: 7px !important;
-            line-height: 1.4 !important;
-            font-size: 28px !important;
-            font-weight: bold
-        }
-
-        table p {
-            font-size: 24px !important;
-            font-weight: bold !important
-        }
-
     </style>
-
 </head>
-
 <body>
-
-
-    <?php
-        $invoiceIdentity = $invoiceIdentity ?? [
-            'name' => $settings['title'] ?? config('app.name'),
-            'address' => $settings['address'] ?? '',
-            'phone' => $settings['phone'] ?? '',
-            'email' => $settings['email'] ?? '',
-            'trn' => '',
-            'tax_enabled' => false,
-        ];
-        $admin_email  = $invoiceIdentity['email'];
-        $admin_mobile = $invoiceIdentity['phone'];
-        $shop_address = $invoiceIdentity['address'];
-        $taxEnabled = (bool) $invoiceIdentity['tax_enabled'];
-        $isSyriaInvoice = (int) ($invoiceCountryId ?? ($order->country_id ?? optional($order->seller)->country_id ?? 0)) === \App\Support\Country::SYRIA;
-    ?>
-
-    <div id="bodyContent" style="margin-bottom: 20px;">
-
-        <table style="margin: auto;direction: rtl;display: flex;justify-content: center;margin-bottom: 10px;">
-            <tbody>
-
-                <tr style="text-align: center;">
-                    <td colspan="2" style="height: 80px !important">
-                        <p style="margin-top: 10px;">
-                            @if($taxEnabled)
-                                <span style="font-size:30px !important">
-                                    فاتورة ضريبية / TAX INVOICE
-                                </span>
-                            @else
-                                <span>
-                                    فاتوره / Receipt
-                                </span>
-                            @endif
-                        </p>
-                    </td>
-
-                </tr>
-
-
-					@if($taxEnabled)
-
-					<tr style="text-align: center;">
-						<td colspan="2" style="height: 80px !important">
-							{{ $invoiceIdentity['trn'] }}
-							TRN
-						</td>
-
-					</tr>
-					@endif
-
-            </tbody>
-        </table>
-
-        <div>
-            <hr style="border: 2px dotted #000;">
-        </div>
-
-        <table class="bill-details">
-            <tbody>
-                <tr>
-                    <td>
-                        {{ $invoiceIdentity['name'] }}
-                    </td>
-                    <td>
-                        <p>
-                            @if($admin_mobile) {{ $isSyriaInvoice ? 'الهاتف / Tel' : 'Tel' }} : {{ $admin_mobile }} @endif
-                        </p>
-                    </td>
-                </tr>
-                @if($isSyriaInvoice && $admin_email)
-                <tr>
-                    <td colspan="2" style="text-align:center;">البريد الإلكتروني / Email: {{ $admin_email }}</td>
-                </tr>
-                @endif
-                <tr>
-                    <td>
-                        <img class="media" data-src="{{ asset('custom/logo-icon-black.png') }}" src="{{ asset('custom/logo-icon-black.png') }}" style="width: 150px;">
-
-                    </td>
-                    <td style="text-align: left;">
-                        <p style="margin-bottom: 10px;">
-                            {{ $shop_address }}
-                        </p>
-                    </td>
-                </tr>
-            </tbody>
-        </table>
-
-        <div style="text-align: center;display: none;">
-            <p style="position: relative;margin-bottom: 10px;">
-                <span style="display: inline-block;direction: rtl;">
-                    <span>
-
-                    </span>
-                </span>
-
-                <span style="position: absolute;right: 64%;">
-                    123
-                </span>
-            </p>
-            <p style="direction: rtl;">
-                فاتوره / Receipt
-            </p>
-        </div>
-
-        <div>
-            <hr style="border: 2px dotted #000;">
-        </div>
-
-        <table style="margin: auto;direction: rtl;display: flex;justify-content: center;margin-bottom: 10px;">
-            <tbody>
-
-                <tr style="text-align: center;">
-                    <td style="height: 80px !important">
-                        رقم العملية /  Op.No
-                    </td>
-                    <td style="height: 80px !important">
-                        {{ $order->id }}
-                    </td>
-                </tr>
-
-
-
-
-
-            </tbody>
-        </table>
-
-        <div>
-            <hr style="border: 2px dotted #000;">
-        </div>
-
-        <table style="direction: rtl;text-align: center;margin: auto;">
-            <tbody>
-                <tr>
-                    <td>
-                        التاريخ / Date
-                    </td>
-                    <td>
-                        {{ Carbon\Carbon::parse($order->created_at)->format('Y-m-d') }}
-                    </td>
-                    <td>
-                        الوقت / Time
-                    </td>
-                    <td>
-                        {{ Carbon\Carbon::parse($order->created_at)->format('h:i A') }}
-                    </td>
-                </tr>
-            </tbody>
-        </table>
-
-        <div>
-            <hr style="border: 2px dotted #000;">
-        </div>
-
-        <table style="direction: rtl;text-align: center;margin: auto;">
-            <tbody>
-                <tr>
-                    <td style="height: 40px">
-                        العميل / Client
-                    </td>
-                    <td style="height: 40px">
-                        {{ @$order->buyer->name }}
-                    </td>
-                </tr>
-
-                @if($taxEnabled)
-                <tr>
-                    <td style="height: 40px">
-                    Customer TRN
-                    </td>
-                    <td style="height: 40px">
-                        {{ $order->trn }}
-                    </td>
-                </tr>
-                @endif
-
-                <tr>
-                    <td style="height: 40px">
-                        البائع / Seller
-                    </td>
-                    <td style="height: 40px">
-                        {{ @$order->seller->name }}
-                    </td>
-                </tr>
-                <tr>
-                    <td style="height: 40px">
-                        الشاحن / Shipper
-                    </td>
-                    <td style="height: 40px">
-                        {{ @$order->shipper->name }}
-                    </td>
-                </tr>
-            </tbody>
-        </table>
-
-        <div>
-            <hr style="border: 2px dotted #000;">
-        </div>
-
-
-        <table class="items">
-            <thead>
-                <tr>
-                    <th class="heading">Model</th>
-                    <th class="heading">Qty</th>
-                    <th class="heading">Rate</th>
-                    @if($taxEnabled)
-                    <th class="heading">Amount Exel.Vat</th>
-                    <th class="heading">Vat @ {{ $order->seller->tax_ratio }}%</th>
-                    <th class="heading">Amount Ancl Vat</th>
-                    @else
-                    <th class="heading">Amount</th>
-                    @endif
-                </tr>
-            </thead>
-
-            @php
-                $qty = 0;
-                $k = 0;
-                $len = $items->count() >= 10 ? 0 : 10 - $items->count();
-                $moneyDecimals = strtoupper($Currency) === 'SYP' ? 0 : 2;
-            @endphp
-
-            <tbody>
-
-                @foreach($items as $k => $order_item)
-
-                    <tr>
-                        <td> {{$order_item->name}} </td>
-                        <td> {{$order_item->qty}} </td>
-                        <td class="price"> {{ number_format($order_item->item_price, $moneyDecimals) }} {{ $Currency }} </td>
-
-                        @if($taxEnabled)
-                        <td class="price"> {{ number_format($order_item->line_price_without_tax, $moneyDecimals)  }} {{ $Currency }} </td>
-                        <td class="price"> {{ number_format($order_item->line_tax_value, $moneyDecimals) }} {{ $Currency }} </td>
-                        <td class="price"> {{ number_format($order_item->total_price, $moneyDecimals) }} {{ $Currency }} </td>
-                        @else
-                        <td class="price"> {{ number_format($order_item->total_price, $moneyDecimals) }} {{ $Currency }} </td>
-                        @endif
-                    </tr>
-
-                    @php
-                        $qty += $order_item->qty;
-                    @endphp
-
+<main id="bodyContent">
+    <h1>@if($taxEnabled) TAX INVOICE / <span dir="rtl">فاتورة ضريبية</span> @else Receipt / <span dir="rtl">فاتورة</span> @endif</h1>
+    @if($taxEnabled && $invoiceIdentity['trn'])<p class="trn" dir="ltr">TRN {{ $invoiceIdentity['trn'] }}</p>@endif
+    <hr>
+    <table class="bill-details">
+        <tr>
+            <td class="brand">One Way<img src="{{ asset('custom/logo-icon-black.png') }}" alt="One Way"></td>
+            <td class="directory" dir="{{ $arabicBranches ? 'rtl' : 'ltr' }}">
+                @foreach($profile['branches'] as $branch)
+                    <div class="branch">
+                        <p>{{ $branch['country'] }}</p>
+                        @foreach($branch['phones'] as $phone)<p><span class="phone">{{ $phone }}</span></p>@endforeach
+                    </div>
                 @endforeach
-
-                @php
-                    [ 'ar' => $polAr, 'en' => $polEn ] = getRefundPolicy();
-                @endphp
-
-
-                @if($taxEnabled)
-                <tr>
-                    <td style="text-align: center !important;direction: rtl;" colspan="3" class="sum-up line">
-                          الإجمالي بدون الضريبة / Total bill EXel.Vat
-                    </td>
-                    <td style="text-align: center !important;direction: rtl;" colspan="3" class="line price">
-                        {{ number_format($order->price_without_tax, $moneyDecimals) }} {{ $Currency }}
-                    </td>
+                <p class="contact">{{ $profile['labels']['website'] }}: <a dir="ltr" href="{{ $contacts['website_url'] }}">{{ $contacts['website'] }}</a></p>
+                <p class="contact">{{ $profile['labels']['email'] }}: <a dir="ltr" href="mailto:{{ $contacts['email'] }}">{{ $contacts['email'] }}</a></p>
+            </td>
+        </tr>
+    </table>
+    <hr>
+    <p class="operation"><bdi>{{ $order->id }}</bdi> Op.No / <span dir="rtl">رقم العملية</span></p>
+    <hr>
+    <table class="date-time"><tr>
+        <td>{{ $createdAt->format('h:i A') }}</td><td>Time / الوقت</td>
+        <td>{{ $createdAt->format('Y-m-d') }}</td><td>Date / التاريخ</td>
+    </tr></table>
+    <hr>
+    <table class="identity">
+        <tr><th>العميل / Client</th><td>{{ $buyerName }}</td></tr>
+        @if($taxEnabled)<tr><th>Customer TRN</th><td dir="ltr">{{ $order->trn }}</td></tr>@endif
+        <tr><th>البائع / Seller</th><td>{{ $invoiceIdentity['name'] }}</td></tr>
+        <tr><th>الشاحن / Shipper</th><td>{{ optional($order->shipper)->name }}</td></tr>
+    </table>
+    <hr>
+    <table class="items">
+        @if($taxEnabled)
+            <colgroup><col style="width:20%"><col style="width:10%"><col style="width:15%"><col style="width:22%"><col style="width:13%"><col style="width:20%"></colgroup>
+        @else
+            <colgroup><col style="width:40%"><col style="width:10%"><col style="width:25%"><col style="width:25%"></colgroup>
+        @endif
+        <thead><tr>
+            <th>Model</th><th>Qty</th><th>Rate</th>
+            @if($taxEnabled)<th>Amount<br>Excl. VAT</th><th>VAT @if($taxRatio !== null)<br>@ {{ $taxRatio }}%@endif</th><th>Amount<br>Incl. VAT</th>@else<th>Amount</th>@endif
+        </tr></thead>
+        <tbody>
+            @foreach($items as $item)
+                <tr class="item-row">
+                    <td class="description"><bdi>{{ $item->name }}</bdi></td><td>{{ $item->qty }}</td>
+                    <td class="money">{{ $money($item->item_price) }} {{ $Currency }}</td>
+                    @if($taxEnabled)
+                        <td class="money">{{ $money($item->line_price_without_tax) }} {{ $Currency }}</td>
+                        <td class="money">{{ $money($item->line_tax_value) }} {{ $Currency }}</td>
+                    @endif
+                    <td class="money">{{ $money($item->total_price) }} {{ $Currency }}</td>
                 </tr>
-                @else
-                <tr>
-                    <td style="text-align: center !important;direction: rtl;" colspan="3" class="sum-up line">
-                         الإجمالي / Total
-                    </td>
-                    <td style="text-align: center !important;direction: rtl;" colspan="1" class="line price">
-                        {{ number_format($order->total_price, $moneyDecimals) }} {{ $Currency }}
-                    </td>
-                </tr>
-                @endif
-
-
-                @if($order->discount > 0)
-                <tr>
-                    <td style="text-align: center !important;direction: rtl;" colspan="3" class="sum-up line">
-                        الخصم / Discount
-                    </td>
-                    <td style="text-align: center !important;direction: rtl;" colspan="3" class="line price">
-                        {{ number_format($order->discount, $moneyDecimals) }} {{ $Currency }}
-                    </td>
-                </tr>
-                @endif
-
-                @if(!empty($order->shipping_fee) && $order->shipping_fee > 0)
-                <tr>
-                    <td style="text-align: center !important;direction: rtl;" colspan="3" class="sum-up line">
-                        رسوم الشحن / Shipping Fee
-                    </td>
-                    <td style="text-align: center !important;direction: rtl;" colspan="3" class="line price">
-                        {{ number_format($order->shipping_fee, $moneyDecimals) }} {{ $Currency }}
-                    </td>
-                </tr>
-                @endif
-
-                @if(!empty($order->cod_fee) && $order->cod_fee > 0)
-                <tr>
-                    <td style="text-align: center !important;direction: rtl;" colspan="3" class="sum-up line">
-                        رسوم الدفع عند الاستلام / COD Fee
-                    </td>
-                    <td style="text-align: center !important;direction: rtl;" colspan="3" class="line price">
-                        {{ number_format($order->cod_fee, $moneyDecimals) }} {{ $Currency }}
-                    </td>
-                </tr>
-                @endif
-
-                @if(isset($displayTotal) && $displayTotal !== null)
-                <tr>
-                    <td style="text-align: center !important;direction: rtl;" colspan="3" class="sum-up line">
-                        المقابل التقريبي (للعرض فقط) / Approximate display value
-                    </td>
-                    <td style="text-align: center !important;direction: rtl;" colspan="3" class="line price">
-                        ≈ {{ number_format($displayTotal, $displayDecimals, '.', ',') }} {{ $displayCurrency }}
-                    </td>
-                </tr>
-                @endif
-
-                <tr>
-                    <td style="text-align: center !important;direction: rtl;" colspan="3" class="sum-up line">
-                        إجمالي الضريبة  / Total VAT
-                    </td>
-                    <td style="text-align: center !important;direction: rtl;" colspan="3" class="line price">
-                        {{ number_format($order->tax_value, $moneyDecimals) }} {{ $Currency }}
-                    </td>
-                </tr>
-
-                @if($taxEnabled)
-                <tr>
-                    <td style="text-align: center !important;direction: rtl;" colspan="3" class="sum-up line">
-                         الإجمالي شامل الضريبة / Total bill Incl VAT
-                    </td>
-                    <td style="text-align: center !important;direction: rtl;" colspan="3" class="line price">
-                        {{ number_format($order->price_without_tax + $order->tax_value, $moneyDecimals) }} {{ $Currency }}
-                    </td>
-                </tr>
-                @endif
-
-                <tr>
-                    <td style="text-align: center !important;direction: rtl;" colspan="3" class="sum-up line">
-                        المدفوع / Paid
-                    </td>
-                    <td style="text-align: center !important;direction: rtl;" @if($taxEnabled) colspan="3" @else colspan="1" @endif class="line price">
-                        {{ number_format($order->paid_price, $moneyDecimals) }} {{ $Currency }}
-                    </td>
-                </tr>
-                <tr>
-                    <td style="text-align: center !important;direction: rtl;" colspan="3" class="sum-up line">
-                        المتبقي / Remaining
-                    </td>
-                    <td style="text-align: center !important;direction: rtl;" @if($taxEnabled) colspan="3" @else colspan="1" @endif class="line price">
-                        {{ number_format($order->remain_price, $moneyDecimals) }} {{ $Currency }}
-                    </td>
-                </tr>
-
-                <tr>
-                    <td style="text-align: center !important;direction: rtl;" colspan="3" class="sum-up line">
-                        إجمالي العدد / Total Qty
-                    </td>
-                    <td style="text-align: center !important;direction: rtl;" colspan="3" class="line price">
-                        {{$qty}}
-                    </td>
-                </tr>
-
-                <tr>
-                    <td style="text-align: center !important;direction: rtl;" colspan="3" class="sum-up">
-                        طريقة الدفع / Payment Method
-                    </td>
-                    <td style="text-align: center !important;direction: rtl;" colspan="3" class="price">
-                        @php
-                            $payment_type = "Pay by Cash";
-                            if($order->payment_type == 0){
-                                    $payment_type = "Pay by Cash";
-                            }elseif($order->payment_type == 1){
-                                    $payment_type = "Pay by Credit/Debit Card";
-                            }elseif($order->payment_type == 2){
-                                    $payment_type = "Pay by Cheque";
-                            }
-                        @endphp
-                        {{$payment_type}}
-                    </td>
-                </tr>
-
-            </tbody>
-        </table>
-
-        <div style="text-align:center;margin: 20px auto;display: flex;flex-direction:column;align-items:center;justify-content: center;">
-            {!! DNS1D::getBarcodeSVG($order->barcode, "C128", 2, 60, '#2A3239') !!}
-            <p style="font-size:18px !important;font-weight:bold !important;margin-top:4px;letter-spacing:2px;">{{ $order->barcode }}</p>
+            @endforeach
+            @foreach($summary as [$label, $value])
+                <tr><th colspan="{{ $summarySpan }}" class="summary-label">{{ $label }}</th><td colspan="{{ $summarySpan }}" class="money">{{ $money($value) }} {{ $Currency }}</td></tr>
+            @endforeach
+            @if(isset($displayTotal))
+                <tr><th colspan="{{ $summarySpan }}" class="summary-label">المقابل التقريبي (للعرض فقط) / Approximate display value</th><td colspan="{{ $summarySpan }}" class="money">≈ {{ number_format($displayTotal, $displayDecimals, '.', ',') }} {{ $displayCurrency }}</td></tr>
+            @endif
+            <tr><th colspan="{{ $summarySpan }}" class="summary-label">إجمالي العدد / Total Qty</th><td colspan="{{ $summarySpan }}">{{ $qty }}</td></tr>
+            <tr><th colspan="{{ $summarySpan }}" class="summary-label">طريقة الدفع / Payment Method</th><td colspan="{{ $summarySpan }}">{{ $paymentLabel }}</td></tr>
+        </tbody>
+    </table>
+    @if(!empty($order->barcode))
+        <div class="barcode" dir="ltr">
+            <img alt="Barcode {{ $order->barcode }}" src="data:image/svg+xml;base64,{{ base64_encode(DNS1D::getBarcodeSVG($order->barcode, 'C128', 2, 60, '#000000', false)) }}">
+            <p>{{ $order->barcode }}</p>
         </div>
-
-        <div>
-            <hr style="border: 2px dotted #000;">
+    @endif
+    <hr>
+    <div class="browse">
+        <div class="qr"><img alt="One Way website QR code" src="data:image/svg+xml;base64,{{ base64_encode(DNS2D::getBarcodeSVG('https://www.oneway.fashion/', 'QRCODE', 7, 7)) }}"></div>
+        <div class="browse-info">
+            <p>{{ $createdAt->format('Y-m-d h:i A') }}</p>
+            <p>لتصفح الموديلات<br>To Browse Models</p>
+            <a href="https://www.oneway.fashion/">https://www.oneway.fashion/</a>
         </div>
-
-        <div style="clear: both"></div>
-
-        <div style="text-align:center;margin: 20px auto;">
-            <div style="width: 30%;float: left;">
-                {!! DNS2D::getBarcodeSVG('https://www.oneway.fashion', 'QRCODE',7,7) !!}
-            </div>
-
-            <div style="width: 70%;float: left;">
-                <p style="margin-bottom: 20px">
-                    {{ Carbon\Carbon::parse($order->created_at)->format('Y-m-d h:i A') }}
-                </p>
-                <p style="font-size: 25px !important;font-weight: bold !important;margin-bottom: 10px;">
-                    لتصفح الموديلات
-                    <br>
-                    To Browse Models
-                </p>
-                <p>
-                    https://www.oneway.fashion/
-                </p>
-            </div>
-        </div>
-
-        <div style="clear: both;margin-bottom:50px"></div>
-
-        <p style="text-align: center;font-size: 40px !important;font-weight: bold !important;border-bottom: 1px solid #000;">
-            سياسة الأستبدال
-        </p>
-
-        <div lang="ar" dir="rtl">
-            <ul class="footer_desc">
-                <li style="list-style-type: disclosure-closed;font-size: 12px;margin-bottom: 0px;line-height:1.2">
-                    مده الاستبدال 3 أيام من تاريخ الفاتورة
-                </li>
-                <li style="list-style-type: disclosure-closed;font-size: 12px;margin-bottom: 0px;line-height:1.2">
-                    لا يوجد لدينا ترجيع واسترداد نقدى
-                </li>
-                <li style="list-style-type: disclosure-closed;font-size: 12px;margin-bottom: 0px;line-height:1.2">
-                    يجب أن تكون السلع المراد استبدالها بحالة جيدة وقابلة للعرض بغلافها وبطاقتها .
-                </li>
-                <li style="list-style-type: disclosure-closed;font-size: 12px;margin-bottom: 0px;line-height:1.2">
-                    يجب أن تكون السلع المراد استبدالها مرفقة بايصال الشراء الأصلى.
-                </li>
-                <li style="list-style-type: disclosure-closed;font-size: 12px;margin-bottom: 0px;line-height:1.2">
-                    يجب ان تكون السلع المراد استبدالها غير مطابقة للمواصفات القياسية أو بها خلل أو عيب لا يكون ظاهرا عند الشراء.
-                </li>
-
-            </ul>
-        </div>
-
-        <div lang="en" dir="ltr" style="margin-top:30px !important">
-            <ul class="footer_desc">
-                <li style="list-style-type: disclosure-closed;font-size: 12px;margin-bottom: 0px;line-height:1.2">
-                    The replacement period is 3 days from the date
-                </li>
-                <li style="list-style-type: disclosure-closed;font-size: 12px;margin-bottom: 0px;line-height:1.2">
-                    We do not offer returns or cash refunds
-                </li>
-                <li style="list-style-type: disclosure-closed;font-size: 12px;margin-bottom: 0px;line-height:1.2">
-                    The goods to be exchanged must be in good condition, and displayable with their packaging and tags
-                </li>
-                <li style="list-style-type: disclosure-closed;font-size: 12px;margin-bottom: 0px;line-height:1.2">
-                    The goods to be exchanged must be accompanied by the original purchase receipt.
-                </li>
-                <li style="list-style-type: disclosure-closed;font-size: 12px;margin-bottom: 0px;line-height:1.2">
-                    The goods to be replaced must not conform to standard specifications or have a defect or defect that is not apparent upon purchase.
-                </li>
-
-
-            </ul>
-        </div>
-
-        <div style="text-align: center;">
-            <p>
-                شكرا لزيارتكم وان واي
-            </p>
-            <p>
-                Thank You For Visiting Oneway
-            </p>
-        </div>
-
-
-        <script>
-            window.print();
-        </script>
-
-
-
     </div>
-
+    @foreach(['ar', 'en'] as $language)
+        <section class="policy" lang="{{ $language }}" dir="{{ $language === 'ar' ? 'rtl' : 'ltr' }}">
+            <h2>{{ config('invoices.a4_policy_headings.' . $language) }}</h2>
+            <ul>
+                @foreach(config('invoices.a4_policy.' . $language) as $term)
+                    <li>{{ str_replace(':days', '5', $term) }}</li>
+                @endforeach
+            </ul>
+        </section>
+    @endforeach
+    <div class="thanks">
+        <p dir="rtl">{{ config('invoices.a4_countries.' . \App\Support\Country::SYRIA . '.thanks') }}</p>
+        <p>{{ config('invoices.a4_countries.' . \App\Support\Country::UAE . '.thanks') }}</p>
+    </div>
+</main>
+<script>
+    window.addEventListener('load', async function () {
+        if (document.fonts && document.fonts.ready) await document.fonts.ready;
+        await Promise.all(Array.from(document.images).map(function (img) {
+            return img.decode ? img.decode().catch(function () {}) : Promise.resolve();
+        }));
+        window.print();
+    }, { once: true });
+</script>
 </body>
-
 </html>

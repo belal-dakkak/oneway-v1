@@ -41,7 +41,7 @@ class InvoiceCountryPresentationTest extends TestCase
                     foreach ($orders as $source => $order) {
                         foreach (['invoice.typed.show', 'invoice.typed.printv2'] as $route) {
                             $response = $this->actingAs($admin)->withSession(['locale' => $locale])
-                                ->get(route($route, ['source' => $source, 'id' => $order->id]))->assertOk();
+                                ->get(route($route, ['source' => $source, 'id' => $order->id, 'format' => 'a4']))->assertOk();
                             $response->assertSee('BILL TO')->assertSee('Name:')->assertSee('Phone:')->assertSee('Address:')
                                 ->assertSee('Stored customer')->assertSee($fields['address'])->assertSee('USD');
                             $response->assertDontSee('class="reference"', false)

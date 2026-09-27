@@ -1510,7 +1510,7 @@ class OrderController extends Controller
     private function printInvoiceFor(string $source, int $id)
     {
         $data = $this->invoicePayload($source, $id);
-        if (request()->query('format') === 'receipt') {
+        if (request()->query('format') !== 'a4') {
             return view('includes.printer', $data);
         }
 

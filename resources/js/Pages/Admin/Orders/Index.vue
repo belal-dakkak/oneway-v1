@@ -246,7 +246,7 @@
                       <a target="_blank" :href="route('invoice.typed.show', { source: 'order', id: item.id })" class="p-2 m-1 pb-1 rounded-md text-white btn-ghost bg-teal-400 hover:bg-teal-600 hover:text-white">
                           <vue-feather :type="'cast'" stroke-width="2"></vue-feather>
                       </a>
-                      <a target="_blank" :href="route('invoice.typed.printv2', { source: 'order', id: item.id })" class="p-2 m-1 pb-1 rounded-md text-white btn-ghost bg-teal-400 hover:bg-teal-600 hover:text-white">
+                      <a target="_blank" :href="route('invoice.typed.printv2', { source: 'order', id: item.id, format: 'receipt' })" class="p-2 m-1 pb-1 rounded-md text-white btn-ghost bg-teal-400 hover:bg-teal-600 hover:text-white">
                         <vue-feather :type="'printer'" stroke-width="2"></vue-feather>
                       </a>
                       <a v-if="item.buyer" target="_blank" :href="encodeUrlWhatsApp(item, item.buyer?.phone)" data-action="share/whatsapp/share" class="p-2 m-1 pb-1 rounded-md text-white btn-ghost bg-teal-400 hover:bg-teal-600 hover:text-white">

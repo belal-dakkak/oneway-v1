@@ -1,7 +1,7 @@
 <?php
 
 return [
-    // A4 presentation only; the receipt and other countries keep their existing policy.
+    // A4 presentation; browser receipts also reuse the approved branch and policy copy.
     'a4_countries' => [
         2 => [
             'language' => 'en', 'ink' => '#111111', 'accent' => '#d52040',
