@@ -8,6 +8,7 @@ use App\Models\CountryCommerceSetting;
 use App\Models\User;
 use App\Support\Country;
 use Illuminate\Database\Eloquent\Model;
+use Illuminate\Database\Eloquent\Collection as EloquentCollection;
 use Illuminate\Support\Collection;
 use InvalidArgumentException;
 
@@ -135,6 +136,7 @@ class InvoiceDataService
                 'barcode' => $product ? $product->barcode : '',
                 'qty' => (int) $item->qty,
                 'item_price' => $unitGross,
+                'entered_unit_price' => $unitGross,
                 'price_without_tax' => $unitGross,
                 'tax_value' => 0.0,
                 'line_price_without_tax' => $totalGross,
@@ -162,6 +164,7 @@ class InvoiceDataService
                 'barcode' => $product ? $product->barcode : '',
                 'qty' => (int) $item->qty,
                 'item_price' => $unitGross,
+                'entered_unit_price' => $unitGross,
                 'price_without_tax' => $unitGross,
                 'tax_value' => 0.0,
                 'line_price_without_tax' => $totalGross,
@@ -175,15 +178,35 @@ class InvoiceDataService
 
     private function orderItems(Order $order, float $rate, int $decimals): Collection
     {
+        // Old rows have no sold-quantity snapshot. Load their refund quantities
+        // together, including when the caller already loaded the order's items.
+        $legacyItems = $order->items->filter(static function ($item) {
+            return $item->sold_qty === null && $item->exists
+                && !$item->relationLoaded('refunds')
+                && !array_key_exists('refunds_sum_qty', $item->getAttributes());
+        });
+        if ($legacyItems->isNotEmpty()) {
+            (new EloquentCollection($legacyItems->all()))->loadSum('refunds', 'qty');
+        }
+
         $lines = [];
         foreach ($order->items as $item) {
             $color = $item->user_product ? $item->user_product->productColor : null;
             $product = $color ? $color->product : null;
-            $qty = (int) $item->qty;
-            $unitGross = $this->round((float) $item->item_price * $rate, $decimals);
-            $unitNet = $this->round((float) ($item->price_without_tax ?? $item->item_price) * $rate, $decimals);
+            $refundedQty = $item->relationLoaded('refunds')
+                ? $item->refunds->sum('qty')
+                : ($item->refunds_sum_qty ?? 0);
+            $qty = (int) ($item->sold_qty ?? ((int) $item->qty + (int) $refundedQty));
+            // The invoice is the original sale; qty/total_price on the stored
+            // row are the remaining sale after refunds. Keep full unit precision
+            // until the original line amounts have been calculated.
+            $rawUnitGross = (float) $item->item_price * $rate;
+            $rawUnitNet = (float) ($item->price_without_tax ?? $item->item_price) * $rate;
+            $unitGross = $this->round($rawUnitGross, $decimals);
+            $unitNet = $this->round($rawUnitNet, $decimals);
             $unitTax = $this->round((float) ($item->tax_value ?? 0) * $rate, $decimals);
-            $lineGross = $this->round((float) $item->total_price * $rate, $decimals);
+            $lineGross = $this->round($rawUnitGross * $qty, $decimals);
+            $lineNet = $this->round($rawUnitNet * $qty, $decimals);
 
             $this->merge($lines, [
                 'product_id' => $product ? $product->id : 'order-' . $item->id,
@@ -193,10 +216,11 @@ class InvoiceDataService
                 'barcode' => $product ? $product->barcode : '',
                 'qty' => $qty,
                 'item_price' => $unitGross,
+                'entered_unit_price' => $order->order_type === 'complex_from_multi' ? $unitNet : $unitGross,
                 'price_without_tax' => $unitNet,
                 'tax_value' => $unitTax,
-                'line_price_without_tax' => $this->round($unitNet * $qty, $decimals),
-                'line_tax_value' => $this->round($unitTax * $qty, $decimals),
+                'line_price_without_tax' => $lineNet,
+                'line_tax_value' => $this->round($lineGross - $lineNet, $decimals),
                 'total_price' => $lineGross,
             ], $decimals);
         }

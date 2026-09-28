@@ -142,7 +142,7 @@
             @foreach($items as $item)
                 <tr class="item-row">
                     <td class="description"><bdi>{{ $item->name }}</bdi></td><td>{{ $item->qty }}</td>
-                    <td class="money">{{ $money($item->item_price) }} {{ $Currency }}</td>
+                    <td class="money">{{ $money($item->entered_unit_price ?? $item->item_price) }} {{ $Currency }}</td>
                     @if($taxEnabled)
                         <td class="money">{{ $money($item->line_price_without_tax) }} {{ $Currency }}</td>
                         <td class="money">{{ $money($item->line_tax_value) }} {{ $Currency }}</td>

@@ -4,6 +4,7 @@ namespace Tests\Unit;
 
 use App\Models\Order;
 use App\Models\OrderItem;
+use App\Models\Refund;
 use App\Models\Product;
 use App\Models\ProductColor;
 use App\Models\UserProduct;
@@ -181,6 +182,64 @@ class InvoiceDataServiceTest extends TestCase
         $this->assertSame('+963900000000', $identity['phone']);
         $this->assertSame('TRN-123', $identity['trn']);
         $this->assertTrue($identity['tax_enabled']);
+    }
+
+    public function test_original_sale_quantities_and_prices_are_restored_without_using_refund_prices(): void
+    {
+        $product = new Product(['name' => 'Shirt', 'barcode' => '18225']);
+        $product->id = 1;
+        $item = $this->orderItem($product, 1, 0, 55, 0, 52.381, 2.619);
+        $item->sold_qty = 1;
+        $item->setRelation('refunds', collect([new Refund(['qty' => 1, 'item_price' => 0, 'total_price' => 0])]));
+        $order = new Order(['type' => Order::TYPE_CASH, 'order_type' => 'simple', 'curr_type' => 'AED', 'curr_rate' => 1, 'total_price' => 55]);
+        $order->setRelation('items', collect([$item]));
+        $line = (new InvoiceDataService())->forOrder($order)['items']->first();
+        $this->assertSame(1, $line->qty);
+        $this->assertSame(55.0, $line->entered_unit_price);
+        $this->assertSame(55.0, $line->total_price);
+        $this->assertSame(52.38, $line->line_price_without_tax);
+        $this->assertSame(2.62, $line->line_tax_value);
+        $this->assertSame(0, $item->qty);
+        $this->assertSame(0.0, (float) $item->total_price);
+
+        $item->sold_qty = null;
+        $this->assertSame(1, (new InvoiceDataService())->forOrder($order)['items']->first()->qty);
+        $item->setRelation('refunds', collect());
+        $this->assertSame(0, (new InvoiceDataService())->forOrder($order)['items']->first()->qty);
+    }
+
+    public function test_line_amounts_use_full_stored_precision_before_currency_rounding(): void
+    {
+        foreach ([
+            ['USD', 1, 100, 95.2381, 5, 500.0, 476.19, 23.81],
+            ['AED', 3.67, 1.005, .9571, 3, 11.07, 10.54, .53],
+            ['SYP', 13000, 1.23456, 1.17577, 3, 48148.0, 45855.0, 2293.0],
+        ] as [$currency, $rate, $gross, $net, $qty, $lineGross, $lineNet, $tax]) {
+            $product = new Product(['name' => 'Precision', 'barcode' => 'P']);
+            $product->id = 1;
+            $item = $this->orderItem($product, 1, 0, $gross, 0, $net, $gross - $net);
+            $item->sold_qty = $qty;
+            $order = new Order(['type' => Order::TYPE_CASH, 'curr_type' => $currency, 'curr_rate' => $rate]);
+            $order->setRelation('items', collect([$item]));
+            $line = (new InvoiceDataService())->forOrder($order)['items']->first();
+            $this->assertSame($lineGross, $line->total_price, $currency);
+            $this->assertSame($lineNet, $line->line_price_without_tax, $currency);
+            $this->assertSame($tax, $line->line_tax_value, $currency);
+        }
+    }
+
+    public function test_entered_price_is_net_for_wholesale_and_gross_for_simple_and_client_orders(): void
+    {
+        $product = new Product(['name' => 'Shirt', 'barcode' => '18225']);
+        $product->id = 1;
+        foreach (['simple' => 105.0, 'complex' => 105.0, 'complex_from_multi' => 100.0] as $type => $expected) {
+            $order = new Order(['type' => Order::TYPE_FOR_CLIENT, 'order_type' => $type, 'curr_type' => 'AED', 'curr_rate' => 1]);
+            $order->setRelation('items', collect([$this->orderItem($product, 1, 5, 105, 525, 100, 5)]));
+            $line = (new InvoiceDataService())->forOrder($order)['items']->first();
+            $this->assertSame($expected, $line->entered_unit_price);
+            $this->assertSame(105.0, $line->item_price);
+            $this->assertSame(525.0, $line->total_price);
+        }
     }
 
     private function orderItem(Product $product, int $colorId, int $qty, float $unit, float $total, float $net, float $tax): OrderItem

@@ -316,6 +316,11 @@ class OrderController extends Controller
         return Redirect::route('orders.complex');
     }
 
+    public function printInfo(int $id, Request $request)
+    {
+        return $this->show(Order::query()->findOrFail($id), $request);
+    }
+
     /**
      * Display the specified resource.
      */
@@ -359,12 +364,13 @@ class OrderController extends Controller
         $o->order_date = Date::parse($order->created_at)->timezone('Asia/Beirut')->format('d-m-Y');
         $o->order_time = Date::parse($order->created_at)->timezone('Asia/Beirut')->format('h:i a');
 
-        $o->total_count       = $order->items()->sum('qty');
-        $o->total_model_count = $order->items()->count();
+        $o->total_count       = $items->sum('qty');
+        $o->total_model_count = $items->count();
 
         $o->products = $items;
 
         foreach($o->products as $product) {
+            $product->item_price = $product->entered_unit_price;
             $product->vat = $product->line_tax_value . ' ' . $Currency;
             $product->total_price_before_vat = $product->line_price_without_tax . ' ' .$Currency;
             $product->total_price = $product->total_price . ' ' .$Currency;

@@ -275,7 +275,7 @@ Route::middleware(['auth:sanctum'])
             Route::get('/all/debts', [OrderController::class, 'debts'])->name('debts');
             Route::get('/all/profits', [OrderController::class, 'profits'])->name('profits');
             Route::post('/single-print/{id}', [OrderController::class, 'singlePrint'])->name('print');
-            Route::get('/{id}/print-info', [OrderController::class, 'show'])->name('print-info');
+            Route::get('/{id}/print-info', [OrderController::class, 'printInfo'])->name('print-info');
             Route::post('/change-status/{id}', [OrderController::class, 'changeStatus'])->name('change');
             Route::get('/client/products', [OrderController::class, 'forClient'])->name('client');
             Route::get('/app/orders', [OrderController::class, 'appOrders'])->name('appOrders');
