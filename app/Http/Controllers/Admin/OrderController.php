@@ -357,7 +357,7 @@ class OrderController extends Controller
         $o->tax                         = $order->tax_value . ' ' .$Currency;
         $o->tax_rate                    = $order->tax_ratio.'%';
 
-        $o->customer_trn                = $order->trn ?? '';
+        $o->customer_trn                = app(\App\Services\InvoiceDataService::class)->customerTrn($order);
         $o->trn                         = @$order->seller->trn ?? '';
 
         Date::setLocale('ar');

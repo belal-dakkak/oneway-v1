@@ -62,7 +62,10 @@ class InvoiceDataService
             $items = $this->orderItems($order, $rate, $decimals);
         }
 
+        $customerTrn = $this->customerTrn($order);
+
         return compact(
+            'customerTrn',
             'order',
             'items',
             'currency',
@@ -118,6 +121,19 @@ class InvoiceDataService
             'trn' => (string) ($seller->trn ?? ''),
             'tax_enabled' => (string) ($seller->enable_tax ?? 'no') === 'yes',
         ];
+    }
+
+    public function customerTrn(Model $order): string
+    {
+        $snapshot = trim((string) $order->trn);
+        if ($snapshot !== '') {
+            return $snapshot;
+        }
+
+        if (!$order->relationLoaded('buyer') && !$order->buyer_id) {
+            return '';
+        }
+        return trim((string) optional($order->buyer)->trn);
     }
 
     private function websiteItems(WebsiteOrder $order, int $decimals): Collection

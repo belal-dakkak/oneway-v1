@@ -147,8 +147,8 @@
                 @if($buyerAddress)
                     <p class="detail"><span class="detail-label">Address / العنوان:</span> <span class="detail-value">{{ $buyerAddress }}</span></p>
                 @endif
-                @if($taxEnabled && !empty($order->trn))
-                    <p class="detail"><span class="detail-label">Customer TRN:</span> <span class="detail-value">{{ $order->trn }}</span></p>
+                @if(!empty($customerTrn ?? app(\App\Services\InvoiceDataService::class)->customerTrn($order)))
+                    <p class="detail"><span class="detail-label">Customer TRN:</span> <span class="detail-value">{{ $customerTrn ?? app(\App\Services\InvoiceDataService::class)->customerTrn($order) }}</span></p>
                 @endif
                 <table class="meta">
                     <tr><td class="label">Date</td><td class="value">{{ $invoiceDate ? date('Y-m-d', strtotime((string) $invoiceDate)) : '—' }}</td></tr>

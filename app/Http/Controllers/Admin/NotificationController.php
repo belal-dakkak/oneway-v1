@@ -24,6 +24,11 @@ use Illuminate\Notifications\DatabaseNotification;
 class NotificationController extends Controller
 
 {
+    public function summary(Request $request)
+    {
+        return response()->json(app(\App\Services\WebsiteOrderNotificationService::class)->snapshot($request->user()))
+            ->header('Cache-Control', 'no-store');
+    }
     /**
      * Display a listing of the resource.
      */
@@ -95,13 +100,15 @@ class NotificationController extends Controller
 
     public function showOrderNotification(Request $request)
     {
-        $table = $request->get('table');
         $notificationId = $request->get('notification');
 
         $user = auth()->user();
-        $notification = $user->unreadNotifications()->whereId($notificationId);
-
-        $notification->update(['read_at' => Carbon::now()]);
+        $notification = $user->notifications()->whereKey($notificationId)->firstOrFail();
+        $table = $notification->data['table'] ?? [];
+        abort_unless(isset($table['id']), 404);
+        abort_unless((int) $user->role_id === User::ROLE_ADMIN
+            || !isset($table['country_id']) || (int) $table['country_id'] === (int) $user->country_id, 404);
+        $notification->markAsRead();
 
         $id = $table['id'];
 

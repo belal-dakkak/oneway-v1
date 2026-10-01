@@ -29,6 +29,7 @@ class MultiCurrencyClientAccountTest extends TestCase
 
         Schema::create('users', function (Blueprint $table) {
             $table->id();
+            $table->string('trn')->nullable();
             $table->string('name');
             $table->string('email');
             $table->string('password');
@@ -71,6 +72,7 @@ class MultiCurrencyClientAccountTest extends TestCase
         });
         Schema::create('orders', function (Blueprint $table) {
             $table->id();
+            $table->string('trn')->nullable();
             $table->unsignedBigInteger('seller_id');
             $table->unsignedBigInteger('buyer_id')->nullable();
             $table->string('barcode');

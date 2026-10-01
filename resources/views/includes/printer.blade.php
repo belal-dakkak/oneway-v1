@@ -123,7 +123,7 @@
     <hr>
     <table class="identity">
         <tr><th>العميل / Client</th><td>{{ $buyerName }}</td></tr>
-        @if($taxEnabled)<tr><th>Customer TRN</th><td dir="ltr">{{ $order->trn }}</td></tr>@endif
+        @if(!empty($customerTrn ?? app(\App\Services\InvoiceDataService::class)->customerTrn($order)))<tr><th>Customer TRN</th><td dir="ltr">{{ $customerTrn ?? app(\App\Services\InvoiceDataService::class)->customerTrn($order) }}</td></tr>@endif
         <tr><th>البائع / Seller</th><td>{{ $invoiceIdentity['name'] }}</td></tr>
         <tr><th>الشاحن / Shipper</th><td>{{ optional($order->shipper)->name }}</td></tr>
     </table>

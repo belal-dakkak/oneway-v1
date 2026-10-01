@@ -104,6 +104,55 @@ class InvoiceOriginalSaleTest extends TestCase
         $this->actingAs($order->seller)->get(route('orders.print-info', 999999))->assertNotFound();
     }
 
+    public function test_direct_receipt_has_only_real_rows_for_one_two_and_three_products_and_customer_trn(): void
+    {
+        foreach ([1, 2, 3] as $count) {
+            $order = $this->sale('simple', 'AED', array_fill(0, $count, [1, 55, 52.381]));
+            // Distinct stored products must stay distinct in the direct-print payload.
+            foreach ($order->items as $index => $item) {
+                $product = $item->user_product->productColor->product->replicate();
+                $product->name = 'Long real product name ' . $index;
+                $product->barcode = 'DISTINCT-' . $count . '-' . $index;
+                $product->save();
+                $item->user_product->productColor->update(['product_id' => $product->id]);
+            }
+            $buyer = User::query()->create([
+                'name' => 'Buyer', 'email' => 'trn-' . $count . '@example.test', 'password' => 'secret',
+                'country_id' => User::COUNTRY_UAE, 'role_id' => User::ROLE_CLIENT, 'trn' => 'CUSTOMER-TRN-' . $count,
+            ]);
+            $order->update(['buyer_id' => $buyer->id, 'trn' => ' ']);
+            $this->actingAs($order->seller);
+            $response = $this->getJson(route('orders.print-info', $order->id))->assertOk()
+                ->assertJsonCount($count, 'products')->assertJsonPath('total_count', $count)
+                ->assertJsonPath('total_model_count', $count)->assertJsonPath('customer_trn', $buyer->trn);
+            foreach ($response->json('products') as $product) {
+                $this->assertSame(1, $product['qty']);
+                $this->assertNotSame('', trim($product['name']));
+            }
+            foreach (['invoice.typed.show', 'invoice.typed.printv2'] as $route) {
+                $this->get(route($route, ['source' => 'order', 'id' => $order->id]))->assertOk()->assertSee($buyer->trn);
+            }
+            $order->update(['trn' => 'ORIGINAL-TRN']);
+            $this->getJson(route('orders.print-info', $order->id))->assertJsonPath('customer_trn', 'ORIGINAL-TRN');
+            $this->assertSame('ORIGINAL-TRN', app(InvoiceDataService::class)->forOrder($order->fresh())['customerTrn']);
+        }
+    }
+
+    public function test_new_orders_snapshot_customer_trn_and_keep_it_after_profile_changes(): void
+    {
+        $buyer = User::query()->create([
+            'name' => 'Buyer', 'email' => 'snapshot@example.test', 'password' => 'secret',
+            'country_id' => User::COUNTRY_UAE, 'role_id' => User::ROLE_CLIENT, 'trn' => 'SAVED-TRN',
+        ]);
+        foreach ([Order::class, \App\Models\WebsiteOrder::class] as $class) {
+            $order = $class::query()->create(['seller_id' => $buyer->id, 'buyer_id' => $buyer->id, 'barcode' => uniqid('SNAPSHOT-'), 'country_id' => 2]);
+            $this->assertSame('SAVED-TRN', $order->fresh()->trn);
+            $buyer->update(['trn' => 'CHANGED-TRN']);
+            $this->assertSame('SAVED-TRN', app(InvoiceDataService::class)->customerTrn($order->fresh()));
+            $buyer->update(['trn' => 'SAVED-TRN']);
+        }
+    }
+
     private function refund(int $itemId, int $qty, string $price): void
     {
         DB::transaction(fn () => app(RefundRepository::class)->add(Request::create('/admin/refunds', 'POST', [

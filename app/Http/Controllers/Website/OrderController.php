@@ -216,8 +216,8 @@ class OrderController extends Controller
 
         if ($request->payment_method === 'card') {
             // Clean phone number: strip country codes and leading zeros for Tap
-            $cleanPhone = $request->phone;
-            $cleanPhone = preg_replace('/^(\+971|00971|971|\+961|00961|961|\+963|00963|963)/', '', $cleanPhone);
+            $cleanPhone = preg_replace('/\D/', '', $request->phone);
+            $cleanPhone = preg_replace('/^(00971|971|00961|961|00963|963)/', '', $cleanPhone);
             $cleanPhone = ltrim($cleanPhone, '0');
             $cleanPhone = preg_replace('/\D/', '', $cleanPhone); // Remove any remaining non-digits
 
@@ -263,7 +263,7 @@ class OrderController extends Controller
 
             $charge = $this->tapService->createCharge($chargeData);
 
-            if ($charge && isset($charge['transaction']['url'])) {
+            if ($charge && !empty($charge['id']) && !empty($charge['transaction']['url'])) {
                 // Update order with tap_id (invoice)
                 $order->update(['invoice' => $charge['id']]);
 

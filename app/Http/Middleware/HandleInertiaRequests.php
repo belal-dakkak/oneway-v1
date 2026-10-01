@@ -100,9 +100,7 @@ class HandleInertiaRequests extends Middleware
                             'credit' => round($credit, $defaultCurrency === 'SYP' ? 0 : 2),
                             'debit' => round($debit, $defaultCurrency === 'SYP' ? 0 : 2),
                             'cashboxes' => $cashboxes,
-                            'notifications' => $user->notifications()->orderByDesc('created_at')->limit(5)->get(),
-                            'notifications_count' => $user->unreadNotifications()->count(),
-                        ]
+                        ] + app(\App\Services\WebsiteOrderNotificationService::class)->snapshot($user)
                         : null,
                 ];
             },

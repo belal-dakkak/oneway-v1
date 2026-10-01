@@ -20,7 +20,7 @@ class WebsiteOrder extends Model
     const STATUS_FAILED = 4;
 
     protected $fillable = [
-        'barcode', 'buyer_id', 'first_name', 'last_name', 'email', 'phone', 
+        'barcode', 'buyer_id', 'trn', 'first_name', 'last_name', 'email', 'phone',
         'address', 'city', 'building_name', 'flat_number',
         'total_price_before_discount', 'discount', 'total_price', 
         'shipping_fee', 'cod_fee', 'status', 'payment_type', 'curr_type', 'invoice', 
@@ -44,6 +44,15 @@ class WebsiteOrder extends Model
     ];
 
     protected $appends = ['date', 'payment_label', 'status_label', 'is_paid', 'invoice_links'];
+
+    protected static function booted()
+    {
+        static::creating(function (WebsiteOrder $order) {
+            if (trim((string) $order->trn) === '' && $order->buyer_id) {
+                $order->trn = User::query()->whereKey($order->buyer_id)->value('trn');
+            }
+        });
+    }
 
     public function getInvoiceLinksAttribute(): array
     {
@@ -116,6 +125,7 @@ class WebsiteOrder extends Model
     public function dispatchNotifications(): void
     {
         try {
+            app(\App\Services\WebsiteOrderNotificationService::class)->deliver($this);
             // Even when a server accidentally uses the sync queue driver, defer
             // SMTP work until after the HTTP response is sent.
             \App\Jobs\DispatchWebsiteOrderNotifications::dispatchAfterResponse($this->id)
@@ -134,50 +144,11 @@ class WebsiteOrder extends Model
     public function sendNotificationsNow(): void
     {
         $this->refresh();
+        app(\App\Services\WebsiteOrderNotificationService::class)->deliver($this);
         if (!$this->confirmation_email_sent_at) {
             \Illuminate\Support\Facades\Mail::to($this->email)->send(new \App\Mail\OrderConfirmationEmail($this));
-            $this->forceFill([
-                'confirmation_email_sent_at' => now(),
-                'notification_last_error' => null,
-            ])->save();
+            $this->forceFill(['confirmation_email_sent_at' => now(), 'notification_last_error' => null])->save();
         }
-
-        if ($this->notifications_sent_at) {
-            return;
-        }
-
-        // Get all users with admin dashboard access (Admin, Warehouse, Shop)
-        $adminUsers = User::query()
-            ->whereIn('role_id', [User::ROLE_ADMIN, User::ROLE_WAREHOUSE, User::ROLE_SHOP])
-            ->where(function ($query) {
-                $query->where('role_id', User::ROLE_ADMIN)
-                    ->orWhere('country_id', $this->country_id);
-            })
-            ->get();
-
-        $buyer = $this->buyer;
-        $note = __('New Order') . " #{$this->barcode}";
-
-        // Log for debugging
-        \Illuminate\Support\Facades\Log::info('Dispatching notifications for website order #' . $this->barcode, [
-            'admin_users_count' => $adminUsers->count(),
-            'admin_users' => $adminUsers->pluck('id', 'email'),
-            'order_id' => $this->id,
-        ]);
-
-        // Send notification to all admin users
-        foreach ($adminUsers as $adminUser) {
-            \Illuminate\Support\Facades\Log::info('Dispatching notification to admin', ['user_id' => $adminUser->id, 'email' => $adminUser->email]);
-            \App\Jobs\NotificationOrderJob::dispatch($adminUser, $buyer, $this, $note)->onQueue('notify');
-
-            // Let the queue retry delivery failures instead of silently marking
-            // the order as notified.
-            \Illuminate\Support\Facades\Mail::to($adminUser->email)->send(new \App\Mail\NewOrderAdminEmail($this));
-        }
-
-        $this->forceFill([
-            'notifications_sent_at' => now(),
-            'notification_last_error' => null,
-        ])->save();
+        app(\App\Services\WebsiteOrderNotificationService::class)->sendAdminEmails($this);
     }
 }

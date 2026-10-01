@@ -43,7 +43,7 @@ class TapPaymentService
                 'amount' => $data['amount'] ?? null,
                 'currency' => $data['currency'] ?? null,
             ]);
-            $response = Http::connectTimeout(5)->timeout(15)->withHeaders([
+            $response = Http::withOptions(['connect_timeout' => 5])->timeout(15)->withHeaders([
                 'Authorization' => 'Bearer ' . $this->secretKey,
                 'accept' => 'application/json',
                 'content-type' => 'application/json',
@@ -57,10 +57,13 @@ class TapPaymentService
                 'status' => $response->status(),
                 'code' => data_get($response->json(), 'errors.0.code'),
             ]);
-            return $response->json(); // Return json even on error so we can parse the description
+            return ['errors' => [[
+                'code' => data_get($response->json(), 'errors.0.code'),
+                'description' => 'تعذر بدء الدفع بالبطاقة. يرجى المحاولة لاحقاً أو التواصل مع المتجر. / Unable to start card payment. Please retry or contact the store.',
+            ]]];
         } catch (\Exception $e) {
-            Log::error('Tap Payment Exception: ' . $e->getMessage());
-            return null;
+            Log::error('Tap payment connection failed.', ['exception' => get_class($e)]);
+            return ['errors' => [['description' => 'تعذر الاتصال ببوابة الدفع. يرجى المحاولة لاحقاً. / Unable to reach the payment gateway. Please retry later.']]];
         }
     }
 
@@ -77,7 +80,7 @@ class TapPaymentService
         }
 
         try {
-            $response = Http::connectTimeout(5)->timeout(15)->retry(2, 200)->withHeaders([
+            $response = Http::withOptions(['connect_timeout' => 5])->timeout(15)->retry(2, 200)->withHeaders([
                 'Authorization' => 'Bearer ' . $this->secretKey,
                 'accept' => 'application/json',
             ])->get($this->baseUrl . '/charges/' . rawurlencode($chargeId));
@@ -92,7 +95,7 @@ class TapPaymentService
             ]);
             return null;
         } catch (\Exception $e) {
-            Log::error('Tap Retrieve Charge Exception: ' . $e->getMessage());
+            Log::error('Tap charge verification connection failed.', ['exception' => get_class($e)]);
             return null;
         }
     }

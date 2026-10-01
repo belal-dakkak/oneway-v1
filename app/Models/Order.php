@@ -37,6 +37,15 @@ class Order extends Model
 
     protected $appends = ['date', 'sent_date','payment_label', 'invoice_links'];
 
+    protected static function booted()
+    {
+        static::creating(function (Order $order) {
+            if (trim((string) $order->trn) === '' && $order->buyer_id) {
+                $order->trn = User::query()->whereKey($order->buyer_id)->value('trn');
+            }
+        });
+    }
+
     public function getInvoiceLinksAttribute(): array
     {
         return [

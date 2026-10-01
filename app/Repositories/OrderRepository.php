@@ -519,7 +519,8 @@ class OrderRepository
                 ]);
             }
 
-            $this->websiteOrderStockService->reserveLocked($order);
+            // Website orders are requests fulfilled by a separate manual sale.
+            // quote(..., true) checks current availability without reserving it.
 
             return $order;
         }, 3);

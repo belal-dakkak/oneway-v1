@@ -371,6 +371,8 @@
 </template>
 <script>
 import { defineComponent } from 'vue'
+import { WebsiteOrderNotifications } from '@/Utils/WebsiteOrderNotifications'
+import axios from 'axios'
 import JetApplicationMark from '@/Jetstream/ApplicationMark.vue'
 import JetBanner from '@/Jetstream/Banner.vue'
 import { Head, Link } from '@inertiajs/inertia-vue3';
@@ -404,46 +406,42 @@ export default defineComponent({
         JetResponsiveNavLink,
         JetAuthenticationCardLogo
     },
-    created() {
-        console.log('Admin Echo listener setting up for user:', this.$page.props.user.id);
-        console.log('Echo object available:', typeof window.Echo !== 'undefined');
-
-        window.Echo.private(`App.Models.User.${this.$page.props.user.id}`).notification((notification) => {
-            console.log('Admin received notification:', notification);
-            console.log('Notification type:', notification.type);
-            console.log('Notification data:', notification.data);
-            console.log('Current notifications count:', this.$page.props.auth.user.notifications_count);
-            console.log('Current notifications:', this.$page.props.auth.user.notifications);
-
-            // Handle all notifications regardless of type
-            let newNotification = {};
-            newNotification.data = notification;
-            newNotification.id = notification.id; // Ensure ID is set
-            newNotification.read_at = null; // Mark as unread
-            newNotification.type = notification.type; // Ensure type is set
-
-            // Check if notification already exists by ID
-            const exists = this.$page.props.auth.user.notifications.some(e => e.id === notification.id);
-            console.log('Notification already exists:', exists);
-
-            if (!exists) {
-                console.log('Adding new notification to list');
-                let audio = new Audio('/custom/ringtone.mp3');
-                audio.play().catch(e => console.log('Audio play failed:', e));
-
-                // Add to beginning of array
-                this.$page.props.auth.user.notifications.unshift(newNotification);
-                this.$page.props.auth.user.notifications_count++;
-
-                console.log('Notification count updated:', this.$page.props.auth.user.notifications_count);
-                console.log('Notifications array updated:', this.$page.props.auth.user.notifications);
-
-                // Force Vue reactivity
-                this.$forceUpdate();
-            }
-        }).error((error) => {
-            console.error('Admin Echo subscription error:', error);
-        });
+    mounted() {
+        const user = this.$page.props.auth.user;
+        if (!user) return;
+        if ([1, 2, 3].includes(Number(user.role))) {
+            this.notificationSync = new WebsiteOrderNotifications({
+                userId: user.id,
+                initialIds: user.website_order_ids || [],
+                load: async () => (await axios.get(this.route('notification.summary'))).data,
+                update: snapshot => Object.assign(this.$page.props.auth.user, snapshot),
+                ring: () => new Audio('/custom/ringtone.mp3').play(),
+                document,
+                setInterval: window.setInterval.bind(window),
+                clearInterval: window.clearInterval.bind(window),
+            });
+            this.notificationSync.start();
+        }
+        if (window.Echo) {
+            this.notificationChannel = `App.Models.User.${user.id}`;
+            window.Echo.private(this.notificationChannel)
+                .notification(notification => {
+                    if (this.notificationSync) {
+                        this.notificationSync.refresh();
+                    } else if (!user.notifications.some(row => row.id === notification.id)) {
+                        user.notifications.unshift({ id: notification.id, data: notification, read_at: null, type: notification.type });
+                        user.notifications_count++;
+                    }
+                    // Keep existing stock/other notifications working for every dashboard role.
+                    if (notification.table?.product_color || !this.notificationSync) {
+                        new Audio('/custom/ringtone.mp3').play().catch(() => {});
+                    }
+                });
+        }
+    },
+    beforeUnmount() {
+        this.notificationSync?.stop();
+        if (this.notificationChannel && window.Echo) window.Echo.leave(this.notificationChannel);
     },
     data() {
         return {
@@ -492,10 +490,7 @@ export default defineComponent({
             ];
         },
         websiteOrdersCount() {
-            if (!this.$page.props.auth.user.notifications) return 0;
-            return this.$page.props.auth.user.notifications.filter(notification => {
-                return notification.data && (notification.read_at === null) && notification.data.table && notification.data.table.barcode && !notification.data.table.product_color;
-            }).length;
+            return this.$page.props.auth.user.website_order_count || 0;
         },
         otherNotificationsCount() {
             if (!this.$page.props.auth.user.notifications) return 0;

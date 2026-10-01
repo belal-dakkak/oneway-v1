@@ -343,6 +343,20 @@ class TapPaymentFinalizerTest extends TestCase
         }
     }
 
+    public function test_new_unreserved_card_orders_never_change_stock_on_capture_or_failure(): void
+    {
+        foreach (['CAPTURED', 'DECLINED'] as $status) {
+            [$order, $stock] = $this->reservedOrder();
+            $order->update(['stock_reserved_at' => null]);
+            $stock->update(['stock' => 10]);
+            $this->finalizer()->finalize($this->charge($order, $status));
+            $this->finalizer()->finalize($this->charge($order, $status));
+            $this->assertSame(10, $stock->fresh()->stock);
+            $this->assertNull($order->fresh()->stock_reserved_at);
+            $this->assertNull($order->fresh()->stock_released_at);
+        }
+    }
+
     private function reservedOrder(): array
     {
         $stockUserId = DB::table('users')->insertGetId([

@@ -61,6 +61,7 @@ class OrderNotification extends Notification
     public function toArray($notifiable)
     {
         return [
+            'source' => $this->table instanceof \App\Models\WebsiteOrder ? 'website' : 'order',
             'user' => $this->user,
             'table' => $this->table,
             'message' => $this->message
@@ -81,6 +82,7 @@ class OrderNotification extends Notification
         ]);
         
         return new \Illuminate\Notifications\Messages\BroadcastMessage([
+            'source' => $this->table instanceof \App\Models\WebsiteOrder ? 'website' : 'order',
             'user' => $this->user,
             'table' => $this->table,
             'message' => $this->message,

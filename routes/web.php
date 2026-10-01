@@ -298,6 +298,8 @@ Route::middleware(['auth:sanctum'])
             Route::post('/', '\App\Http\Controllers\CurrencyController@store')->name('store');
         });
     Route::get('/notifications', [NotificationController::class, 'index'])->name('notification.index');
+    Route::get('/notifications/summary', [NotificationController::class, 'summary'])
+        ->middleware(['guard:admin|warehouse|shop'])->name('notification.summary');
     Route::get('/show-notification', [NotificationController::class, 'showNotification'])->name('notification.show');
     Route::get('/show-order-notification', [NotificationController::class, 'showOrderNotification'])->name('notification.order.show');
     Route::get('/approve-notification/{id}', [NotificationController::class, 'approveNotification'])->name('notification.approve');

@@ -62,19 +62,8 @@ class TapPaymentFinalizer
                 ], true);
 
                 if (!$order->payment_captured_at) {
-                    // New orders are reserved before redirecting to Tap. For an older unpaid
-                    // order, reserve now; older already-accepted orders are left untouched.
-                    if (!$order->stock_reserved_at && $wasAwaitingPayment) {
-                        try {
-                            $this->stockService->reserveLocked($order);
-                        } catch (Throwable $exception) {
-                            Log::critical('Captured Tap payment has insufficient stock.', [
-                                'order_id' => $order->id,
-                                'charge_id' => $chargeId,
-                                'error' => $exception->getMessage(),
-                            ]);
-                        }
-                    }
+                    // Payment confirmation records money only. Stock is deducted
+                    // by the staff's manual sale, including for legacy unpaid orders.
 
                     $order->forceFill([
                         'status' => WebsiteOrder::STATUS_PENDING,
