@@ -631,9 +631,6 @@ class OrderController extends Controller
 
         $orders = $this->orderRepository->getOrders($request);
 
-        // Mark all website-order notifications as read when the page is opened
-        $this->markWebsiteOrderNotificationsRead();
-
         if ($request->wantsJson()) {
             return $orders;
         }
@@ -659,34 +656,6 @@ class OrderController extends Controller
             'buyers'  => $buyers,
             'filters' => $request->all(['search', 'field', 'direction', 'start_date', 'end_date', 'date', 'buyer'])
         ]);
-    }
-
-    /**
-     * Mark all unread website-order notifications as read for the current user.
-     * Website order notifications have 'email' and 'phone' fields in their data.table.
-     */
-    public function clearWebsiteOrderNotifications(Request $request): JsonResponse
-    {
-        $this->markWebsiteOrderNotificationsRead();
-        return response()->json(['success' => true]);
-    }
-
-    private function markWebsiteOrderNotificationsRead(): void
-    {
-        $user = auth()->user();
-        if (!$user) return;
-
-        // Mark all website order notifications as read for ALL admin/shop/warehouse users
-        User::whereIn('role_id', [User::ROLE_ADMIN, User::ROLE_WAREHOUSE, User::ROLE_SHOP])
-            ->get()
-            ->each(function ($adminUser) {
-                $adminUser->unreadNotifications()
-                    ->whereNotNull('data->table->email')
-                    ->whereNotNull('data->table->phone')
-                    ->update([
-                        'read_at' => now(),
-                    ]);
-            });
     }
 
     public function invoice($id)

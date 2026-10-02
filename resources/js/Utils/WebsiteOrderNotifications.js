@@ -1,5 +1,10 @@
 // Shared across Inertia layout mounts so navigation cannot replay a ringtone.
 const sessions = new Map();
+const statusChangedEvent = 'website-order-status-changed';
+
+export function refreshWebsiteOrderSummary() {
+    document.dispatchEvent(new Event(statusChangedEvent));
+}
 
 export class WebsiteOrderNotifications {
     constructor({ userId, initialIds = [], load, update, ring, document, setInterval, clearInterval }) {
@@ -8,8 +13,10 @@ export class WebsiteOrderNotifications {
         this.session = sessions.get(userId);
         initialIds.forEach(id => this.session.seen.add(id));
         this.busy = false;
+        this.refreshQueued = false;
         this.stopped = false;
         this.visibility = () => { if (!document.hidden) this.refresh(); };
+        this.statusChanged = () => this.refresh({ ensureFresh: true });
         this.unlock = () => { this.session.audioEnabled = true; };
     }
 
@@ -17,16 +24,22 @@ export class WebsiteOrderNotifications {
         this.document.addEventListener('visibilitychange', this.visibility);
         this.document.addEventListener('pointerdown', this.unlock);
         this.document.addEventListener('keydown', this.unlock);
+        this.document.addEventListener(statusChangedEvent, this.statusChanged);
         this.timer = this.setInterval(() => this.refresh(), 15000);
         this.refresh();
     }
 
-    async refresh() {
-        if (this.stopped || this.busy || this.document.hidden) return;
+    async refresh({ ensureFresh = false } = {}) {
+        if (this.stopped || this.document.hidden) return;
+        if (this.busy) {
+            // A response started before the status save may contain the old count.
+            if (ensureFresh) this.refreshQueued = true;
+            return;
+        }
         this.busy = true;
         try {
             const snapshot = await this.load();
-            if (this.stopped) return;
+            if (this.stopped || this.refreshQueued) return;
             const fresh = snapshot.website_order_ids.filter(id => !this.session.seen.has(id));
             snapshot.website_order_ids.forEach(id => this.session.seen.add(id));
             this.update(snapshot);
@@ -37,6 +50,10 @@ export class WebsiteOrderNotifications {
             // The next poll retries; do not clear the existing badge on a network error.
         } finally {
             this.busy = false;
+            if (this.refreshQueued) {
+                this.refreshQueued = false;
+                await this.refresh();
+            }
         }
     }
 
@@ -46,5 +63,6 @@ export class WebsiteOrderNotifications {
         this.document.removeEventListener('visibilitychange', this.visibility);
         this.document.removeEventListener('pointerdown', this.unlock);
         this.document.removeEventListener('keydown', this.unlock);
+        this.document.removeEventListener(statusChangedEvent, this.statusChanged);
     }
 }

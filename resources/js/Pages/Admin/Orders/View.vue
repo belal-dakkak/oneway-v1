@@ -157,6 +157,7 @@ import { defineComponent } from 'vue'
 import AppLayout from '@/Layouts/AppLayout.vue'
 import JetSectionBorder from '@/Jetstream/SectionBorder.vue'
 import axios from 'axios'
+import { refreshWebsiteOrderSummary } from '@/Utils/WebsiteOrderNotifications'
 
 export default defineComponent({
     components: {
@@ -176,6 +177,7 @@ export default defineComponent({
                 const response = await axios.post(this.route('orders.websiteOrders.changeStatus', { id: this.order.id }), { status: status });
                 this.order.status = response.data.status;
                 this.order.status_label = response.data.status_label;
+                refreshWebsiteOrderSummary();
             } catch (e) {
                 console.error('Error changing status', e);
             }

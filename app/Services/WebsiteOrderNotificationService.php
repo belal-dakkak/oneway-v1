@@ -62,7 +62,11 @@ class WebsiteOrderNotificationService
         }
         $ids = (clone $query)->whereNull('read_at')->pluck('id')->all();
         return [
-            'website_order_count' => count($ids),
+            // The badge represents work waiting in the current country's order list,
+            // independently of notification delivery and each user's read state.
+            'website_order_count' => WebsiteOrder::query()
+                ->where('country_id', $user->country_id)
+                ->where('status', WebsiteOrder::STATUS_PENDING)->count(),
             'website_order_ids' => $ids,
             'notifications_count' => $user->unreadNotifications()->count(),
             'notifications' => $user->notifications()->latest()->limit(5)->get(),

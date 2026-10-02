@@ -293,6 +293,7 @@ import JetButton from '@/Jetstream/Button.vue'
 import { ref, onMounted, onUnmounted } from 'vue'
 import { throttle } from 'lodash'
 import axios from 'axios'
+import { refreshWebsiteOrderSummary } from '@/Utils/WebsiteOrderNotifications'
 import Datepicker from '@vuepic/vue-datepicker'
 import '@vuepic/vue-datepicker/dist/main.css'
 import Multiselect from '@suadelabs/vue3-multiselect'
@@ -396,6 +397,7 @@ export default {
                 const response = await axios.post(this.route('orders.websiteOrders.changeStatus', { id: item.id }));
                 item.status = response.data.status;
                 item.status_label = response.data.status_label;
+                refreshWebsiteOrderSummary();
             } catch (e) {
                 console.error('Error changing status', e);
             }
@@ -405,6 +407,7 @@ export default {
                 const response = await axios.post(this.route('orders.websiteOrders.changeStatus', { id: item.id }), { status: status });
                 item.status = response.data.status;
                 item.status_label = response.data.status_label;
+                refreshWebsiteOrderSummary();
             } catch (e) {
                 console.error('Error changing status', e);
             }
