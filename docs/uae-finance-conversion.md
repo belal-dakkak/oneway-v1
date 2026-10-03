@@ -19,6 +19,18 @@ php artisan finance:convert-uae-to-aed --source=storage/app/client_debits.sql --
 
 The private JSON report records field-by-field previous/proposed values, evidence, exact unrounded conversion and rounding differences where applicable, source snapshot, conflicts and a signature. The server's `APP_KEY` signs it. Do not edit the report or change `APP_KEY` between preview and application. Existing reports are never overwritten; choose a new output filename for another preview. A report under `public` is rejected.
 
+### PHP CLI memory on Plesk
+
+The snapshot reader fetches 250 records at a time, fingerprints every original field incrementally, and retains only conversion fields for large order/item tables. Inventory rows are fingerprinted without retaining a second inventory copy. It also releases snapshots before revalidation and report writing. This avoids loading whole PDO result sets and constructing a full snapshot JSON string. Account/wallet rows that may be merged are retained in full for the audit. Memory still depends on the number of financial rows and proposed changes; it is not a constant-memory converter.
+
+After deploying the memory fix, regenerate any previous preview because the fingerprint format changed. For larger databases, a bounded CLI-only memory limit can be used from SSH in the project directory:
+
+```sh
+/opt/plesk/php/8.0/bin/php -d memory_limit=512M artisan finance:convert-uae-to-aed --source=storage/app/client_debits.sql --output=storage/app/uae-finance-preview-v2.json
+```
+
+This does not change the website's PHP memory limit or apply the conversion. If the command fails during preview, no financial updates have been executed. A regression test with more than 128 MiB of stored order metadata passes under a 128 MiB PHP limit and verifies that changes to discarded metadata still invalidate the report.
+
 Review all conflicts before application. Examples:
 
 - Missing/changed source account, mismatched customer/shop, prior balance-only correction.

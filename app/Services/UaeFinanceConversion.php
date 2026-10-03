@@ -21,12 +21,30 @@ class UaeFinanceConversion
     private array $changes = [];
     private array $conflicts = [];
     private array $childIndex = [];
+    private string $snapshotFingerprint = '';
+
+    // Retain only fields used by the conversion. Every original field is still
+    // fingerprinted while streaming, including base prices and inventory.
+    private const SNAPSHOT_FIELDS = [
+        'orders' => ['id', 'seller_id', 'buyer_id', 'curr_type', 'curr_rate', 'total_price_before_discount',
+            'discount', 'total_price', 'paid_price', 'remain_price', 'tax_value', 'price_without_tax',
+            'shipping_fee', 'cod_fee', 'display_currency', 'display_rate'],
+        'website_orders' => ['id', 'country_id', 'curr_type', 'curr_rate', 'total_price_before_discount',
+            'discount', 'total_price', 'paid_price', 'remain_price', 'tax_value', 'price_without_tax',
+            'shipping_fee', 'cod_fee', 'display_currency', 'display_rate'],
+        'order_items' => ['id', 'order_id', 'item_price_paid', 'total_price_paid', 'tax_value_paid', 'price_without_tax_paid'],
+        'website_order_items' => ['id', 'website_order_id', 'item_price', 'item_price_before_discount', 'total_price', 'total_price_before_discount'],
+        'order_payments' => ['id', 'order_id', 'pay_amount', 'exchange_rate', 'base_amount'],
+        'refunds' => ['id', 'order_item_id', 'total_price_paid', 'net_amount', 'tax_amount', 'cost_amount', 'currency_code'],
+        'user_products' => [], // Fingerprint only: base inventory is never converted.
+    ];
 
     public function report(?array $legacy = null, bool $lock = false): array
     {
         $this->changes = $this->conflicts = $this->childIndex = [];
+        $this->data = []; // Release the preview snapshot before revalidation on this instance.
         $this->data = $this->snapshot($lock);
-        $fingerprint = hash('sha256', json_encode($this->data, JSON_PRESERVE_ZERO_FRACTION));
+        $fingerprint = $this->snapshotFingerprint;
         $this->orders('orders', 'order_items', 'order_id');
         $this->orders('website_orders', 'website_order_items', 'website_order_id');
         $this->clients($legacy);
@@ -40,6 +58,7 @@ class UaeFinanceConversion
         $report = ['version' => self::KEY, 'rate' => self::RATE, 'fingerprint' => $fingerprint,
             'legacy_source' => $legacy, 'conflicts' => $this->conflicts, 'changes' => array_values($this->changes)];
         $report['signature'] = $this->signature($report);
+        $this->data = $this->childIndex = $this->changes = [];
         return $report;
     }
 
@@ -81,12 +100,26 @@ class UaeFinanceConversion
     private function snapshot(bool $lock): array
     {
         $result = [];
+        $hash = hash_init('sha256');
         foreach (self::TABLES as $table) {
-            $query = DB::table($table)->orderBy('id');
+            hash_update($hash, $table . "\n");
+            $query = DB::table($table);
             if ($table === 'users') $query->select('id', 'country_id', 'role_id'); // No credentials in audit files.
             if ($lock) $query->lockForUpdate();
-            $result[$table] = $query->get()->map(fn ($row) => (array) $row)->keyBy('id')->all();
+            $result[$table] = [];
+            $fields = isset(self::SNAPSHOT_FIELDS[$table]) ? array_flip(self::SNAPSHOT_FIELDS[$table]) : null;
+            // chunkById bounds both PDO's result buffer and temporary collections.
+            // cursor() alone still buffers an entire result with MySQL PDO.
+            $query->chunkById(250, function ($rows) use (&$result, $table, $fields, $hash) {
+                foreach ($rows as $object) {
+                    $row = (array) $object;
+                    hash_update($hash, json_encode($row, JSON_PRESERVE_ZERO_FRACTION | JSON_THROW_ON_ERROR) . "\n");
+                    if ($fields === []) continue;
+                    $result[$table][$row['id']] = $fields === null ? $row : array_intersect_key($row, $fields);
+                }
+            });
         }
+        $this->snapshotFingerprint = hash_final($hash);
         return $result;
     }
 

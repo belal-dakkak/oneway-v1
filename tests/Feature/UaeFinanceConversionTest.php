@@ -267,4 +267,29 @@ class UaeFinanceConversionTest extends TestCase
         catch (\RuntimeException $e) { $this->assertStringContainsString('conflicts', $e->getMessage()); }
         $this->assertDatabaseCount('finance_conversion_changes', 0);
     }
+
+    public function test_large_order_metadata_is_streamed_and_still_invalidates_a_stale_report(): void
+    {
+        $f = $this->fixture();
+        // Over 128 MiB of stored metadata: retaining get()->map()->keyBy()
+        // results or encoding the complete snapshot would exhaust the server limit.
+        $note = str_repeat('x', 65536);
+        for ($offset = 0; $offset < 2100; $offset += 50) {
+            $rows = [];
+            for ($i = $offset; $i < $offset + 50; $i++) {
+                $rows[] = ['seller_id' => $f['seller']->id, 'barcode' => 'MEMORY-' . $i,
+                    'curr_type' => 'AED', 'curr_rate' => 3.675, 'notes' => $note];
+            }
+            DB::table('orders')->insert($rows);
+        }
+        unset($rows, $note);
+        $service = app(UaeFinanceConversion::class);
+        $report = $service->report($f['legacy']);
+        $this->assertSame([], $report['conflicts']);
+        DB::table('orders')->where('barcode', 'MEMORY-2099')->update(['notes' => 'changed outside retained fields']);
+        try { $service->apply($report); $this->fail('Expected complete fingerprint revalidation'); }
+        catch (\RuntimeException $e) { $this->assertStringContainsString('changed', $e->getMessage()); }
+        $this->assertDatabaseCount('finance_conversion_changes', 0);
+        $this->assertDatabaseCount('finance_conversion_batches', 0);
+    }
 }
