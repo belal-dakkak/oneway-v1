@@ -82,7 +82,7 @@
                 </td>
                 <td class="mx-auto max-w-sm p-6 text-sm leading-6 sm:text-base sm:leading-7">
                     <div class="ml-4">
-                        <div class="text-sm font-medium">{{ item.amount }}</div>
+                        <div class="text-sm font-medium">{{ item.amount }} {{ item.currency_code || 'USD' }}</div>
                     </div>
                 </td>
                 <td class="mx-auto max-w-sm p-6 text-sm leading-6 sm:text-base sm:leading-7">

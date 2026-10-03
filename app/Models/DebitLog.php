@@ -10,8 +10,9 @@ use Jenssegers\Date\Date;
 class DebitLog extends Model
 {
     use HasFactory;
+    use \App\Models\Concerns\CreatesOperationalCurrency;
 
-    protected $fillable = [
+    protected $fillable = ['currency_code', 'exchange_rate',
         'merchant_debit_id', 'user_product_id', 'debit_payment_id', 'merchant_refund_id', 'note', 'amount',
         'product_color_id','shop_id','merchant_id','request_date','qty','type'
     ];

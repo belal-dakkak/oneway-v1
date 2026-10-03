@@ -68,16 +68,17 @@ class DebitController extends Controller
             }
 
             $amount = (float) $debit->amount;
+            $code = app(\App\Services\OperationalCurrency::class)->accountCode($debit);
             $debit->update(['paid_at' => Carbon::now()]);
             $context = [
-                'exchange_rate' => 1,
+                'exchange_rate' => app(CurrencyService::class)->rate($code),
                 'payment_method' => 'merchant_debt',
                 'source_type' => Debit::class,
                 'source_id' => $debit->id,
                 'note' => "Merchant debt settlement #{$debit->id}",
             ];
-            $this->cashboxes->debit((int) $debit->creditor_id, $amount, 'USD', "merchant-debit:{$debit->id}:creditor-settled", $context);
-            $this->cashboxes->credit((int) $debit->debtor_id, $amount, 'USD', "merchant-debit:{$debit->id}:debtor-settled", $context);
+            $this->cashboxes->debit((int) $debit->creditor_id, $amount, $code, "merchant-debit:{$debit->id}:creditor-settled", $context);
+            $this->cashboxes->credit((int) $debit->debtor_id, $amount, $code, "merchant-debit:{$debit->id}:debtor-settled", $context);
         }, 3);
 
         return Redirect::route('debits.index');
@@ -109,7 +110,8 @@ class DebitController extends Controller
             DB::beginTransaction();
 
             $debit = MerchantDebit::query()->lockForUpdate()->findOrFail($request->get('debit'));
-            // Merchant balances are operational USD balances, even for Syria.
+            $code = app(\App\Services\OperationalCurrency::class)->accountCode($debit);
+            $rate = app(CurrencyService::class)->rate($code);
             $amount = (float) $request->get('amount');
             $originalAmount = number_format((float)$amount, 2, '.', '');
 
@@ -120,6 +122,7 @@ class DebitController extends Controller
             $debit->update(['amount' => DB::raw("amount - $amount")]);
 
             $debitPayment = DebitPayment::query()->create([
+                'currency_code' => $code, 'exchange_rate' => $rate,
                 'amount' => $amount,
                 'merchant_debit_id' => $debit->id
             ]);
@@ -128,6 +131,7 @@ class DebitController extends Controller
             $note = "قام المحل $shop بتسديد دفعة $originalAmount للتاجر $merchant";
 
             DebitLog::query()->create([
+                'currency_code' => $code, 'exchange_rate' => $rate,
                 'amount' => $amount,
                 'merchant_debit_id' => $debit->id,
                 'debit_payment_id' => $debitPayment->id,
@@ -135,14 +139,14 @@ class DebitController extends Controller
             ]);
 
             $context = [
-                'exchange_rate' => 1,
+                'exchange_rate' => $rate,
                 'payment_method' => 'merchant_debt',
                 'source_type' => DebitPayment::class,
                 'source_id' => $debitPayment->id,
                 'note' => $note,
             ];
-            $this->cashboxes->debit((int) $debit->creditor_id, $amount, 'USD', "merchant-payment:{$debitPayment->id}:creditor", $context);
-            $this->cashboxes->credit((int) $debit->debtor_id, $amount, 'USD', "merchant-payment:{$debitPayment->id}:debtor", $context);
+            $this->cashboxes->debit((int) $debit->creditor_id, $amount, $code, "merchant-payment:{$debitPayment->id}:creditor", $context);
+            $this->cashboxes->credit((int) $debit->debtor_id, $amount, $code, "merchant-payment:{$debitPayment->id}:debtor", $context);
 
 
         }catch (Exception $exception){
@@ -215,7 +219,7 @@ class DebitController extends Controller
 
         $creditor = $debit->creditor;
         $debtor = $debit->debtor;
-        $rate = app(CurrencyService::class)->rate(Country::defaultCurrency(auth()->user()->country_id));
+        $rate = app(CurrencyService::class)->rate(Country::defaultCurrency($debtor->country_id));
         return Inertia::render('Admin/Debits/Log', [
             'logs' => $log,
             'debit' => $debit,
@@ -236,17 +240,16 @@ class DebitController extends Controller
 
         $totalPaid = $debit->log()->whereNull('user_product_id')->whereNull('merchant_refund_id')->sum('amount');
         $totalAccount = $debit->log()->whereNotNull('user_product_id')->sum('amount');
-        $totalRefund = $debit->refunds->sum(function ($refund){
-            return $refund->userProduct->wholesale_price??0 * $refund->qty;
-        });
+        $totalRefund = $debit->log()->whereNotNull('merchant_refund_id')->sum('amount');
 
         $log = $log->get();
         Date::setLocale('ar');
         $now = Date::parse(now())->timezone(Country::timezone(auth()->user()->country_id))->format('d-m-Y h:i a');
         $language  = 'en';
-        $country = auth()->user()->country_id;
+        $country = $debtor->country_id;
         $Currency = Country::defaultCurrency($country);
         $rate = app(CurrencyService::class)->rate($Currency);
+        if ($debit->currency_code === 'AED') $rate = 1;
 				
         $settings = Setting::where('country',$country)->where('language',$language)->pluck('value',Setting::keyColumn())->toArray();
         $pdf = PDF::loadView('includes.log_template',array('log'=>$log,'settings'=>$settings, 'creditor' => $creditor, 'debtor' => $debtor, 'debit' => $debit, 'now' => $now, 'totalPaid' => $totalPaid, 'totalAccount' => $totalAccount, 'totalRefund' => $totalRefund,'rate' => $rate,'Currency' => $Currency));

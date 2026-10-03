@@ -66,16 +66,18 @@ class ExpenseController extends Controller
             $expense = $this->expenseRepository->add($request);
             $localCurrency = Country::defaultCurrency((int) auth()->user()->country_id);
             $rate = app(CurrencyService::class)->rate($localCurrency);
+            $expense->update(['currency_code' => $localCurrency, 'exchange_rate' => $rate]);
+            $uae = $localCurrency === 'AED';
             $cashboxAmount = $localCurrency === 'USD'
                 ? (float) $request->get('amount')
                 : app(CurrencyService::class)->toUsdAtRate((float) $request->get('amount'), $rate);
             $this->cashboxes->debit(
                 (int) auth()->id(),
-                $cashboxAmount,
-                'USD',
+                $uae ? (float) $expense->amount : $cashboxAmount,
+                $uae ? 'AED' : 'USD',
                 "expense:{$expense->id}",
                 [
-                    'exchange_rate' => 1,
+                    'exchange_rate' => $uae ? $rate : 1,
                     'payment_method' => 'cash',
                     'source_type' => Expense::class,
                     'source_id' => $expense->id,

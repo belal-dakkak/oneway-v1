@@ -47,7 +47,7 @@ class SalesCurrencyPolicy
             'code' => $code,
             'rate' => $this->currencies->rate($code),
             'decimals' => $code === 'SYP' ? 0 : 2,
-            'locked' => (int) $countryId === Country::SYRIA,
+            'locked' => in_array((int) $countryId, [Country::SYRIA, Country::UAE], true),
         ];
     }
 

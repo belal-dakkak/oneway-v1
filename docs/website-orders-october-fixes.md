@@ -23,39 +23,11 @@ Card capture accounting and its idempotency keys are preserved. A manual sale is
 
 The installed Laravel HTTP client does not implement `connectTimeout`. Both Tap charge creation and verification now use the supported `withOptions(['connect_timeout' => 5])`. Mocked gateway tests cover success, rejection, network failure and repeated callbacks. Live credentials and a real customer payment were not exercised.
 
-## Legacy UAE customer account currency labels
+## UAE currency conversion (superseding procedure)
 
-The owner confirmed that existing UAE customer account amounts are already dirham amounts. Correct their USD labels to AED without multiplying, dividing, rebuilding balances from historical notes, or changing payments and exchange rates. This supersedes the earlier reconciliation workflow for this correction.
+The latest approved scope converts all proven UAE USD transaction amounts and history to AED at **3.675**, while retaining internal USD base prices. It replaces the earlier label-only and remaining-balance-only instructions. Do not run `clients:correct-uae-currency-labels --apply` or `clients:convert-uae-debt-balances --apply` for this deployment.
 
-After deploying the code, preview the correction:
-
-```sh
-php artisan clients:correct-uae-currency-labels
-```
-
-Apply it on the server:
-
-```sh
-php artisan clients:correct-uae-currency-labels --apply
-```
-
-The transaction changes only `client_debits.currency_code` and the USD log labels belonging to those accounts. UAE scope comes from the creditor/shop's country, including zero and negative balances. For example, `32.65 USD` becomes `32.65 AED`. Existing amounts, rates, timestamps, payments, orders, refunds, inventory and cashbox entries remain unchanged. Repeating the command makes no further changes.
-
-If a customer already has both USD and AED accounts with the same shop, the command reports the conflicting shop/customer pair and makes no changes; it does not silently merge accounts. No production correction was executed during development.
-
-## Earlier diagnostic report
-
-Generate a **read-only** report outside the public directory:
-
-```sh
-php artisan clients:audit-uae-debts --output=storage/app/uae-debt-audit.json
-```
-
-Rows marked `proven_aed_label` require a pre-currency-migration USD account, only AED orders, reconciling balances and account ledger, matched historical payments, and one unambiguous stored exchange rate. Mixed currencies, missing ledger evidence, refunds, modern cashbox postings or conflicting values are left for manual review. `base_conversion_matches` is diagnostic and never authorizes conversion.
-
-The old audit's apply workflow is not the procedure for the owner's label-only correction. Use `clients:correct-uae-currency-labels --apply` above instead.
-
-The local database connection was unavailable (`Access denied`); the correction was verified using isolated test data.
+Follow [the UAE finance conversion guide](uae-finance-conversion.md) for the required migration, signed private report, conflict review, backup, paused writers, atomic application and verification. The current command is `finance:convert-uae-to-aed`; its default mode only saves a preview. Application uses `--apply=<report>` and requires maintenance mode. Live database conversion has not been performed from this workspace.
 
 ## Direct receipt limitation
 

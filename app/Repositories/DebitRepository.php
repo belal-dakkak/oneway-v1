@@ -141,7 +141,8 @@ class DebitRepository
         if (auth()->user()->role_id != User::ROLE_ADMIN)
             $belalDebit = $belalDebit->where('debtor_id', auth()->id());
 
-        return ceil($belalDebit->where('creditor_id', 95)->sum('amount'));
+        $amount = $belalDebit->where('creditor_id', 95)->sum('amount');
+        return (int) $country === \App\Support\Country::UAE ? round($amount, 2) : ceil($amount);
     }
 
 }

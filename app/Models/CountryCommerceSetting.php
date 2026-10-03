@@ -33,7 +33,7 @@ class CountryCommerceSetting extends Model
             'free_shipping_threshold_usd' => null,
             'cod_fee_percent' => 0,
             'card_enabled' => false,
-            'gateway_currency' => 'USD',
+            'gateway_currency' => $countryId === \App\Support\Country::UAE ? 'AED' : 'USD',
             'gateway_mode' => 'sandbox',
             'website_cashbox_user_id' => null,
             'website_stock_user_id' => null,

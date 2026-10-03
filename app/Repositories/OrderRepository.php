@@ -90,6 +90,13 @@ class OrderRepository
             DB::beginTransaction();
             $countryId = (int) auth()->user()->country_id;
             $currencyCode = strtoupper((string) $request->input('currency.code', $request->input('currency.value', 'USD')));
+            if ($countryId === Country::UAE) {
+                $this->currencyService->validateForCountry($currencyCode, $countryId);
+                $currency = $request->get('currency');
+                $currency['code'] = $currency['value'] = 'AED';
+                $currency['rate'] = $this->currencyService->rate('AED');
+                $request->merge(['currency' => $currency]);
+            }
             $displayCurrency = $countryId === Country::SYRIA
                 ? null
                 : $this->currencyService->displayForCountry($countryId);

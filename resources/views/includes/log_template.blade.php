@@ -173,7 +173,7 @@
             @foreach($log as $key => $item)
                 <tr class=" ">
                     <td class="td-med" style=""> {{$key+1}} </td>
-                    <td class="td-med" style=""> {{$item->color == 'green'?'+':'-'}}{{round($item->amount * $rate)}} {{ $Currency }} </td>
+                    <td class="td-med" style=""> {{$item->color == 'green'?'+':'-'}}{{number_format($item->amount * (($item->currency_code ?? null) === 'AED' ? 1 : $rate), $Currency === 'SYP' ? 0 : 2)}} {{ $Currency }} </td>
                     <td class="td-med">{{$item->date}} </td>
                     <td dir="rtl" class="td-med"><div dir="rtl" style="direction: rtl;">{{$item->note}}</div></td>
                 </tr>
@@ -212,25 +212,25 @@
             </tr>
             <tr class="total">
                 <td width="20%" class="td-med1 bg_color1" style="color: black;">إجمالي حساب التاجر<br> total merchant account</td>
-                <td width="20%" class="td-med1">{{round($totalAccount * $rate)}}</td>
+                <td width="20%" class="td-med1">{{number_format($totalAccount * $rate, $Currency === 'SYP' ? 0 : 2)}}</td>
                 <td width="60%" style="border: 0;" class="td-med"></td>
             </tr>
             <tr class="total">
                 <td width="20%" class="td-med1 bg_color1" style="color: black;">إجمالي المدفوعات<br> Total payments</td>
-                <td width="20%" class="td-med1">{{round($totalPaid * $rate)}}</td>
+                <td width="20%" class="td-med1">{{number_format($totalPaid * $rate, $Currency === 'SYP' ? 0 : 2)}}</td>
                 <td width="60%" style="border: 0;" class="td-med"></td>
             </tr>
 
             <tr class="total">
                 <td width="20%" class="td-med1 bg_color1" style="color: black;">إجمالي المرتجعات <br> Total refunds</td>
-                <td width="20%" class="td-med1">{{round($totalRefund * $rate)}}</td>
+                <td width="20%" class="td-med1">{{number_format($totalRefund * $rate, $Currency === 'SYP' ? 0 : 2)}}</td>
                 <td width="60%" style="border: 0;" class="td-med"></td>
             </tr>
 
 
             <tr class="total">
                 <td width="20%" class="td-med bg_color1" style="color: black;">الباقي <br> rem of amount</td>
-                <td width="20%" style="color: darkred" class="td-med">{{round($debit->amount * $rate)}}</td>
+                <td width="20%" style="color: darkred" class="td-med">{{number_format($debit->amount * $rate, $Currency === 'SYP' ? 0 : 2)}}</td>
                 <td width="60%" style="border: 0;" class="td-med"></td>
             </tr>
         </table>

@@ -1,7 +1,7 @@
 class Currency
 {
     static AED = {
-        round: true,
+        round: false,
         label: 'aed'
     };
     static USD = {
@@ -20,7 +20,9 @@ class Currency
 
         value = parseFloat(value);
 
-        if(rate > Currency.USD.rate)
+        if (rate >= 100)
+            result = Math.round(value * rate);
+        else if(rate > Currency.USD.rate)
             result = Currency.AED.round || forceRound ? Math.round(value * rate) : value * rate;
         else
             result = Currency.USD.round || forceRound ? Math.round(value * rate) : value * rate;

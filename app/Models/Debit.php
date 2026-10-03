@@ -11,13 +11,14 @@ use Jenssegers\Date\Date;
 class Debit extends Model
 {
     use HasFactory;
+    use \App\Models\Concerns\CreatesOperationalCurrency;
 
     const TYPE_MERCHANT = 0;
     const TYPE_CLIENT = 1;
 
     protected $appends = ['date'];
 
-    protected $fillable = ['creditor_id', 'debtor_id', 'type', 'amount', 'order_id', 'user_product_id', 'paid_at', 'user_product_log_id'];
+    protected $fillable = ['currency_code', 'exchange_rate', 'creditor_id', 'debtor_id', 'type', 'amount', 'order_id', 'user_product_id', 'paid_at', 'user_product_log_id'];
 
     public function creditor(): BelongsTo
     {

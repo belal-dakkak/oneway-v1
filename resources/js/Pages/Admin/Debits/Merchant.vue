@@ -12,14 +12,14 @@
                   {{ creditor.name }}
             </span>
             <span class="lab-email text-center text-2xl font-bold py-2">
-                  {{ debit.amount }}
+                  {{ Number(debit.amount).toFixed(2) }} {{ debit.currency_code || 'USD' }}
             </span>
 
             <div class="flex flex-row justify-around mt-4" dir="rtl" v-for="payment in payments">
                 <div class="basis-1/2 rounded-2xl text-pcr p-8 pcr-shadow text-left">
                     <div class="flex justify-between py-4 border-b">
                         <p class="font-bold">الكمية المدفوعة</p>
-                        <p>{{ payment.amount }}</p>
+                        <p>{{ Number(payment.amount).toFixed(2) }} {{ payment.currency_code || debit.currency_code || 'USD' }}</p>
                     </div>
                     <div class="flex justify-between py-4 border-b">
                         <p class="font-bold">التاريخ</p>

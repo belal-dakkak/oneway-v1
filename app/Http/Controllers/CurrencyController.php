@@ -72,6 +72,9 @@ class CurrencyController extends Controller
 
         $data = $request->except('_method');
         foreach ($data['commerce'] as $countryId => $commerce) {
+            if ((int) $countryId === Country::UAE) {
+                $data['commerce'][$countryId]['gateway_currency'] = 'AED';
+            }
             $cashboxUserId = $commerce['website_cashbox_user_id'] ?? null;
             $stockUserId = $commerce['website_stock_user_id'] ?? null;
             if ($cashboxUserId && !User::query()

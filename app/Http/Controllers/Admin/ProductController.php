@@ -95,8 +95,9 @@ class ProductController extends Controller
         $selectedSizes = getSizes($product->sizes);
         $selectedColors = getColors($product->colors);
 
-        $rate = $this->currencyService->rate(Country::defaultCurrency(auth()->user()->country_id));
-        $currencyCode = Country::defaultCurrency((int) auth()->user()->country_id);
+        $currencyCode = Country::defaultCurrency((int) $product->country_id === Country::UAE
+            ? Country::UAE : (int) auth()->user()->country_id);
+        $rate = $this->currencyService->rate($currencyCode);
 
         return Inertia::render('Admin/Products/Edit', [
             'categories' => $categories,

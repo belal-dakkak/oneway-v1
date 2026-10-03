@@ -19,13 +19,13 @@
             <template v-for="country in countries" :key="country.id">
                 <div class="col-span-8 border-t pt-4 mt-4 font-bold" dir="rtl">إعدادات متجر {{ country.name }}</div>
                 <div class="col-span-8 sm:col-span-4" dir="rtl">
-                    <jet-label :for="`shipping_fee_usd_${country.id}`" value="رسوم الشحن بالدولار" />
-                    <jet-input :id="`shipping_fee_usd_${country.id}`" type="number" step="0.0001" min="0" class="mt-1 block w-full" v-model="form.commerce[country.id].shipping_fee_usd" />
+                    <jet-label :for="`shipping_fee_usd_${country.id}`" :value="country.id === 2 ? 'رسوم الشحن بالدرهم' : 'رسوم الشحن بالدولار'" />
+                    <jet-input :id="`shipping_fee_usd_${country.id}`" type="number" :step="country.id === 2 ? '0.01' : '0.0001'" min="0" class="mt-1 block w-full" :model-value="commerceAmount(country.id, 'shipping_fee_usd')" @update:modelValue="setCommerceAmount(country.id, 'shipping_fee_usd', $event)" />
                     <jet-input-error :message="form.errors[`commerce.${country.id}.shipping_fee_usd`]" class="mt-2" />
                 </div>
                 <div class="col-span-8 sm:col-span-4" dir="rtl">
-                    <jet-label :for="`free_shipping_threshold_usd_${country.id}`" value="حد الشحن المجاني بالدولار (اختياري)" />
-                    <jet-input :id="`free_shipping_threshold_usd_${country.id}`" type="number" step="0.0001" min="0" class="mt-1 block w-full" v-model="form.commerce[country.id].free_shipping_threshold_usd" />
+                    <jet-label :for="`free_shipping_threshold_usd_${country.id}`" :value="country.id === 2 ? 'حد الشحن المجاني بالدرهم (اختياري)' : 'حد الشحن المجاني بالدولار (اختياري)'" />
+                    <jet-input :id="`free_shipping_threshold_usd_${country.id}`" type="number" :step="country.id === 2 ? '0.01' : '0.0001'" min="0" class="mt-1 block w-full" :model-value="commerceAmount(country.id, 'free_shipping_threshold_usd')" @update:modelValue="setCommerceAmount(country.id, 'free_shipping_threshold_usd', $event)" />
                     <jet-input-error :message="form.errors[`commerce.${country.id}.free_shipping_threshold_usd`]" class="mt-2" />
                 </div>
                 <div class="col-span-8 sm:col-span-4" dir="rtl">
@@ -57,7 +57,7 @@
                 <div class="col-span-8 sm:col-span-4" dir="rtl">
                     <jet-label :for="`gateway_currency_${country.id}`" value="عملة تحصيل Tap" />
                     <select :id="`gateway_currency_${country.id}`" class="mt-1 block w-full rounded-md border-gray-300" v-model="form.commerce[country.id].gateway_currency">
-                        <option value="USD">USD</option>
+                        <option v-if="country.id !== 2" value="USD">USD</option>
                         <option v-if="country.id === 2" value="AED">AED</option>
                     </select>
                 </div>
@@ -122,7 +122,7 @@ export default defineComponent({
                 free_shipping_threshold_usd: setting.free_shipping_threshold_usd ?? null,
                 cod_fee_percent: setting.cod_fee_percent ?? 0,
                 card_enabled: Boolean(setting.card_enabled),
-                gateway_currency: setting.gateway_currency || 'USD',
+                gateway_currency: countryId === 2 ? 'AED' : (setting.gateway_currency || 'USD'),
                 gateway_mode: setting.gateway_mode || 'sandbox',
                 website_cashbox_user_id: setting.website_cashbox_user_id || null,
                 website_stock_user_id: setting.website_stock_user_id || null,
@@ -151,6 +151,15 @@ export default defineComponent({
     },
 
     methods: {
+        commerceAmount(countryId, field) {
+            const value = this.form.commerce[countryId][field];
+            if (value === null || value === '') return '';
+            return countryId === 2 ? Number((Number(value) * Number(this.form.aed)).toFixed(2)) : value;
+        },
+        setCommerceAmount(countryId, field, value) {
+            this.form.commerce[countryId][field] = value === '' ? null
+                : (countryId === 2 ? Number(value) / Number(this.form.aed) : Number(value));
+        },
         usersForCountry(countryId) {
             return this.cashboxUsers?.[countryId] || []
         },

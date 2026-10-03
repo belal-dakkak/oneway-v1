@@ -345,6 +345,8 @@ class InventoryTransferService
             'creditor_id' => $merchant->id,
             'debtor_id' => $destination->id,
         ], ['amount' => 0]);
+        $code = app(OperationalCurrency::class)->accountCode($merchantDebit);
+        $amount = app(OperationalCurrency::class)->fromBase($amount, $code);
         $merchantDebit->increment('amount', $amount);
 
         $today = now()->toDateString();
@@ -368,6 +370,7 @@ class InventoryTransferService
         }
 
         DebitLog::query()->create([
+            'currency_code' => $code, 'exchange_rate' => $this->currency->rate($code),
             'merchant_debit_id' => $merchantDebit->id,
             'user_product_id' => $lastProduct->id,
             'product_color_id' => $productColor->id,

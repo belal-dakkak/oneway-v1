@@ -24,3 +24,10 @@ test('price inputs use the correct step for each currency', () => {
     assert.equal(Currency.inputStep('AED'), '0.01')
     assert.equal(Currency.inputStep('SYP'), '1')
 })
+
+test('legacy price displays retain AED cents while SYP remains integer', () => {
+    assert.equal(Currency.exchange(10, 3.675), '36.75')
+    assert.equal(Currency.format(119.99, 'aed'), '119.99')
+    assert.equal(Currency.exchange(1.23456, 13000), '16049')
+    assert.equal(Currency.exchange(10.25, 1), '10.25')
+})

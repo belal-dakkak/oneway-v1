@@ -28,7 +28,7 @@
                           {{ creditor.name }}
                     </span>
                     <span class="lab-email text-center text-2xl font-bold py-2">
-                          {{ parseFloat(debit.amount * rate).toFixed(2) }}
+                          {{ Number(debit.amount * (debit.currency_code === 'AED' ? 1 : rate)).toFixed(2) }}
                     </span>
                 </div>
                 <div class="flex flex-col justify-around">
@@ -107,7 +107,7 @@
                                     <div class="text-sm font-medium">
                                         <span v-if="log.color === 'green'">+</span>
                                         <span v-else>-</span>
-                                        {{ currencyExchange(log.amount, rate) }}
+                                        {{ Number(log.amount * (log.currency_code === 'AED' ? 1 : rate)).toFixed(2) }}
                                     </div>
                                 </div>
                             </div>

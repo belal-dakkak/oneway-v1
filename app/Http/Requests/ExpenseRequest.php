@@ -28,13 +28,12 @@ class ExpenseRequest extends FormRequest
     {
         switch($this->method()) {
             case 'POST':
-                $wallet = Wallet::query()->firstOrCreate(
-                    ['user_id' => auth()->id(), 'currency_code' => 'USD'],
-                    ['credit' => 0, 'debit' => 0]
-                );
                 $currency = Country::defaultCurrency((int) auth()->user()->country_id);
+                $wallet = Wallet::query()->where('user_id', auth()->id())
+                    ->where('currency_code', $currency === 'AED' ? 'AED' : 'USD')->first();
                 $rate = app(CurrencyService::class)->rate($currency);
-                $userCredit = max(0, (float) $wallet->credit - (float) $wallet->debit) * $rate;
+                $userCredit = max(0, (float) optional($wallet)->credit - (float) optional($wallet)->debit)
+                    * ($currency === 'AED' ? 1 : $rate);
                 return [
                     'description' => 'required',
                     'amount' => 'required|numeric|min:0.0001|max:'.$userCredit

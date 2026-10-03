@@ -129,6 +129,8 @@ class UserController extends Controller
                 }
 
                 $currency = strtoupper((string) $wallet->currency_code);
+                abort_if((int) $source->country_id === \App\Support\Country::UAE && $currency !== 'AED', 422,
+                    'Convert the legacy UAE cashbox before closing sales.');
                 $amount = abs($balance);
                 $context = [
                     'payment_method' => 'sales_closure',

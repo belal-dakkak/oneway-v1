@@ -78,7 +78,7 @@
               </td>
               <td class="mx-auto max-w-sm p-6 text-sm leading-6 sm:text-base sm:leading-7">
                   <div class="ml-4">
-                      <div class="text-sm font-medium">{{ item.amount }}</div>
+                      <div class="text-sm font-medium">{{ Number(item.amount).toFixed(2) }} {{ item.currency_code || 'USD' }}</div>
                   </div>
               </td>
               <td class="flex flex-wrap mx-auto max-w-sm p-6 text-sm leading-6 sm:text-base sm:leading-7">
@@ -133,7 +133,7 @@
                 </td>
                 <td class="mx-auto max-w-sm p-6 text-sm leading-6 sm:text-base sm:leading-7">
                     <div class="ml-4">
-                        <div class="text-sm font-medium">{{ parseInt(item.amount * rate) }}</div>
+                        <div class="text-sm font-medium">{{ Number(item.amount * (item.currency_code === 'AED' ? 1 : rate)).toFixed(2) }}</div>
                     </div>
                 </td>
                 <td class="flex flex-wrap mx-auto max-w-sm p-6 text-sm leading-6 sm:text-base sm:leading-7">

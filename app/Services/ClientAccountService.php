@@ -52,6 +52,7 @@ class ClientAccountService
             $order = Order::query()->lockForUpdate()->findOrFail($order->id);
             $amount = $this->validatePayment($amount, (float) $order->remain_price);
             $currency = strtoupper((string) ($order->curr_type ?: 'USD'));
+            $this->requireAccountCurrency((int) $order->seller_id, $currency);
             $rate = $this->paymentRate($currency);
 
             $payment = $order->payments()->create([
@@ -88,6 +89,7 @@ class ClientAccountService
             $account = ClientDebit::query()->lockForUpdate()->findOrFail($account->id);
             $amount = $this->validatePayment($amount, max(0, (float) $account->amount));
             $currency = strtoupper((string) ($account->currency_code ?: 'USD'));
+            $this->requireAccountCurrency((int) $account->creditor_id, $currency);
             $rate = $this->paymentRate($currency);
             $remaining = $amount;
 
@@ -176,6 +178,7 @@ class ClientAccountService
             $available = max(0, -(float) $account->amount);
             $amount = $this->validatePayment($amount, $available);
             $currency = strtoupper((string) ($account->currency_code ?: 'USD'));
+            $this->requireAccountCurrency((int) $account->creditor_id, $currency);
             $rate = $this->paymentRate($currency);
             $account->increment('amount', $amount);
             $log = ClientDebitLog::query()->create([
@@ -198,6 +201,7 @@ class ClientAccountService
 
     public function account(int $creditorId, int $debtorId, string $currency): ClientDebit
     {
+        $this->requireAccountCurrency($creditorId, $currency);
         $attributes = [
             'creditor_id' => $creditorId,
             'debtor_id' => $debtorId,
@@ -240,6 +244,7 @@ class ClientAccountService
 
     private function findAccount(int $creditorId, int $debtorId, string $currency): ?ClientDebit
     {
+        $this->requireAccountCurrency($creditorId, $currency);
         return ClientDebit::query()
             ->where('creditor_id', $creditorId)
             ->where('debtor_id', $debtorId)
@@ -281,6 +286,13 @@ class ClientAccountService
     private function paymentRate(string $currency): float
     {
         return $currency === 'USD' ? 1.0 : $this->currencies->rate($currency);
+    }
+
+    private function requireAccountCurrency(int $owner, string $currency): void
+    {
+        if (app(OperationalCurrency::class)->code($owner) === 'AED' && strtoupper($currency) !== 'AED') {
+            throw new InvalidArgumentException('UAE customer transactions require AED. Convert legacy accounts before posting payments.');
+        }
     }
 
     private function validatePayment(float $amount, float $available): float

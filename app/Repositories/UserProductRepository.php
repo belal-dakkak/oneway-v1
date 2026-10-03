@@ -214,8 +214,11 @@ class UserProductRepository
                         'amount' => $amount
                     ]);
 
-                    if (!$merchantDebit->wasRecentlyCreated)
-                        $merchantDebit->update(['amount' => DB::raw("amount + $amount")]);
+                    if (!$merchantDebit->wasRecentlyCreated) {
+                        $code = app(\App\Services\OperationalCurrency::class)->accountCode($merchantDebit);
+                        $localAmount = app(\App\Services\OperationalCurrency::class)->fromBase($amount, $code);
+                        $merchantDebit->increment('amount', $localAmount);
+                    }
 
                     //$note = "قام المستودع بإرسال $stock من المنتج $item إلى المحل $shop بتاريخ $date ";
                     $note = "قام المستودع بإرسال $stock من المنتج $item من المقاس $size  الى المحل $shop بتاريخ $date";
@@ -288,7 +291,7 @@ class UserProductRepository
 
                         $check_debit_log->update([
                             'qty' => $stock,
-                            'amount' => $wholesalePrice * $stock,
+                            'amount' => app(\App\Services\OperationalCurrency::class)->fromBase($wholesalePrice * $stock, $check_debit_log->currency_code ?: 'USD'),
                             'note' => $debit_note,
                         ]);
 

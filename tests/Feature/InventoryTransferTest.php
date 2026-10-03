@@ -127,6 +127,8 @@ class InventoryTransferTest extends TestCase
             $table->timestamps();
         });
         Schema::create('merchant_debits', function (Blueprint $table) {
+            $table->string('currency_code', 3)->nullable();
+            $table->decimal('exchange_rate', 20, 6)->nullable();
             $table->id();
             $table->unsignedBigInteger('creditor_id');
             $table->unsignedBigInteger('debtor_id');
@@ -134,6 +136,8 @@ class InventoryTransferTest extends TestCase
             $table->timestamps();
         });
         Schema::create('debits', function (Blueprint $table) {
+            $table->string('currency_code', 3)->nullable();
+            $table->decimal('exchange_rate', 20, 6)->nullable();
             $table->id();
             $table->unsignedBigInteger('creditor_id');
             $table->unsignedBigInteger('debtor_id');
@@ -146,6 +150,8 @@ class InventoryTransferTest extends TestCase
             $table->timestamps();
         });
         Schema::create('debit_logs', function (Blueprint $table) {
+            $table->string('currency_code', 3)->nullable();
+            $table->decimal('exchange_rate', 20, 6)->nullable();
             $table->id();
             $table->unsignedBigInteger('merchant_debit_id');
             $table->unsignedBigInteger('user_product_id')->nullable();
@@ -238,12 +244,13 @@ class InventoryTransferTest extends TestCase
         $this->assertEquals(50, $destination->fresh()->wholesale_price);
     }
 
-    public function test_transfer_with_merchant_updates_receivable_without_touching_cashboxes(): void
+    /** @dataProvider merchantCountries */
+    public function test_transfer_with_merchant_updates_receivable_without_touching_cashboxes(int $country, string $currency, float $rate): void
     {
-        $admin = $this->user(User::ROLE_ADMIN, 4, 'merchant-transfer-admin@example.test');
-        $shop = $this->user(User::ROLE_SHOP, 4, 'merchant-transfer-shop@example.test');
-        $merchant = $this->user(User::ROLE_MERCHANT, 4, 'merchant-transfer-creditor@example.test');
-        $productColor = $this->productColor(4, [
+        $admin = $this->user(User::ROLE_ADMIN, $country, 'merchant-transfer-admin@example.test');
+        $shop = $this->user(User::ROLE_SHOP, $country, 'merchant-transfer-shop@example.test');
+        $merchant = $this->user(User::ROLE_MERCHANT, $country, 'merchant-transfer-creditor@example.test');
+        $productColor = $this->productColor($country, [
             ['size' => 'M', 'barcode' => 'MERCHANT-M', 'stock' => 0],
         ]);
 
@@ -252,9 +259,9 @@ class InventoryTransferTest extends TestCase
             'destination_user_id' => $shop->id,
             'merchant_id' => $merchant->id,
             'product_color_id' => $productColor->id,
-            'currency_code' => 'USD',
-            'retail_price' => 20,
-            'wholesale_price' => 10,
+            'currency_code' => $currency,
+            'retail_price' => 20 * $rate,
+            'wholesale_price' => 10 * $rate,
             'items' => [
                 ['size' => 'M', 'barcode' => 'MERCHANT-M', 'quantity' => 3],
             ],
@@ -263,11 +270,20 @@ class InventoryTransferTest extends TestCase
         $this->assertDatabaseHas('merchant_debits', [
             'creditor_id' => $merchant->id,
             'debtor_id' => $shop->id,
-            'amount' => 30,
+            'amount' => 30 * $rate,
+            'currency_code' => $currency,
         ]);
+        $this->assertDatabaseHas('debit_logs', ['amount' => 30 * $rate, 'currency_code' => $currency]);
+        $this->assertDatabaseHas('debits', ['amount' => 30 * $rate, 'currency_code' => $currency]);
+        $this->assertDatabaseHas('user_products', ['user_id' => $shop->id, 'wholesale_price' => 10, 'retail_price' => 20]);
         $this->assertSame(0, DB::table('wallet_movements')->count());
         $this->assertSame(0.0, (float) $shop->wallet->fresh()->credit - (float) $shop->wallet->fresh()->debit);
         $this->assertSame(0.0, (float) $merchant->wallet->fresh()->credit - (float) $merchant->wallet->fresh()->debit);
+    }
+
+    public static function merchantCountries(): array
+    {
+        return ['Syria base USD' => [4, 'USD', 1], 'UAE local AED' => [2, 'AED', 3.67]];
     }
 
     public function test_transfer_destinations_follow_catalog_and_inventory_source_rules(): void

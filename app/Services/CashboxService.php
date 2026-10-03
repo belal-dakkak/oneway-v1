@@ -21,7 +21,10 @@ class CashboxService
     /** Read the same persisted balances for the branch and administrator views. */
     public function balancesForUser(int $userId): array
     {
-        return Wallet::query()->where('user_id', $userId)->get()
+        $uae = app(OperationalCurrency::class)->code($userId) === 'AED';
+        $balances = Wallet::query()->where('user_id', $userId)->get()
+            ->filter(fn (Wallet $wallet) => !$uae || $wallet->currency_code === 'AED'
+                || (float) $wallet->credit != 0 || (float) $wallet->debit != 0)
             ->mapWithKeys(function (Wallet $wallet) {
                 $code = strtoupper((string) ($wallet->currency_code ?: 'USD'));
                 return [$code => [
@@ -31,6 +34,8 @@ class CashboxService
                     'balance' => (float) $wallet->credit - (float) $wallet->debit,
                 ]];
             })->all();
+        if ($uae && !isset($balances['AED'])) $balances['AED'] = ['currency' => 'AED', 'credit' => 0.0, 'debit' => 0.0, 'balance' => 0.0];
+        return $balances;
     }
 
     public function credit(
@@ -72,6 +77,19 @@ class CashboxService
         $existing = WalletMovement::query()->where('idempotency_key', $idempotencyKey)->first();
         if ($existing) {
             return $existing;
+        }
+
+        if (app(OperationalCurrency::class)->code($userId) === 'AED' && !in_array($currency, ['USD', 'AED'], true)) {
+            throw new InvalidArgumentException('UAE cashbox transactions must use AED.');
+        }
+
+        // Legacy operational writers still supply base USD. UAE cash movements
+        // always land in the AED wallet; base_amount continues to hold USD.
+        if ($currency === 'USD' && app(OperationalCurrency::class)->code($userId) === 'AED') {
+            $rate = $this->currencies->rate('AED');
+            $amount = $this->currencies->fromUsdAtRate($amount, $rate, 'AED');
+            $currency = 'AED';
+            $context['exchange_rate'] = $rate;
         }
 
         return DB::transaction(function () use ($userId, $amount, $currency, $direction, $idempotencyKey, $context) {
@@ -135,6 +153,9 @@ class CashboxService
     {
         $from = strtoupper($from);
         $to = strtoupper($to);
+        if (app(OperationalCurrency::class)->code($userId) === 'AED') {
+            throw new InvalidArgumentException('UAE cashboxes use AED only; use the reviewed migration for legacy balances.');
+        }
         if ($from === $to || $amount <= 0 || $rate <= 0) {
             throw new InvalidArgumentException('Invalid currency exchange request.');
         }

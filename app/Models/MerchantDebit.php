@@ -10,8 +10,9 @@ use Illuminate\Database\Eloquent\Relations\HasMany;
 class MerchantDebit extends Model
 {
     use HasFactory;
+    use \App\Models\Concerns\CreatesOperationalCurrency;
 
-    protected $fillable = ['creditor_id', 'debtor_id', 'amount'];
+    protected $fillable = ['currency_code', 'exchange_rate', 'creditor_id', 'debtor_id', 'amount'];
 
     public function payments(): HasMany
     {

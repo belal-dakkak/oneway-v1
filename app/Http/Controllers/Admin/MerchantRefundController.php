@@ -159,9 +159,9 @@ class MerchantRefundController extends Controller
                     $cashboxContext
                 );
 
-                $merchantRefund->merchantDebit->update([
-                    'amount' =>  DB::raw("amount - $amount")
-                ]);
+                $merchantAccount = $merchantRefund->merchantDebit;
+                $merchantCode = app(\App\Services\OperationalCurrency::class)->accountCode($merchantAccount);
+                $merchantAccount->decrement('amount', app(\App\Services\OperationalCurrency::class)->fromBase($amount, $merchantCode));
 
                 ////////////////////////////////////////////
 
@@ -238,7 +238,7 @@ class MerchantRefundController extends Controller
                         } else {
 
                             $total_stock = $total_stock + $check_debit_log->qty;
-                            $total_amount = $total_amount + $check_debit_log->amount;
+                            $total_amount = app(\App\Services\OperationalCurrency::class)->fromBase($total_amount, $check_debit_log->currency_code ?: 'USD') + $check_debit_log->amount;
 
                             $debit_note = "لقد قام المحل $shopName بمرتجع للمنتج $product بعدد $total_stock للتاجر $merchantName بتاريخ $now2";
 

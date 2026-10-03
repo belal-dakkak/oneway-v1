@@ -148,6 +148,9 @@ class WebsitePricingService
             }
 
             $gatewayCode = strtoupper((string) ($commerce->gateway_currency ?: $currencyCode));
+            if ($countryId === Country::UAE) {
+                $gatewayCode = 'AED';
+            }
             if ($countryId === Country::SYRIA && $gatewayCode !== 'USD') {
                 throw new InvalidArgumentException('Syrian card payments must settle in USD.');
             }

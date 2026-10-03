@@ -28,7 +28,8 @@ class ProductRepository
     {
         $data = $request->all(['name', 'name_en', 'details', 'details_en', 'cost_price', 'barcode', 'retail_price','sale_price', 'price_before_discount']);
         $priceBeforeDiscount = $data['price_before_discount'];
-        $currencyCode = Country::defaultCurrency(auth()->user()->country_id);
+        $currencyCode = Country::defaultCurrency((int) $product->country_id === Country::UAE
+            ? Country::UAE : auth()->user()->country_id);
         $rate = app(CurrencyService::class)->rate($currencyCode);
         if ($rate != 1.0) {
             $data['cost_price'] = $data['cost_price'] / $rate;

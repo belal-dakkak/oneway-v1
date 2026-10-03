@@ -11,7 +11,7 @@ class Expense extends Model
 {
     use HasFactory;
 
-    protected $fillable = ['issuer_id', 'consumer_id', 'description', 'image', 'amount'];
+    protected $fillable = ['currency_code', 'exchange_rate', 'issuer_id', 'consumer_id', 'description', 'image', 'amount'];
 
     protected $appends = ['date'];
 
