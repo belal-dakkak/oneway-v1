@@ -198,7 +198,13 @@ class UaeFinanceConversion
             $convert = $code === 'USD' || ($snapshot && $snapshot['source_currency'] === 'USD');
             if ($convert) {
                 if (!$snapshot || !$this->equal($snapshot['source_amount'], $account['amount'])) {
-                    $this->conflict('client_debits', $account, 'original_debt_snapshot_missing_or_balance_changed', ['original_source' => $snapshot]); continue;
+                    $this->conflict('client_debits', $account, 'original_debt_snapshot_missing_or_balance_changed', [
+                        'original_source' => $snapshot,
+                        'account_logs' => array_map(fn ($row) => $this->diagnosticRow($row),
+                            $this->children('client_debit_logs', 'client_debit_id', $account['id'])),
+                        'account_payments' => array_map(fn ($row) => $this->diagnosticRow($row),
+                            $this->children('client_debit_payments', 'client_debit_id', $account['id'])),
+                    ]); continue;
                 }
                 foreach ($this->children('client_debit_logs', 'client_debit_id', $account['id']) as $log) {
                     if (strpos($log['note'] ?? '', UaeDebtBalanceConversion::MARKER) === 0) $this->conflict('client_debits', $account, 'balance_only_conversion_already_applied');
@@ -502,8 +508,12 @@ class UaeFinanceConversion
 
     private function usdPayment(array $row, string $amount): bool
     {
-        return (empty($row['exchange_rate']) || $this->equal($row['exchange_rate'], 1))
-            && (empty($row['base_amount']) || $this->equal($row['base_amount'], $row[$amount]));
+        // MySQL DECIMAL values are strings: empty('0.0000') is false, unlike
+        // SQLite's numeric zero. Compare numerically before diagnosing a mixed ledger.
+        $rate = $row['exchange_rate'] ?? 0;
+        $base = $row['base_amount'] ?? 0;
+        return ($rate === '' || $this->equal($rate, 0) || $this->equal($rate, 1))
+            && ($base === '' || $this->equal($base, 0) || $this->equal($base, $row[$amount]));
     }
 
     private function uae($userId): bool { return (int) ($this->data['users'][$userId]['country_id'] ?? 0) === Country::UAE; }
