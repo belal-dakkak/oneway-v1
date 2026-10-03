@@ -12,12 +12,14 @@ class ConvertUaeFinance extends Command
     protected $signature = 'finance:convert-uae-to-aed
         {--source= : Original client_debits.sql export before label correction}
         {--output= : Private JSON report path (defaults to storage/app/uae-finance-report.json)}
+        {--memory= : Raise the PHP memory limit for this command in MiB, e.g. 512 (128-2048)}
         {--apply= : Apply a previously generated, unchanged report while the app is in maintenance}';
     protected $description = 'Audit or convert proven UAE financial amounts to AED at 3.675, preserving USD base prices.';
 
     public function handle(UaeFinanceConversion $service, LegacyUaeDebtSnapshot $reader): int
     {
         try {
+            $this->configureMemory();
             if ($path = $this->option('apply')) {
                 if (!app()->isDownForMaintenance()) throw new RuntimeException('Pause writes first with php artisan down; resume with php artisan up after verification.');
                 $path = $this->privatePath($path, true);
@@ -41,6 +43,33 @@ class ConvertUaeFinance extends Command
             $this->error($exception->getMessage());
             return 1;
         }
+    }
+
+    private function configureMemory(): void
+    {
+        $requested = $this->option('memory');
+        if ($requested === null) return;
+        if (!preg_match('/^[0-9]+$/D', (string) $requested) || (int) $requested < 128 || (int) $requested > 2048) {
+            throw new RuntimeException('--memory must be an integer from 128 to 2048 MiB, for example --memory=512.');
+        }
+        $requiredBytes = (int) $requested * 1024 * 1024;
+        $current = (string) ini_get('memory_limit');
+        if ($this->memoryBytes($current) !== -1 && $this->memoryBytes($current) < $requiredBytes) {
+            if (!function_exists('ini_set') || @ini_set('memory_limit', $requested . 'M') === false
+                || $this->memoryBytes((string) ini_get('memory_limit')) < $requiredBytes) {
+                throw new RuntimeException('PHP refused the memory increase. Ask the hosting administrator to raise the CLI memory_limit; no conversion was started.');
+            }
+        }
+        $this->line('PHP memory limit for this process: ' . ini_get('memory_limit'));
+    }
+
+    private function memoryBytes(string $limit): int
+    {
+        $limit = trim($limit);
+        if ($limit === '-1') return -1;
+        $suffix = strtoupper(substr($limit, -1));
+        $multiplier = ['K' => 1024, 'M' => 1024 * 1024, 'G' => 1024 * 1024 * 1024][$suffix] ?? 1;
+        return (int) $limit * $multiplier;
     }
 
     private function privatePath(string $path, bool $existing = false): string

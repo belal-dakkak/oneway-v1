@@ -31,6 +31,14 @@ After deploying the memory fix, regenerate any previous preview because the fing
 
 This does not change the website's PHP memory limit or apply the conversion. If the command fails during preview, no financial updates have been executed. A regression test with more than 128 MiB of stored order metadata passes under a 128 MiB PHP limit and verifies that changes to discarded metadata still invalidate the report.
 
+Without SSH, upload the updated `app/Console/Commands/ConvertUaeFinance.php` and run the following in Plesk's Artisan command interface:
+
+```sh
+php artisan finance:convert-uae-to-aed --memory=512 --source=storage/app/client_debits.sql --output=storage/app/uae-finance-preview-v2.json
+```
+
+`--memory` accepts an integer in MiB from 128 through 2048. It raises the current process's limit before loading the snapshot and prints the effective limit. It never lowers an existing higher/unlimited limit and changes no PHP configuration file. It does not imply `--apply`. If PHP disallows `ini_set`, the command stops with a hosting-administrator message before reading financial data. The same option can be used for a later reviewed `--apply`, with the maintenance requirement still enforced. Actual memory availability remains subject to hosting limits.
+
 Review all conflicts before application. Examples:
 
 - Missing/changed source account, mismatched customer/shop, prior balance-only correction.
