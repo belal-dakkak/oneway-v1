@@ -37,7 +37,14 @@ class ConvertUaeFinance extends Command
             @chmod($path, 0600);
             $this->info('Preview only: ' . count($report['changes']) . ' field changes; ' . count($report['conflicts']) . ' conflicts.');
             $this->line('Report: ' . $path);
-            $this->table(['Table', 'ID', 'Reason'], array_map(fn ($row) => array_values($row), $report['conflicts']));
+            $summary = [];
+            foreach ($report['conflicts'] as $conflict) {
+                $key = $conflict['table'] . ':' . $conflict['reason'];
+                if (!isset($summary[$key])) $summary[$key] = [$conflict['table'], $conflict['reason'], 0];
+                $summary[$key][2]++;
+            }
+            $this->table(['Table', 'Reason', 'Count'], array_values($summary));
+            if ($report['conflicts']) $this->warn('Application blocked. The JSON report contains record IDs and financial context for each conflict.');
             return $report['conflicts'] ? 1 : 0;
         } catch (\Exception $exception) {
             $this->error($exception->getMessage());

@@ -198,7 +198,7 @@ class UaeFinanceConversion
             $convert = $code === 'USD' || ($snapshot && $snapshot['source_currency'] === 'USD');
             if ($convert) {
                 if (!$snapshot || !$this->equal($snapshot['source_amount'], $account['amount'])) {
-                    $this->conflict('client_debits', $account, 'original_debt_snapshot_missing_or_balance_changed'); continue;
+                    $this->conflict('client_debits', $account, 'original_debt_snapshot_missing_or_balance_changed', ['original_source' => $snapshot]); continue;
                 }
                 foreach ($this->children('client_debit_logs', 'client_debit_id', $account['id']) as $log) {
                     if (strpos($log['note'] ?? '', UaeDebtBalanceConversion::MARKER) === 0) $this->conflict('client_debits', $account, 'balance_only_conversion_already_applied');
@@ -302,6 +302,27 @@ class UaeFinanceConversion
         $groups = [];
         foreach ($this->data['wallets'] as $wallet) if ($this->uae($wallet['user_id'])) $groups[$wallet['user_id']][] = $wallet;
         foreach ($groups as $wallets) {
+            // A legacy balance without matching history cannot be rebuilt from
+            // those movements. Do not propose deleting/resetting that owner’s wallets.
+            $unreconciled = false;
+            foreach ($wallets as $wallet) {
+                $recordedCredit = $recordedDebit = Decimal::zero();
+                $movements = $this->children('wallet_movements', 'wallet_id', $wallet['id']);
+                foreach ($movements as $movement) {
+                    if ($movement['direction'] === 'credit') $recordedCredit = $recordedCredit->plus((string) $movement['amount']);
+                    if ($movement['direction'] === 'debit') $recordedDebit = $recordedDebit->plus((string) $movement['amount']);
+                }
+                if (!$this->equal($recordedCredit, $wallet['credit']) || !$this->equal($recordedDebit, $wallet['debit'])) {
+                    $unreconciled = true;
+                    $this->conflict('wallets', $wallet, 'cashbox_totals_do_not_match_recorded_movements', [
+                        'recorded_credit' => (string) $recordedCredit, 'recorded_debit' => (string) $recordedDebit,
+                        'unmatched_credit' => (string) Decimal::of((string) $wallet['credit'])->minus($recordedCredit),
+                        'unmatched_debit' => (string) Decimal::of((string) $wallet['debit'])->minus($recordedDebit),
+                        'movement_count' => count($movements),
+                    ]);
+                }
+            }
+            if ($unreconciled) continue;
             $target = collect($wallets)->firstWhere('currency_code', 'AED') ?: $wallets[0];
             $credits = $debits = Decimal::zero();
             $allMovements = [];
@@ -488,7 +509,40 @@ class UaeFinanceConversion
     private function uae($userId): bool { return (int) ($this->data['users'][$userId]['country_id'] ?? 0) === Country::UAE; }
     private function equal($a, $b): bool { return Decimal::of((string) $a)->isEqualTo((string) $b); }
     private function subtract($a, $b): string { return (string) Decimal::of((string) $a)->minus((string) $b)->toScale(2, RoundingMode::HALF_UP); }
-    private function conflict(string $table, array $row, string $reason): void { $this->conflicts[] = ['table' => $table, 'id' => $row['id'], 'reason' => $reason]; }
+    private function conflict(string $table, array $row, string $reason, array $context = []): void
+    {
+        $context['record'] = $this->diagnosticRow($row);
+        $owners = $row;
+        foreach (['client_debit_id' => 'client_debits', 'merchant_debit_id' => 'merchant_debits', 'order_id' => 'orders'] as $key => $relatedTable) {
+            if (empty($row[$key])) continue;
+            $related = $this->data[$relatedTable][$row[$key]] ?? null;
+            $context[$relatedTable] = $related ? $this->diagnosticRow($related) : null;
+            if ($related) $owners += $related;
+        }
+        foreach (['creditor_id', 'debtor_id', 'seller_id', 'buyer_id', 'user_id', 'issuer_id'] as $key) {
+            if (!empty($owners[$key])) $context['owners'][$key] = $this->data['users'][$owners[$key]] ?? null;
+        }
+        if (($row['source_type'] ?? null) === \App\Models\User::class) {
+            $context['source_user'] = $this->data['users'][$row['source_id']] ?? null;
+        }
+        if (!empty($row['exchange_group'])) {
+            $context['transfer_movements'] = array_map(fn ($peer) => $this->diagnosticRow($peer),
+                $this->childrenByValue('wallet_movements', 'exchange_group', $row['exchange_group']));
+        }
+        $this->conflicts[] = ['table' => $table, 'id' => $row['id'], 'reason' => $reason, 'context' => $context];
+    }
+
+    private function diagnosticRow(array $row): array
+    {
+        // Financial evidence only: no names, phone numbers, free-text notes or credentials.
+        return array_intersect_key($row, array_flip(['id', 'country_id', 'creditor_id', 'debtor_id', 'seller_id',
+            'buyer_id', 'user_id', 'issuer_id', 'client_debit_id', 'merchant_debit_id', 'order_id',
+            'client_debit_payment_id', 'client_refund_id', 'debit_payment_id', 'merchant_refund_id',
+            'currency_code', 'curr_type', 'curr_rate', 'amount', 'pay_amount', 'base_amount', 'exchange_rate',
+            'total_price', 'paid_price', 'remain_price', 'price_without_tax', 'tax_value',
+            'credit', 'debit', 'wallet_id', 'direction', 'balance_after', 'source_type', 'source_id',
+            'exchange_group', 'created_at', 'updated_at']));
+    }
     private function signature(array $report): string
     {
         $key = (string) config('app.key');

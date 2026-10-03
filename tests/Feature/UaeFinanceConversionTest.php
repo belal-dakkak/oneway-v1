@@ -95,6 +95,14 @@ class UaeFinanceConversionTest extends TestCase
         DB::table('wallets')->where('id', $f['wallet']->id)->update(['credit' => 30]);
         $report = $service->report($f['legacy']);
         $this->assertContains('cashbox_totals_do_not_match_recorded_movements', array_column($report['conflicts'], 'reason'));
+        $walletConflict = collect($report['conflicts'])->firstWhere('reason', 'cashbox_totals_do_not_match_recorded_movements');
+        $this->assertEquals(30, $walletConflict['context']['record']['credit']);
+        $this->assertEquals(20, $walletConflict['context']['recorded_credit']);
+        $this->assertEquals(10, $walletConflict['context']['unmatched_credit']);
+        $this->assertSame(1, $walletConflict['context']['movement_count']);
+        $this->assertSame(2, (int) $walletConflict['context']['owners']['user_id']['country_id']);
+        $this->assertSame([], array_values(array_filter($report['changes'], fn ($change) =>
+            ($change['table'] === 'wallets' && $change['id'] === $f['wallet']->id) || $change['table'] === 'wallet_movements')));
         try { $service->apply($report); $this->fail('Expected conflict rejection'); }
         catch (\RuntimeException $e) { $this->assertStringContainsString('conflicts', $e->getMessage()); }
         $this->assertDatabaseCount('finance_conversion_changes', 0);
@@ -263,6 +271,11 @@ class UaeFinanceConversionTest extends TestCase
         $report = $service->report($f['legacy']);
         $this->assertContains('original_gross_net_tax_do_not_reconcile', array_column($report['conflicts'], 'reason'));
         $this->assertContains('payment_currency_disagrees_with_order', array_column($report['conflicts'], 'reason'));
+        $paymentConflict = collect($report['conflicts'])->firstWhere('reason', 'payment_currency_disagrees_with_order');
+        $this->assertEquals(3.675, $paymentConflict['context']['record']['exchange_rate']);
+        $this->assertSame('USD', $paymentConflict['context']['orders']['curr_type']);
+        $this->assertArrayNotHasKey('note', $paymentConflict['context']['record']);
+        $this->assertArrayNotHasKey('email', $paymentConflict['context']['owners']['seller_id']);
         try { $service->apply($report); $this->fail('Expected conflicts to block application'); }
         catch (\RuntimeException $e) { $this->assertStringContainsString('conflicts', $e->getMessage()); }
         $this->assertDatabaseCount('finance_conversion_changes', 0);

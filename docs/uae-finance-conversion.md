@@ -48,6 +48,8 @@ Review all conflicts before application. Examples:
 
 These cases block the **whole** batch. Do not fix them by editing the signed JSON, assuming an exchange rate or deleting evidence. Investigate the database records and obtain their source evidence, then produce another report.
 
+Conflict entries include a restricted `context` with the current amounts/rates, linked account/order data and owner IDs/countries. Free-text notes, names and contact details are excluded from this diagnostic context. Cashbox conflicts include recorded credit/debit sums, movement count and unmatched differences. For an owner with unreconciled cashbox history, the preview omits all wallet reset/merge/movement proposals for that owner; an empty movement history never proposes resetting a historical balance to zero. The command prints grouped conflict counts, with all IDs/details available in the private JSON. An exit code of 1 together with a saved report and a conflict summary means review is required, not that financial changes were applied.
+
 ## Applying the reviewed report
 
 Take a complete database backup and verify its restore procedure before conversion. Stop scheduled financial imports and pause/drain queue workers so no background payment or inventory job can write. `queue:restart` alone is not a pause: Supervisor can restart workers. Let in-flight HTTP requests finish. The command requires Laravel maintenance mode for application; this is a whole-application pause, not a per-country middleware switch.
