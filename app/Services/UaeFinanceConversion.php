@@ -36,7 +36,7 @@ class UaeFinanceConversion
         'order_items' => ['id', 'order_id', 'item_price_paid', 'total_price_paid', 'tax_value_paid', 'price_without_tax_paid'],
         'website_order_items' => ['id', 'website_order_id', 'item_price', 'item_price_before_discount', 'total_price', 'total_price_before_discount'],
         'order_payments' => ['id', 'order_id', 'pay_amount', 'exchange_rate', 'base_amount'],
-        'refunds' => ['id', 'order_item_id', 'total_price_paid', 'net_amount', 'tax_amount', 'cost_amount', 'currency_code'],
+        'refunds' => ['id', 'order_item_id', 'total_price', 'total_price_paid', 'net_amount', 'tax_amount', 'cost_amount', 'currency_code'],
         'user_products' => [], // Fingerprint only: base inventory is never converted.
     ];
 
@@ -335,7 +335,13 @@ class UaeFinanceConversion
                 return $this->refundReconciliationFailure($account, 'refund_or_order_currency_is_not_aed', [
                     'refund' => $this->diagnosticRow($refund), 'order' => $this->diagnosticRow($order)]);
             }
-            if (!$this->equal($refund['total_price_paid'] ?? 0, $amount->negated())) {
+            $refundAmount = Decimal::of((string) ($refund['total_price_paid'] ?? 0));
+            if ($refundAmount->isZero()) {
+                $refundAmount = Decimal::of((string) ($refund['total_price'] ?? 0))
+                    ->multipliedBy((string) ($order['curr_rate'] ?: 1))
+                    ->toScale(2, RoundingMode::HALF_UP);
+            }
+            if (!$this->equal($refundAmount, $amount->negated())) {
                 return $this->refundReconciliationFailure($account, 'refund_amount_does_not_match_ledger', [
                     'log' => $this->diagnosticRow($log), 'refund' => $this->diagnosticRow($refund)]);
             }
@@ -671,7 +677,8 @@ class UaeFinanceConversion
             'buyer_id', 'user_id', 'issuer_id', 'client_debit_id', 'merchant_debit_id', 'order_id',
             'client_debit_payment_id', 'client_refund_id', 'debit_payment_id', 'merchant_refund_id',
             'currency_code', 'curr_type', 'curr_rate', 'amount', 'pay_amount', 'base_amount', 'exchange_rate',
-            'total_price', 'paid_price', 'remain_price', 'price_without_tax', 'tax_value',
+            'total_price', 'total_price_paid', 'net_amount', 'tax_amount', 'cost_amount',
+            'paid_price', 'remain_price', 'price_without_tax', 'tax_value', 'order_item_id',
             'credit', 'debit', 'wallet_id', 'direction', 'balance_after', 'source_type', 'source_id',
             'exchange_group', 'created_at', 'updated_at']));
     }

@@ -311,7 +311,7 @@ class UaeFinanceConversionTest extends TestCase
         $f = $this->mixedRefundFixture();
         $service = app(UaeFinanceConversion::class);
         // Legacy refunds can omit currency and inherit AED from their order.
-        DB::table('refunds')->update(['currency_code' => null]);
+        DB::table('refunds')->update(['currency_code' => null, 'total_price_paid' => null]);
         $refunds = DB::table('refunds')->orderBy('id')->get()->all();
         $modernLogs = DB::table('client_debit_logs')->whereIn('id', $f['modern_logs'])->orderBy('id')->get()->all();
         $report = $service->report($f['legacy']);
