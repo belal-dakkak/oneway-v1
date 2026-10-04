@@ -52,6 +52,22 @@ Conflict entries include a restricted `context` with the current amounts/rates, 
 
 MySQL returns DECIMAL metadata as strings. The legacy USD evidence check compares zero numerically, so `base_amount = "0.0000"` with `exchange_rate = "1.000000"` is treated like SQLite's numeric zero/one. Previous builds incorrectly used PHP `empty()` on the decimal zero string and reported false mixed-currency conflicts. Nonzero mismatched base amounts and non-USD rates still block conversion. Regenerate previews after deploying this fix; do not edit old reports to remove conflicts. Changed-source-account conflicts also include restricted account log/payment history to investigate later activity without multiplying new AED payments as if they were old USD.
 
+## Later AED refunds against a label-corrected USD account
+
+A changed source balance can be reconciled only when the complete account history proves this specific case: positive legacy order logs sum exactly to the original USD snapshot; subsequent AED refund logs explain the entire difference to the current balance; and there are no account payments or previous balance-only conversion. Each refund must match the customer, account, original order, actual refund amount, AED currency and 3.675 rate/base amount. Duplicate refund sources, missing links and other changes still block application.
+
+The proposal converts the snapshot and legacy logs once, preserves the actual later AED refunds, and records its calculation in the signed report's `reconciliation` field. For example, an original USD balance of 97.96 followed by two verified AED refunds of 90 produces `97.96 × 3.675 = 360.00`, then `360.00 − 180.00 = 180.00 AED`. The current mixed figure of -82.04 must not itself be multiplied. No refund, payment or cash movement is created by this reconciliation. Production links must pass the checks; the example alone is not proof of the live records.
+
+The owner confirmed that UAE/Lebanon merchant transactions and Lebanese closures into the admin wallet are genuine cross-country activity. Do not change user countries to clear those conflicts. The current conversion still blocks these cases until their UAE portion and settlement currency are established from source records. A mixed admin wallet cannot be converted using only its owner's current country. Historical wallet balances without matching movements also remain unresolved; an empty ledger does not establish a zero balance.
+
+After uploading the updated `app/Services/UaeFinanceConversion.php`, use the following in Plesk's Artisan command box to generate a new preview (no financial writes):
+
+```text
+finance:convert-uae-to-aed --memory=512 --source=storage/app/client_debits.sql --output=storage/app/uae-finance-preview-v5.json
+```
+
+This preview verifies the refund links on the server. It is not approval to apply the conversion; the remaining cross-country, wallet and identity conflicts still require reconciliation.
+
 ## Applying the reviewed report
 
 Take a complete database backup and verify its restore procedure before conversion. Stop scheduled financial imports and pause/drain queue workers so no background payment or inventory job can write. `queue:restart` alone is not a pause: Supervisor can restart workers. Let in-flight HTTP requests finish. The command requires Laravel maintenance mode for application; this is a whole-application pause, not a per-country middleware switch.

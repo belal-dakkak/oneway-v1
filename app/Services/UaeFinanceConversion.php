@@ -197,7 +197,11 @@ class UaeFinanceConversion
             }
             $convert = $code === 'USD' || ($snapshot && $snapshot['source_currency'] === 'USD');
             if ($convert) {
-                if (!$snapshot || !$this->equal($snapshot['source_amount'], $account['amount'])) {
+                $mixedRefunds = null;
+                if ($snapshot && !$this->equal($snapshot['source_amount'], $account['amount'])) {
+                    $mixedRefunds = $this->reconcileLaterAedRefunds($account, $snapshot);
+                }
+                if (!$snapshot || (!$this->equal($snapshot['source_amount'], $account['amount']) && !$mixedRefunds)) {
                     $this->conflict('client_debits', $account, 'original_debt_snapshot_missing_or_balance_changed', [
                         'original_source' => $snapshot,
                         'account_logs' => array_map(fn ($row) => $this->diagnosticRow($row),
@@ -208,6 +212,7 @@ class UaeFinanceConversion
                 }
                 foreach ($this->children('client_debit_logs', 'client_debit_id', $account['id']) as $log) {
                     if (strpos($log['note'] ?? '', UaeDebtBalanceConversion::MARKER) === 0) $this->conflict('client_debits', $account, 'balance_only_conversion_already_applied');
+                    if (isset($mixedRefunds['preserved_log_ids'][$log['id']])) continue;
                     // A newer explicit base amount is evidence of a mixed-currency ledger.
                     if (!$this->usdPayment($log, 'amount')) {
                         $this->conflict('client_debit_logs', $log, 'mixed_or_already_converted_ledger'); continue;
@@ -225,7 +230,11 @@ class UaeFinanceConversion
                     $this->set('client_debit_payments', $payment, 'base_amount', (string) $payment['amount'], 'original USD payment');
                     $this->set('client_debit_payments', $payment, 'exchange_rate', self::RATE, 'fixed conversion rate');
                 }
-                $this->money('client_debits', $account, ['amount']);
+                if ($mixedRefunds) {
+                    $this->set('client_debits', $account, 'amount', $mixedRefunds['target_amount'],
+                        'Original USD snapshot converted once; verified later AED refunds retained');
+                    $this->changes['client_debits:' . $account['id'] . ':amount']['reconciliation'] = $mixedRefunds;
+                } else $this->money('client_debits', $account, ['amount']);
                 $this->set('client_debits', $account, 'currency_code', 'AED', 'original export proves USD');
             } elseif ($code !== 'AED') $this->conflict('client_debits', $account, 'unknown_currency');
             $groups[$account['creditor_id'] . ':' . $account['debtor_id']][] = $account;
@@ -244,6 +253,61 @@ class UaeFinanceConversion
             }
             $this->set('client_debits', $target, 'amount', (string) $sum->toScale(2, RoundingMode::HALF_UP), 'sum of matched account balances');
         }
+    }
+
+    /** Only recover a changed snapshot when every difference is a verified AED refund. */
+    private function reconcileLaterAedRefunds(array $account, array $snapshot): ?array
+    {
+        if (strtoupper((string) $account['currency_code']) !== 'AED' || $snapshot['source_currency'] !== 'USD'
+            || $this->children('client_debit_payments', 'client_debit_id', $account['id'])) return null;
+
+        $oldTotal = $refundTotal = Decimal::zero();
+        $oldOrders = $modern = [];
+        $lastOldDate = '';
+        foreach ($this->children('client_debit_logs', 'client_debit_id', $account['id']) as $log) {
+            if (strpos($log['note'] ?? '', UaeDebtBalanceConversion::MARKER) === 0) return null;
+            if (!$this->usdPayment($log, 'amount')) { $modern[] = $log; continue; }
+            if (empty($log['order_id']) || !empty($log['client_refund_id']) || !empty($log['client_debit_payment_id'])
+                || !Decimal::of((string) $log['amount'])->isGreaterThan(0) || empty($log['created_at'])) return null;
+            $order = $this->data['orders'][$log['order_id']] ?? null;
+            if (!$order || (int) $order['seller_id'] !== (int) $account['creditor_id']
+                || (int) $order['buyer_id'] !== (int) $account['debtor_id']) return null;
+            $oldOrders[$order['id']] = true;
+            $oldTotal = $oldTotal->plus((string) $log['amount']);
+            $lastOldDate = max($lastOldDate, $log['created_at']);
+        }
+        if (!$modern || !$this->equal($oldTotal, $snapshot['source_amount'])) return null;
+        $preserved = $refundIds = $sourceRefundIds = [];
+        foreach ($modern as $log) {
+            $amount = Decimal::of((string) $log['amount']);
+            if (strtoupper((string) $log['currency_code']) !== 'AED' || !$amount->isLessThan(0)
+                || !$this->equal($log['exchange_rate'] ?? 0, self::RATE)
+                || !$this->equal($amount->dividedBy(self::RATE, 4, RoundingMode::HALF_UP), $log['base_amount'] ?? 0)
+                || empty($log['created_at']) || $log['created_at'] <= $lastOldDate
+                || !empty($log['order_id']) || !empty($log['client_debit_payment_id'])) return null;
+            $clientRefund = $this->data['client_refunds'][$log['client_refund_id'] ?? 0] ?? null;
+            if (!$clientRefund || isset($refundIds[$clientRefund['id']])
+                || (int) $clientRefund['client_debit_id'] !== (int) $account['id']
+                || (int) $clientRefund['client_id'] !== (int) $account['debtor_id']) return null;
+            $refund = $this->data['refunds'][$clientRefund['refund_id']] ?? null;
+            $item = $refund ? ($this->data['order_items'][$refund['order_item_id']] ?? null) : null;
+            $order = $item ? ($this->data['orders'][$item['order_id']] ?? null) : null;
+            if (!$refund || isset($sourceRefundIds[$refund['id']]) || !$order || !isset($oldOrders[$order['id']])
+                || strtoupper((string) $order['curr_type']) !== 'AED'
+                || strtoupper((string) $refund['currency_code']) !== 'AED'
+                || !$this->equal($refund['total_price_paid'] ?? 0, $amount->negated())) return null;
+            $refundTotal = $refundTotal->plus($amount);
+            $preserved[$log['id']] = true;
+            $refundIds[$clientRefund['id']] = true;
+            $sourceRefundIds[$refund['id']] = true;
+        }
+        if (count($refundIds) !== count($this->children('client_refunds', 'client_debit_id', $account['id']))
+            || !$this->equal($oldTotal->plus($refundTotal), $account['amount'])) return null;
+        $converted = $oldTotal->multipliedBy(self::RATE)->toScale(2, RoundingMode::HALF_UP);
+        return ['original_usd_balance' => (string) $oldTotal, 'converted_snapshot_aed' => (string) $converted,
+            'preserved_refunds_aed' => (string) $refundTotal, 'preserved_log_ids' => $preserved,
+            'client_refund_ids' => array_keys($refundIds),
+            'target_amount' => (string) $converted->plus($refundTotal)->toScale(2, RoundingMode::HALF_UP)];
     }
 
     private function merchants(): void

@@ -305,4 +305,129 @@ class UaeFinanceConversionTest extends TestCase
         $this->assertDatabaseCount('finance_conversion_changes', 0);
         $this->assertDatabaseCount('finance_conversion_batches', 0);
     }
+
+    public function test_old_usd_balance_is_converted_while_verified_later_aed_refunds_are_preserved(): void
+    {
+        $f = $this->mixedRefundFixture();
+        $service = app(UaeFinanceConversion::class);
+        $refunds = DB::table('refunds')->orderBy('id')->get()->all();
+        $modernLogs = DB::table('client_debit_logs')->whereIn('id', $f['modern_logs'])->orderBy('id')->get()->all();
+        $report = $service->report($f['legacy']);
+        $this->assertSame([], $report['conflicts']);
+        $change = collect($report['changes'])->first(fn ($row) => $row['table'] === 'client_debits' && $row['field'] === 'amount');
+        $this->assertEquals(-82.04, $change['before']);
+        $this->assertSame('180.00', $change['after']);
+        $this->assertSame('360.00', $change['reconciliation']['converted_snapshot_aed']);
+        $this->assertEquals(-180, $change['reconciliation']['preserved_refunds_aed']);
+        $service->apply($report);
+        $this->assertDatabaseHas('client_debits', ['id' => $f['account'], 'amount' => 180, 'currency_code' => 'AED']);
+        $this->assertEquals($refunds, DB::table('refunds')->orderBy('id')->get()->all());
+        $this->assertEquals($modernLogs, DB::table('client_debit_logs')->whereIn('id', $f['modern_logs'])->orderBy('id')->get()->all());
+        $this->assertEquals(360, DB::table('client_debit_logs')->whereNotIn('id', $f['modern_logs'])->sum('amount'));
+        $this->assertDatabaseCount('wallet_movements', 0);
+        $this->assertSame('already_applied', $service->apply($report));
+    }
+
+    public function test_changed_snapshot_remains_blocked_without_matching_refund_evidence(): void
+    {
+        $f = $this->mixedRefundFixture();
+        $service = app(UaeFinanceConversion::class);
+        foreach ([['amount' => -89], ['base_amount' => -25], ['client_refund_id' => null]] as $invalid) {
+            $id = $f['modern_logs'][0];
+            $original = (array) DB::table('client_debit_logs')->where('id', $id)->first();
+            DB::table('client_debit_logs')->where('id', $id)->update($invalid);
+            $report = $service->report($f['legacy']);
+            $this->assertContains('original_debt_snapshot_missing_or_balance_changed', array_column($report['conflicts'], 'reason'));
+            try { $service->apply($report); $this->fail('Expected unresolved evidence to block'); }
+            catch (\RuntimeException $e) { $this->assertStringContainsString('conflicts', $e->getMessage()); }
+            $this->assertDatabaseHas('client_debits', ['id' => $f['account'], 'amount' => -82.04]);
+            $this->assertDatabaseCount('finance_conversion_changes', 0);
+            DB::table('client_debit_logs')->where('id', $id)->update($original);
+        }
+    }
+
+    public function test_refund_recovery_requires_matching_customer_amount_and_unique_source(): void
+    {
+        $f = $this->mixedRefundFixture();
+        $service = app(UaeFinanceConversion::class);
+        $links = DB::table('client_refunds')->orderBy('id')->get();
+        $cases = [
+            ['client_refunds', $links[0]->id, ['client_id' => $f['seller']->id]],
+            ['client_refunds', $links[1]->id, ['refund_id' => $links[0]->refund_id]],
+            ['refunds', $links[0]->refund_id, ['total_price_paid' => 89]],
+            ['refunds', $links[0]->refund_id, ['currency_code' => 'USD']],
+        ];
+        foreach ($cases as [$table, $id, $invalid]) {
+            $original = (array) DB::table($table)->where('id', $id)->first();
+            DB::table($table)->where('id', $id)->update($invalid);
+            $report = $service->report($f['legacy']);
+            $this->assertContains('original_debt_snapshot_missing_or_balance_changed', array_column($report['conflicts'], 'reason'));
+            $this->assertFalse(collect($report['changes'])->contains(fn ($row) => $row['table'] === 'client_debits'
+                && $row['id'] === $f['account'] && $row['field'] === 'amount'));
+            DB::table($table)->where('id', $id)->update($original);
+        }
+    }
+
+    public function test_real_cross_country_merchant_account_blocks_application_without_changing_either_country(): void
+    {
+        $f = $this->fixture();
+        $merchant = $this->user(1);
+        $account = DB::table('merchant_debits')->insertGetId(['creditor_id' => $merchant->id,
+            'debtor_id' => $f['seller']->id, 'amount' => 96.80]);
+        $service = app(UaeFinanceConversion::class);
+        $report = $service->report($f['legacy']);
+        $this->assertContains('cross_country_merchant_account', array_column($report['conflicts'], 'reason'));
+        $this->assertFalse(collect($report['changes'])->contains(fn ($row) => $row['table'] === 'merchant_debits' && $row['id'] === $account));
+        try { $service->apply($report); $this->fail('Cross-country evidence must be resolved first'); }
+        catch (\RuntimeException $e) { $this->assertStringContainsString('conflicts', $e->getMessage()); }
+        $this->assertDatabaseHas('merchant_debits', ['id' => $account, 'amount' => 96.80, 'currency_code' => null]);
+        $this->assertDatabaseHas('users', ['id' => $merchant->id, 'country_id' => 1]);
+        $this->assertDatabaseHas('users', ['id' => $f['seller']->id, 'country_id' => 2]);
+        $this->assertDatabaseHas('orders', ['id' => $f['order'], 'total_price' => 100, 'curr_type' => 'USD']);
+        $this->assertDatabaseCount('finance_conversion_changes', 0);
+    }
+
+    private function mixedRefundFixture(): array
+    {
+        $f = $this->fixture();
+        DB::table('wallet_movements')->delete();
+        DB::table('wallets')->update(['credit' => 0, 'debit' => 0]);
+        DB::table('order_payments')->delete();
+        DB::table('client_debits')->where('id', $f['aed'])->delete();
+        DB::table('client_debit_logs')->where('id', $f['log'])->delete();
+        DB::table('client_debits')->where('id', $f['account'])->update(['amount' => -82.04]);
+        $f['legacy']['accounts'][0]['source_amount'] = '97.9600';
+        $category = \App\Models\Category::create(['name' => 'Mixed account test']);
+        $color = \App\Models\Color::create(['name' => 'Black', 'code' => '#000000']);
+        $product = \App\Models\Product::create(['name' => 'Original sale', 'barcode' => 'MIXED', 'category_id' => $category->id, 'country_id' => 2, 'cost_price' => 1]);
+        $variant = \App\Models\ProductColor::create(['product_id' => $product->id, 'color_id' => $color->id, 'country_id' => 2,
+            'barcode' => 'MIXED-COLOR', 'sizes' => '[]', 'stock' => 2]);
+        $stock = \App\Models\UserProduct::create(['product_color_id' => $variant->id, 'user_id' => $f['seller']->id,
+            'country_id' => 2, 'size' => 'M', 'stock' => 2, 'barcode' => 'MIXED-STOCK']);
+        $f['modern_logs'] = [];
+        foreach ([28, 29] as $index => $day) {
+            $values = ['seller_id' => $f['seller']->id, 'buyer_id' => $f['buyer']->id, 'barcode' => 'MIXED-' . $index,
+                'curr_type' => 'AED', 'curr_rate' => 3.675, 'total_price' => 90, 'paid_price' => 0,
+                'remain_price' => 90, 'price_without_tax' => 90, 'tax_value' => 0];
+            if ($index === 0) {
+                $orderId = $f['order'];
+                DB::table('orders')->where('id', $orderId)->update($values);
+            } else $orderId = DB::table('orders')->insertGetId($values);
+            DB::table('client_debit_logs')->insert(['client_debit_id' => $f['account'], 'order_id' => $orderId,
+                'amount' => 48.98, 'currency_code' => 'AED', 'exchange_rate' => 1, 'base_amount' => 0,
+                'note' => 'old USD debt after label correction', 'created_at' => "2026-09-{$day} 12:00:00"]);
+            $itemId = DB::table('order_items')->insertGetId(['order_id' => $orderId, 'user_product_id' => $stock->id,
+                'qty' => 1, 'sold_qty' => 2, 'item_price' => 24.4898]);
+            $refundId = DB::table('refunds')->insertGetId(['order_item_id' => $itemId, 'qty' => 1,
+                'item_barcode' => 'MIXED-STOCK', 'order_barcode' => $values['barcode'], 'currency_code' => 'AED',
+                'total_price' => 24.4898, 'total_price_paid' => 90, 'net_amount' => 90, 'tax_amount' => 0]);
+            $clientRefundId = DB::table('client_refunds')->insertGetId(['client_debit_id' => $f['account'],
+                'client_id' => $f['buyer']->id, 'refund_id' => $refundId]);
+            $f['modern_logs'][] = DB::table('client_debit_logs')->insertGetId(['client_debit_id' => $f['account'],
+                'client_refund_id' => $clientRefundId, 'amount' => -90, 'currency_code' => 'AED',
+                'exchange_rate' => 3.675, 'base_amount' => -24.4898, 'note' => 'actual AED refund',
+                'created_at' => '2026-10-03 12:46:05']);
+        }
+        return $f;
+    }
 }
