@@ -406,6 +406,69 @@ class UaeFinanceConversionTest extends TestCase
         $this->assertSame('already_applied', $service->apply($report));
     }
 
+    public function test_zero_legacy_balance_keeps_a_later_verified_aed_order_after_old_payment_history(): void
+    {
+        $f = $this->fixture();
+        DB::table('client_debits')->where('id', $f['aed'])->delete();
+        DB::table('client_debits')->where('id', $f['account'])->update(['amount' => 100]);
+        $f['legacy']['accounts'][0]['source_amount'] = '0.0000';
+
+        DB::table('orders')->where('id', $f['order'])->update([
+            'total_price' => 27.21, 'price_without_tax' => 27.21, 'tax_value' => 0,
+            'paid_price' => 27.21, 'remain_price' => 0,
+        ]);
+        DB::table('order_payments')->where('id', $f['payment'])->update([
+            'pay_amount' => 27.21, 'base_amount' => 27.21,
+        ]);
+        DB::table('client_debit_logs')->where('id', $f['log'])->update([
+            'amount' => 27.21, 'created_at' => '2026-03-12 22:23:06',
+            'updated_at' => '2026-03-12 22:23:06',
+        ]);
+        $legacyPayment = DB::table('client_debit_payments')->insertGetId([
+            'client_debit_id' => $f['account'], 'amount' => 27.21,
+            'exchange_rate' => 1, 'base_amount' => 0,
+            'created_at' => '2026-03-19 15:55:47', 'updated_at' => '2026-03-19 15:55:47',
+        ]);
+        $legacyPaymentLog = DB::table('client_debit_logs')->insertGetId([
+            'client_debit_id' => $f['account'], 'client_debit_payment_id' => $legacyPayment,
+            'amount' => 27.21, 'currency_code' => 'AED', 'exchange_rate' => 1, 'base_amount' => 0,
+            'note' => 'legacy payment with historical positive sign',
+            'created_at' => '2026-03-19 15:55:47', 'updated_at' => '2026-03-19 15:55:47',
+        ]);
+        DB::table('wallet_movements')->where('source_id', $f['payment'])->update([
+            'amount' => 27.21, 'base_amount' => 27.21, 'balance_after' => 27.21,
+        ]);
+        DB::table('wallets')->where('id', $f['wallet']->id)->update(['credit' => 27.21]);
+
+        $modernOrder = DB::table('orders')->insertGetId([
+            'seller_id' => $f['seller']->id, 'buyer_id' => $f['buyer']->id,
+            'barcode' => 'NEW-AED-100', 'curr_type' => 'AED', 'curr_rate' => 3.675,
+            'total_price' => 100, 'price_without_tax' => 100, 'tax_value' => 0,
+            'paid_price' => 0, 'remain_price' => 100,
+            'created_at' => '2026-10-04 17:22:11', 'updated_at' => '2026-10-04 17:22:11',
+        ]);
+        $modernLog = DB::table('client_debit_logs')->insertGetId([
+            'client_debit_id' => $f['account'], 'order_id' => $modernOrder,
+            'amount' => 100, 'currency_code' => 'AED', 'exchange_rate' => 3.675,
+            'base_amount' => 27.2109, 'note' => 'new AED debt',
+            'created_at' => '2026-10-04 17:22:11', 'updated_at' => '2026-10-04 17:22:11',
+        ]);
+
+        $service = app(UaeFinanceConversion::class);
+        $report = $service->report($f['legacy']);
+        $this->assertSame([], $report['conflicts']);
+        $this->assertFalse(collect($report['changes'])->contains(fn ($change) => $change['table'] === 'client_debits'
+            && $change['id'] === $f['account'] && $change['field'] === 'amount'));
+        $this->assertSame('applied', $service->apply($report));
+
+        $this->assertDatabaseHas('client_debits', ['id' => $f['account'], 'amount' => 100, 'currency_code' => 'AED']);
+        $this->assertDatabaseHas('client_debit_logs', ['id' => $f['log'], 'amount' => 100, 'exchange_rate' => 3.675]);
+        $this->assertDatabaseHas('client_debit_logs', ['id' => $legacyPaymentLog, 'amount' => 100, 'exchange_rate' => 3.675]);
+        $this->assertDatabaseHas('client_debit_payments', ['id' => $legacyPayment, 'amount' => 100, 'exchange_rate' => 3.675]);
+        $this->assertDatabaseHas('client_debit_logs', ['id' => $modernLog, 'amount' => 100,
+            'exchange_rate' => 3.675, 'base_amount' => 27.2109]);
+    }
+
     public function test_changed_snapshot_remains_blocked_without_matching_refund_evidence(): void
     {
         $f = $this->mixedRefundFixture();
