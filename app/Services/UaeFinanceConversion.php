@@ -438,38 +438,51 @@ class UaeFinanceConversion
         foreach ($groups as $wallets) {
             // A legacy balance without matching history cannot be rebuilt from
             // those movements. Do not propose deleting/resetting that owner’s wallets.
-            $unreconciled = false;
+            $openingRows = [];
+            $invalid = false;
             foreach ($wallets as $wallet) {
+                $walletCode = strtoupper((string) ($wallet['currency_code'] ?: 'USD'));
+                if (!in_array($walletCode, ['USD', 'AED'], true)) {
+                    $this->conflict('wallets', $wallet, 'unknown_currency');
+                    $invalid = true;
+                }
                 $recordedCredit = $recordedDebit = Decimal::zero();
                 $movements = $this->children('wallet_movements', 'wallet_id', $wallet['id']);
                 foreach ($movements as $movement) {
                     if ($movement['direction'] === 'credit') $recordedCredit = $recordedCredit->plus((string) $movement['amount']);
-                    if ($movement['direction'] === 'debit') $recordedDebit = $recordedDebit->plus((string) $movement['amount']);
+                    elseif ($movement['direction'] === 'debit') $recordedDebit = $recordedDebit->plus((string) $movement['amount']);
+                    else { $this->conflict('wallet_movements', $movement, 'unknown_direction'); $invalid = true; }
+                    if (strtoupper((string) $movement['currency_code']) !== $walletCode
+                        || (int) $movement['user_id'] !== (int) $wallet['user_id']) {
+                        $this->conflict('wallet_movements', $movement, 'wallet_owner_or_currency_mismatch');
+                        $invalid = true;
+                    }
                 }
-                if (!$this->equal($recordedCredit, $wallet['credit']) || !$this->equal($recordedDebit, $wallet['debit'])) {
-                    $unreconciled = true;
-                    $this->conflict('wallets', $wallet, 'cashbox_totals_do_not_match_recorded_movements', [
+                $openingCredit = Decimal::of((string) $wallet['credit'])->minus($recordedCredit);
+                $openingDebit = Decimal::of((string) $wallet['debit'])->minus($recordedDebit);
+                if ($openingCredit->isLessThan(0) || $openingDebit->isLessThan(0)) {
+                    $invalid = true;
+                    $this->conflict('wallets', $wallet, 'cashbox_movement_totals_exceed_wallet_totals', [
                         'recorded_credit' => (string) $recordedCredit, 'recorded_debit' => (string) $recordedDebit,
-                        'unmatched_credit' => (string) Decimal::of((string) $wallet['credit'])->minus($recordedCredit),
-                        'unmatched_debit' => (string) Decimal::of((string) $wallet['debit'])->minus($recordedDebit),
+                        'opening_credit' => (string) $openingCredit, 'opening_debit' => (string) $openingDebit,
                         'movement_count' => count($movements),
                     ]);
                 }
+                $openingRows[$wallet['id']] = ['wallet_id' => $wallet['id'],
+                    'original_currency' => $walletCode,
+                    'opening_credit' => (string) $openingCredit, 'opening_debit' => (string) $openingDebit,
+                    'movement_count' => count($movements)];
             }
-            if ($unreconciled) continue;
+            if ($invalid) continue;
             $target = collect($wallets)->firstWhere('currency_code', 'AED') ?: $wallets[0];
-            $credits = $debits = Decimal::zero();
+            $credits = $debits = $openingBalance = Decimal::zero();
             $allMovements = [];
             foreach ($wallets as $wallet) {
                 $code = strtoupper($wallet['currency_code'] ?: 'USD');
                 if (!in_array($code, ['USD', 'AED'], true)) { $this->conflict('wallets', $wallet, 'unknown_currency'); continue; }
                 $movements = $this->children('wallet_movements', 'wallet_id', $wallet['id']);
-                $oldCredit = $oldDebit = $newCredit = $newDebit = Decimal::zero();
+                $newMovementCredit = $newMovementDebit = Decimal::zero();
                 foreach ($movements as $movement) {
-                    if ($movement['currency_code'] !== $code || (int) $movement['user_id'] !== (int) $wallet['user_id']) {
-                        $this->conflict('wallet_movements', $movement, 'wallet_owner_or_currency_mismatch'); continue;
-                    }
-                    $amount = (string) $movement['amount'];
                     if ($code === 'USD') {
                         $this->money('wallet_movements', $movement, ['amount']);
                         if ($movement['source_type'] === \App\Models\Expense::class) {
@@ -482,22 +495,26 @@ class UaeFinanceConversion
                         $this->set('wallet_movements', $movement, 'exchange_rate', self::RATE, 'fixed conversion rate');
                     }
                     $newAmount = $this->value('wallet_movements', $movement, 'amount');
-                    if ($movement['direction'] === 'credit') { $oldCredit = $oldCredit->plus($amount); $newCredit = $newCredit->plus($newAmount); }
-                    elseif ($movement['direction'] === 'debit') { $oldDebit = $oldDebit->plus($amount); $newDebit = $newDebit->plus($newAmount); }
-                    else $this->conflict('wallet_movements', $movement, 'unknown_direction');
+                    if ($movement['direction'] === 'credit') $newMovementCredit = $newMovementCredit->plus($newAmount);
+                    else $newMovementDebit = $newMovementDebit->plus($newAmount);
                     $this->set('wallet_movements', $movement, 'wallet_id', $target['id'], 'unified AED wallet');
                     $allMovements[] = $movement;
                 }
-                // Do not guess a missing opening cash balance.
-                if (!$this->equal($oldCredit, $wallet['credit']) || !$this->equal($oldDebit, $wallet['debit'])) {
-                    $this->conflict('wallets', $wallet, 'cashbox_totals_do_not_match_recorded_movements');
-                }
-                $credits = $credits->plus($newCredit);
-                $debits = $debits->plus($newDebit);
+                $newWalletCredit = $code === 'USD'
+                    ? Decimal::of((string) $wallet['credit'])->multipliedBy(self::RATE)->toScale(2, RoundingMode::HALF_UP)
+                    : Decimal::of((string) $wallet['credit']);
+                $newWalletDebit = $code === 'USD'
+                    ? Decimal::of((string) $wallet['debit'])->multipliedBy(self::RATE)->toScale(2, RoundingMode::HALF_UP)
+                    : Decimal::of((string) $wallet['debit']);
+                $credits = $credits->plus($newWalletCredit);
+                $debits = $debits->plus($newWalletDebit);
+                $openingBalance = $openingBalance
+                    ->plus($newWalletCredit)->minus($newWalletDebit)
+                    ->minus($newMovementCredit)->plus($newMovementDebit);
                 if ($wallet['id'] !== $target['id']) $this->remove('wallets', $wallet);
             }
             usort($allMovements, fn ($a, $b) => [$a['created_at'], $a['id']] <=> [$b['created_at'], $b['id']]);
-            $balance = Decimal::zero();
+            $balance = $openingBalance;
             foreach ($allMovements as $movement) {
                 $amount = $this->value('wallet_movements', $movement, 'amount');
                 $balance = $movement['direction'] === 'credit' ? $balance->plus($amount) : $balance->minus($amount);
@@ -506,6 +523,10 @@ class UaeFinanceConversion
             $this->set('wallets', $target, 'currency_code', 'AED', 'unified UAE cashbox');
             $this->set('wallets', $target, 'credit', (string) $credits->toScale(2, RoundingMode::HALF_UP), 'sum of converted credits');
             $this->set('wallets', $target, 'debit', (string) $debits->toScale(2, RoundingMode::HALF_UP), 'sum of converted debits');
+            foreach (['credit', 'debit'] as $field) {
+                $key = 'wallets:' . $target['id'] . ':' . $field;
+                if (isset($this->changes[$key])) $this->changes[$key]['opening_balances'] = array_values($openingRows);
+            }
         }
     }
 
@@ -566,7 +587,10 @@ class UaeFinanceConversion
             $source = $table ? ($this->data[$table][$row['source_id']] ?? null) : null;
             if ($table === 'orders' && $source && !$this->uae($source['seller_id'])) $this->conflict('wallet_movements', $row, 'cross_country_order_posting');
             if ($table === 'website_orders' && $source && (int) $source['country_id'] !== Country::UAE) $this->conflict('wallet_movements', $row, 'cross_country_website_posting');
-            if ($table === 'users' && $source && !$this->uae($source['id'])) $this->conflict('wallet_movements', $row, 'cross_country_sales_closure');
+            $verifiedCrossCountry = $this->verifiedCrossCountryTransfer($row);
+            if ($table === 'users' && $source && !$this->uae($source['id']) && !$verifiedCrossCountry) {
+                $this->conflict('wallet_movements', $row, 'cross_country_sales_closure_needs_matching_transfer');
+            }
             if (!$table && !empty($row['source_type'])) $this->conflict('wallet_movements', $row, 'unrecognized_financial_source');
             $amountField = ['order_payments' => 'pay_amount', 'client_debit_payments' => 'amount',
                 'debit_payments' => 'amount', 'debits' => 'amount', 'expenses' => 'amount'][$table] ?? null;
@@ -590,10 +614,33 @@ class UaeFinanceConversion
             }
             if (!empty($row['exchange_group'])) {
                 foreach ($this->childrenByValue('wallet_movements', 'exchange_group', $row['exchange_group']) as $other) {
-                    if (!$this->uae($other['user_id'])) $this->conflict('wallet_movements', $row, 'cross_country_transfer_group');
+                    if (!$this->uae($other['user_id']) && !$verifiedCrossCountry) {
+                        $this->conflict('wallet_movements', $row, 'cross_country_transfer_group_needs_review');
+                    }
                 }
             }
         }
+    }
+
+    private function verifiedCrossCountryTransfer(array $row): bool
+    {
+        if (empty($row['exchange_group']) || ($row['source_type'] ?? null) !== \App\Models\User::class
+            || !$this->uae($row['user_id'])) return false;
+        $peers = $this->childrenByValue('wallet_movements', 'exchange_group', $row['exchange_group']);
+        if (count($peers) !== 2) return false;
+        $other = collect($peers)->first(fn ($peer) => (int) $peer['id'] !== (int) $row['id']);
+        if (!$other || $this->uae($other['user_id'])
+            || ($other['source_type'] ?? null) !== \App\Models\User::class
+            || (int) $row['source_id'] !== (int) $other['user_id']
+            || (int) $other['source_id'] !== (int) $other['user_id']
+            || strtoupper((string) $row['currency_code']) !== 'USD'
+            || strtoupper((string) $other['currency_code']) !== 'USD'
+            || $row['direction'] === $other['direction']
+            || !in_array($row['direction'], ['credit', 'debit'], true)
+            || !$this->equal($row['amount'], $other['amount'])
+            || !$this->equal($row['base_amount'], $other['base_amount'])) return false;
+        $peerWallet = $this->data['wallets'][$other['wallet_id']] ?? null;
+        return $peerWallet && (int) $peerWallet['user_id'] === (int) $other['user_id'];
     }
 
     private function set(string $table, array $row, string $field, $value, string $evidence): void

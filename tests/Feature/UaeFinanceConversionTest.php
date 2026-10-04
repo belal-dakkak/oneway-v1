@@ -46,7 +46,7 @@ class UaeFinanceConversionTest extends TestCase
             'curr_type' => 'USD', 'curr_rate' => 1, 'total_price' => 50, 'paid_price' => 0, 'remain_price' => 50]);
         $legacy = ['sha256' => str_repeat('a', 64), 'accounts' => [['account_id' => $account, 'shop_id' => $seller->id,
             'customer_id' => $buyer->id, 'source_currency' => 'USD', 'source_amount' => '80.0000']]];
-        return compact('seller', 'buyer', 'order', 'payment', 'account', 'aed', 'log', 'wallet', 'foreignOrder', 'legacy');
+        return compact('seller', 'buyer', 'foreign', 'order', 'payment', 'account', 'aed', 'log', 'wallet', 'foreignOrder', 'legacy');
     }
 
     public function test_signed_conversion_converts_related_finance_once_and_preserves_foreign_rows(): void
@@ -84,7 +84,7 @@ class UaeFinanceConversionTest extends TestCase
         $this->assertDatabaseHas('orders', ['id' => $f['order'], 'total_price' => 100]);
     }
 
-    public function test_tampered_report_and_unreconciled_cashbox_are_rejected(): void
+    public function test_tampered_report_is_rejected_and_opening_cashbox_balance_is_converted(): void
     {
         $f = $this->fixture();
         $service = app(UaeFinanceConversion::class);
@@ -94,18 +94,65 @@ class UaeFinanceConversionTest extends TestCase
         catch (\RuntimeException $e) { $this->assertStringContainsString('signature', $e->getMessage()); }
         DB::table('wallets')->where('id', $f['wallet']->id)->update(['credit' => 30]);
         $report = $service->report($f['legacy']);
-        $this->assertContains('cashbox_totals_do_not_match_recorded_movements', array_column($report['conflicts'], 'reason'));
-        $walletConflict = collect($report['conflicts'])->firstWhere('reason', 'cashbox_totals_do_not_match_recorded_movements');
-        $this->assertEquals(30, $walletConflict['context']['record']['credit']);
-        $this->assertEquals(20, $walletConflict['context']['recorded_credit']);
-        $this->assertEquals(10, $walletConflict['context']['unmatched_credit']);
-        $this->assertSame(1, $walletConflict['context']['movement_count']);
-        $this->assertSame(2, (int) $walletConflict['context']['owners']['user_id']['country_id']);
+        $this->assertSame([], $report['conflicts']);
+        $walletChange = collect($report['changes'])->first(fn ($change) => $change['table'] === 'wallets'
+            && $change['id'] === $f['wallet']->id && $change['field'] === 'credit');
+        $this->assertSame('110.25', $walletChange['after']);
+        $this->assertEquals(10, $walletChange['opening_balances'][0]['opening_credit']);
+        $movementBalance = collect($report['changes'])->first(fn ($change) => $change['table'] === 'wallet_movements'
+            && $change['field'] === 'balance_after');
+        $this->assertSame('110.25', $movementBalance['after']);
+
+        // A negative opening component is impossible and still blocks the batch.
+        DB::table('wallets')->where('id', $f['wallet']->id)->update(['credit' => 10]);
+        $report = $service->report($f['legacy']);
+        $this->assertContains('cashbox_movement_totals_exceed_wallet_totals', array_column($report['conflicts'], 'reason'));
         $this->assertSame([], array_values(array_filter($report['changes'], fn ($change) =>
             ($change['table'] === 'wallets' && $change['id'] === $f['wallet']->id) || $change['table'] === 'wallet_movements')));
         try { $service->apply($report); $this->fail('Expected conflict rejection'); }
         catch (\RuntimeException $e) { $this->assertStringContainsString('conflicts', $e->getMessage()); }
         $this->assertDatabaseCount('finance_conversion_changes', 0);
+    }
+
+    public function test_legacy_wallet_without_movements_is_converted_as_an_opening_balance(): void
+    {
+        $f = $this->fixture();
+        DB::table('wallet_movements')->delete();
+        DB::table('wallets')->where('id', $f['wallet']->id)->update(['credit' => 32.65, 'debit' => 2]);
+        $service = app(UaeFinanceConversion::class);
+        $report = $service->report($f['legacy']);
+        $this->assertSame([], $report['conflicts']);
+        $service->apply($report);
+        $this->assertDatabaseHas('wallets', ['id' => $f['wallet']->id, 'currency_code' => 'AED',
+            'credit' => 119.99, 'debit' => 7.35]);
+        $this->assertDatabaseCount('wallet_movements', 0);
+    }
+
+    public function test_verified_cross_country_closure_converts_only_the_uae_side(): void
+    {
+        $f = $this->fixture();
+        $foreignWallet = DB::table('wallets')->where('user_id', $f['foreign']->id)->first();
+        DB::table('wallets')->where('id', $f['wallet']->id)->update(['credit' => 25]);
+        DB::table('wallets')->where('id', $foreignWallet->id)->update(['debit' => 5]);
+        $group = '11111111-2222-3333-4444-555555555555';
+        $common = ['currency_code' => 'USD', 'amount' => 5, 'exchange_rate' => 1, 'base_amount' => 5,
+            'source_type' => User::class, 'source_id' => $f['foreign']->id, 'exchange_group' => $group,
+            'created_at' => now(), 'updated_at' => now()];
+        $foreignMovement = DB::table('wallet_movements')->insertGetId($common + ['wallet_id' => $foreignWallet->id,
+            'user_id' => $f['foreign']->id, 'direction' => 'debit', 'balance_after' => -5,
+            'idempotency_key' => 'foreign-closure-out']);
+        $uaeMovement = DB::table('wallet_movements')->insertGetId($common + ['wallet_id' => $f['wallet']->id,
+            'user_id' => $f['seller']->id, 'direction' => 'credit', 'balance_after' => 25,
+            'idempotency_key' => 'foreign-closure-in']);
+        $service = app(UaeFinanceConversion::class);
+        $report = $service->report($f['legacy']);
+        $this->assertSame([], $report['conflicts']);
+        $service->apply($report);
+        $this->assertDatabaseHas('wallet_movements', ['id' => $uaeMovement, 'currency_code' => 'AED',
+            'amount' => 18.38, 'base_amount' => 5]);
+        $this->assertDatabaseHas('wallet_movements', ['id' => $foreignMovement, 'currency_code' => 'USD',
+            'amount' => 5, 'base_amount' => 5]);
+        $this->assertDatabaseHas('users', ['id' => $f['foreign']->id, 'country_id' => 4]);
     }
 
     public function test_local_expense_amount_is_preserved_and_original_dollar_posting_is_corrected(): void
