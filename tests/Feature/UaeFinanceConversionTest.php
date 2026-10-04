@@ -332,12 +332,16 @@ class UaeFinanceConversionTest extends TestCase
     {
         $f = $this->mixedRefundFixture();
         $service = app(UaeFinanceConversion::class);
-        foreach ([['amount' => -89], ['base_amount' => -25], ['client_refund_id' => null]] as $invalid) {
+        foreach ([[['amount' => -89], 'later_log_amount_or_currency_is_not_verified_aed'],
+            [['base_amount' => -25], 'later_log_amount_or_currency_is_not_verified_aed'],
+            [['client_refund_id' => null], 'client_refund_link_or_identity_mismatch']] as [$invalid, $expectedReason]) {
             $id = $f['modern_logs'][0];
             $original = (array) DB::table('client_debit_logs')->where('id', $id)->first();
             DB::table('client_debit_logs')->where('id', $id)->update($invalid);
             $report = $service->report($f['legacy']);
             $this->assertContains('original_debt_snapshot_missing_or_balance_changed', array_column($report['conflicts'], 'reason'));
+            $conflict = collect($report['conflicts'])->firstWhere('reason', 'original_debt_snapshot_missing_or_balance_changed');
+            $this->assertSame($expectedReason, $conflict['context']['refund_reconciliation']['reason']);
             try { $service->apply($report); $this->fail('Expected unresolved evidence to block'); }
             catch (\RuntimeException $e) { $this->assertStringContainsString('conflicts', $e->getMessage()); }
             $this->assertDatabaseHas('client_debits', ['id' => $f['account'], 'amount' => -82.04]);

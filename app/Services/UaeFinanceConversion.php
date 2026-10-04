@@ -21,6 +21,7 @@ class UaeFinanceConversion
     private array $changes = [];
     private array $conflicts = [];
     private array $childIndex = [];
+    private array $clientReconciliationFailures = [];
     private string $snapshotFingerprint = '';
 
     // Retain only fields used by the conversion. Every original field is still
@@ -41,7 +42,7 @@ class UaeFinanceConversion
 
     public function report(?array $legacy = null, bool $lock = false): array
     {
-        $this->changes = $this->conflicts = $this->childIndex = [];
+        $this->changes = $this->conflicts = $this->childIndex = $this->clientReconciliationFailures = [];
         $this->data = []; // Release the preview snapshot before revalidation on this instance.
         $this->data = $this->snapshot($lock);
         $fingerprint = $this->snapshotFingerprint;
@@ -58,7 +59,7 @@ class UaeFinanceConversion
         $report = ['version' => self::KEY, 'rate' => self::RATE, 'fingerprint' => $fingerprint,
             'legacy_source' => $legacy, 'conflicts' => $this->conflicts, 'changes' => array_values($this->changes)];
         $report['signature'] = $this->signature($report);
-        $this->data = $this->childIndex = $this->changes = [];
+        $this->data = $this->childIndex = $this->changes = $this->clientReconciliationFailures = [];
         return $report;
     }
 
@@ -208,6 +209,7 @@ class UaeFinanceConversion
                             $this->children('client_debit_logs', 'client_debit_id', $account['id'])),
                         'account_payments' => array_map(fn ($row) => $this->diagnosticRow($row),
                             $this->children('client_debit_payments', 'client_debit_id', $account['id'])),
+                        'refund_reconciliation' => $this->clientReconciliationFailures[$account['id']] ?? null,
                     ]); continue;
                 }
                 foreach ($this->children('client_debit_logs', 'client_debit_id', $account['id']) as $log) {
@@ -258,56 +260,109 @@ class UaeFinanceConversion
     /** Only recover a changed snapshot when every difference is a verified AED refund. */
     private function reconcileLaterAedRefunds(array $account, array $snapshot): ?array
     {
-        if (strtoupper((string) $account['currency_code']) !== 'AED' || $snapshot['source_currency'] !== 'USD'
-            || $this->children('client_debit_payments', 'client_debit_id', $account['id'])) return null;
+        if (strtoupper((string) $account['currency_code']) !== 'AED' || $snapshot['source_currency'] !== 'USD') {
+            return $this->refundReconciliationFailure($account, 'account_or_snapshot_currency_is_not_expected');
+        }
+        if ($this->children('client_debit_payments', 'client_debit_id', $account['id'])) {
+            return $this->refundReconciliationFailure($account, 'account_has_payments');
+        }
 
         $oldTotal = $refundTotal = Decimal::zero();
         $oldOrders = $modern = [];
         $lastOldDate = '';
         foreach ($this->children('client_debit_logs', 'client_debit_id', $account['id']) as $log) {
-            if (strpos($log['note'] ?? '', UaeDebtBalanceConversion::MARKER) === 0) return null;
+            if (strpos($log['note'] ?? '', UaeDebtBalanceConversion::MARKER) === 0) {
+                return $this->refundReconciliationFailure($account, 'balance_only_conversion_was_already_applied');
+            }
             if (!$this->usdPayment($log, 'amount')) { $modern[] = $log; continue; }
             if (empty($log['order_id']) || !empty($log['client_refund_id']) || !empty($log['client_debit_payment_id'])
-                || !Decimal::of((string) $log['amount'])->isGreaterThan(0) || empty($log['created_at'])) return null;
+                || !Decimal::of((string) $log['amount'])->isGreaterThan(0) || empty($log['created_at'])) {
+                return $this->refundReconciliationFailure($account, 'legacy_log_shape_is_not_supported', ['log' => $this->diagnosticRow($log)]);
+            }
             $order = $this->data['orders'][$log['order_id']] ?? null;
             if (!$order || (int) $order['seller_id'] !== (int) $account['creditor_id']
-                || (int) $order['buyer_id'] !== (int) $account['debtor_id']) return null;
+                || (int) $order['buyer_id'] !== (int) $account['debtor_id']) {
+                return $this->refundReconciliationFailure($account, 'legacy_log_order_identity_mismatch', [
+                    'log' => $this->diagnosticRow($log), 'order' => $order ? $this->diagnosticRow($order) : null]);
+            }
             $oldOrders[$order['id']] = true;
             $oldTotal = $oldTotal->plus((string) $log['amount']);
             $lastOldDate = max($lastOldDate, $log['created_at']);
         }
-        if (!$modern || !$this->equal($oldTotal, $snapshot['source_amount'])) return null;
+        if (!$modern) return $this->refundReconciliationFailure($account, 'no_later_aed_refund_logs');
+        if (!$this->equal($oldTotal, $snapshot['source_amount'])) {
+            return $this->refundReconciliationFailure($account, 'legacy_logs_do_not_sum_to_snapshot', [
+                'legacy_log_total' => (string) $oldTotal, 'snapshot_amount' => $snapshot['source_amount']]);
+        }
         $preserved = $refundIds = $sourceRefundIds = [];
         foreach ($modern as $log) {
             $amount = Decimal::of((string) $log['amount']);
             if (strtoupper((string) $log['currency_code']) !== 'AED' || !$amount->isLessThan(0)
                 || !$this->equal($log['exchange_rate'] ?? 0, self::RATE)
-                || !$this->equal($amount->dividedBy(self::RATE, 4, RoundingMode::HALF_UP), $log['base_amount'] ?? 0)
-                || empty($log['created_at']) || $log['created_at'] <= $lastOldDate
-                || !empty($log['order_id']) || !empty($log['client_debit_payment_id'])) return null;
+                || !$this->equal($amount->dividedBy(self::RATE, 4, RoundingMode::HALF_UP), $log['base_amount'] ?? 0)) {
+                return $this->refundReconciliationFailure($account, 'later_log_amount_or_currency_is_not_verified_aed', ['log' => $this->diagnosticRow($log)]);
+            }
+            if (empty($log['created_at']) || $log['created_at'] <= $lastOldDate
+                || !empty($log['order_id']) || !empty($log['client_debit_payment_id'])) {
+                return $this->refundReconciliationFailure($account, 'later_refund_log_shape_or_date_is_invalid', ['log' => $this->diagnosticRow($log)]);
+            }
             $clientRefund = $this->data['client_refunds'][$log['client_refund_id'] ?? 0] ?? null;
             if (!$clientRefund || isset($refundIds[$clientRefund['id']])
                 || (int) $clientRefund['client_debit_id'] !== (int) $account['id']
-                || (int) $clientRefund['client_id'] !== (int) $account['debtor_id']) return null;
+                || (int) $clientRefund['client_id'] !== (int) $account['debtor_id']) {
+                return $this->refundReconciliationFailure($account, 'client_refund_link_or_identity_mismatch', [
+                    'log' => $this->diagnosticRow($log), 'client_refund' => $clientRefund ? $this->diagnosticRow($clientRefund) : null]);
+            }
             $refund = $this->data['refunds'][$clientRefund['refund_id']] ?? null;
             $item = $refund ? ($this->data['order_items'][$refund['order_item_id']] ?? null) : null;
             $order = $item ? ($this->data['orders'][$item['order_id']] ?? null) : null;
-            if (!$refund || isset($sourceRefundIds[$refund['id']]) || !$order || !isset($oldOrders[$order['id']])
-                || strtoupper((string) $order['curr_type']) !== 'AED'
-                || strtoupper((string) $refund['currency_code']) !== 'AED'
-                || !$this->equal($refund['total_price_paid'] ?? 0, $amount->negated())) return null;
+            if (!$refund || !$item || !$order) {
+                return $this->refundReconciliationFailure($account, 'refund_order_chain_is_missing', [
+                    'client_refund' => $this->diagnosticRow($clientRefund),
+                    'refund' => $refund ? $this->diagnosticRow($refund) : null]);
+            }
+            if (isset($sourceRefundIds[$refund['id']])) {
+                return $this->refundReconciliationFailure($account, 'same_refund_is_linked_more_than_once', ['refund_id' => $refund['id']]);
+            }
+            if (!isset($oldOrders[$order['id']])) {
+                return $this->refundReconciliationFailure($account, 'refund_does_not_belong_to_a_snapshot_order', [
+                    'refund' => $this->diagnosticRow($refund), 'order' => $this->diagnosticRow($order)]);
+            }
+            if (strtoupper((string) $order['curr_type']) !== 'AED' || strtoupper((string) $refund['currency_code']) !== 'AED') {
+                return $this->refundReconciliationFailure($account, 'refund_or_order_currency_is_not_aed', [
+                    'refund' => $this->diagnosticRow($refund), 'order' => $this->diagnosticRow($order)]);
+            }
+            if (!$this->equal($refund['total_price_paid'] ?? 0, $amount->negated())) {
+                return $this->refundReconciliationFailure($account, 'refund_amount_does_not_match_ledger', [
+                    'log' => $this->diagnosticRow($log), 'refund' => $this->diagnosticRow($refund)]);
+            }
             $refundTotal = $refundTotal->plus($amount);
             $preserved[$log['id']] = true;
             $refundIds[$clientRefund['id']] = true;
             $sourceRefundIds[$refund['id']] = true;
         }
-        if (count($refundIds) !== count($this->children('client_refunds', 'client_debit_id', $account['id']))
-            || !$this->equal($oldTotal->plus($refundTotal), $account['amount'])) return null;
+        if (count($refundIds) !== count($this->children('client_refunds', 'client_debit_id', $account['id']))) {
+            return $this->refundReconciliationFailure($account, 'not_all_account_refunds_were_verified', [
+                'verified_refunds' => count($refundIds),
+                'account_refunds' => count($this->children('client_refunds', 'client_debit_id', $account['id']))]);
+        }
+        if (!$this->equal($oldTotal->plus($refundTotal), $account['amount'])) {
+            return $this->refundReconciliationFailure($account, 'refunds_do_not_explain_current_balance', [
+                'legacy_log_total' => (string) $oldTotal, 'later_refund_total' => (string) $refundTotal,
+                'expected_current_balance' => (string) $oldTotal->plus($refundTotal),
+                'actual_current_balance' => $account['amount']]);
+        }
         $converted = $oldTotal->multipliedBy(self::RATE)->toScale(2, RoundingMode::HALF_UP);
         return ['original_usd_balance' => (string) $oldTotal, 'converted_snapshot_aed' => (string) $converted,
             'preserved_refunds_aed' => (string) $refundTotal, 'preserved_log_ids' => $preserved,
             'client_refund_ids' => array_keys($refundIds),
             'target_amount' => (string) $converted->plus($refundTotal)->toScale(2, RoundingMode::HALF_UP)];
+    }
+
+    private function refundReconciliationFailure(array $account, string $reason, array $context = []): ?array
+    {
+        $this->clientReconciliationFailures[$account['id']] = ['reason' => $reason] + $context;
+        return null;
     }
 
     private function merchants(): void
