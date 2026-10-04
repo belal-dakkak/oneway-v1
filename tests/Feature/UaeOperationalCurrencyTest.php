@@ -70,6 +70,24 @@ class UaeOperationalCurrencyTest extends TestCase
         $this->assertDatabaseCount('debit_payments', 0);
     }
 
+    public function test_cross_country_merchant_transactions_use_destination_shop_currency(): void
+    {
+        $uaeShop = $this->user();
+        $foreignShop = $this->user(User::ROLE_SHOP, 1);
+        $uaeMerchant = $this->user(User::ROLE_MERCHANT);
+        $foreignMerchant = $this->user(User::ROLE_MERCHANT, 1);
+
+        $toUae = MerchantDebit::create(['creditor_id' => $foreignMerchant->id,
+            'debtor_id' => $uaeShop->id, 'amount' => 10]);
+        $this->assertSame('AED', $toUae->currency_code);
+        $this->assertEquals(36.75, $toUae->amount);
+
+        $toForeign = MerchantDebit::create(['creditor_id' => $uaeMerchant->id,
+            'debtor_id' => $foreignShop->id, 'amount' => 10]);
+        $this->assertSame('USD', $toForeign->currency_code);
+        $this->assertEquals(10, $toForeign->amount);
+    }
+
     public function test_uae_website_and_admin_options_only_offer_dirhams(): void
     {
         $currencies = app(CurrencyService::class);

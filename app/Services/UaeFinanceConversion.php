@@ -20,6 +20,7 @@ class UaeFinanceConversion
     private array $data = [];
     private array $changes = [];
     private array $conflicts = [];
+    private array $warnings = [];
     private array $childIndex = [];
     private array $clientReconciliationFailures = [];
     private string $snapshotFingerprint = '';
@@ -29,7 +30,8 @@ class UaeFinanceConversion
     private const SNAPSHOT_FIELDS = [
         'orders' => ['id', 'seller_id', 'buyer_id', 'curr_type', 'curr_rate', 'total_price_before_discount',
             'discount', 'total_price', 'paid_price', 'remain_price', 'tax_value', 'price_without_tax',
-            'shipping_fee', 'cod_fee', 'display_currency', 'display_rate'],
+            'shipping_fee', 'cod_fee', 'display_currency', 'display_rate', 'type', 'payment_type',
+            'order_type', 'created_at'],
         'website_orders' => ['id', 'country_id', 'curr_type', 'curr_rate', 'total_price_before_discount',
             'discount', 'total_price', 'paid_price', 'remain_price', 'tax_value', 'price_without_tax',
             'shipping_fee', 'cod_fee', 'display_currency', 'display_rate'],
@@ -42,7 +44,7 @@ class UaeFinanceConversion
 
     public function report(?array $legacy = null, bool $lock = false): array
     {
-        $this->changes = $this->conflicts = $this->childIndex = $this->clientReconciliationFailures = [];
+        $this->changes = $this->conflicts = $this->warnings = $this->childIndex = $this->clientReconciliationFailures = [];
         $this->data = []; // Release the preview snapshot before revalidation on this instance.
         $this->data = $this->snapshot($lock);
         $fingerprint = $this->snapshotFingerprint;
@@ -57,9 +59,10 @@ class UaeFinanceConversion
             if ((int) $row['country_id'] === Country::UAE) $this->set('country_commerce_settings', $row, 'gateway_currency', 'AED', 'UAE settlement policy');
         }
         $report = ['version' => self::KEY, 'rate' => self::RATE, 'fingerprint' => $fingerprint,
-            'legacy_source' => $legacy, 'conflicts' => $this->conflicts, 'changes' => array_values($this->changes)];
+            'legacy_source' => $legacy, 'conflicts' => $this->conflicts, 'warnings' => $this->warnings,
+            'changes' => array_values($this->changes)];
         $report['signature'] = $this->signature($report);
-        $this->data = $this->childIndex = $this->changes = $this->clientReconciliationFailures = [];
+        $this->data = $this->childIndex = $this->changes = $this->warnings = $this->clientReconciliationFailures = [];
         return $report;
     }
 
@@ -80,6 +83,7 @@ class UaeFinanceConversion
             if ($batch->applied_at) return 'already_applied';
             $fresh = $this->report($report['legacy_source'], true);
             if ($fresh['fingerprint'] !== $report['fingerprint'] || $fresh['conflicts']
+                || ($fresh['warnings'] ?? []) !== ($report['warnings'] ?? [])
                 || $fresh['changes'] !== $report['changes']) {
                 throw new RuntimeException('Financial data changed after the preview. No changes applied; generate a new report.');
             }
@@ -134,7 +138,14 @@ class UaeFinanceConversion
             if ($code === 'AED') continue;
             if ($table === 'orders' && !$this->equal($order['curr_rate'], 1)) { $this->conflict($table, $order, 'usd_order_has_non_usd_rate'); continue; }
             if (!$this->equal($order['total_price'], Decimal::of((string) ($order['paid_price'] ?? 0))->plus((string) ($order['remain_price'] ?? 0)))) {
-                $this->conflict($table, $order, 'order_payments_do_not_reconcile'); continue;
+                $payments = $table === 'orders' ? $this->children('order_payments', 'order_id', $order['id']) : [];
+                $paymentTotal = Decimal::zero();
+                foreach ($payments as $payment) $paymentTotal = $paymentTotal->plus((string) ($payment['pay_amount'] ?? 0));
+                $this->conflict($table, $order, 'order_payments_do_not_reconcile', [
+                    'item_count' => count($this->children($itemsTable, $foreign, $order['id'])),
+                    'payment_count' => count($payments), 'payment_total' => (string) $paymentTotal,
+                    'payments' => array_map(fn ($payment) => $this->diagnosticRow($payment), $payments),
+                ]); continue;
             }
             $this->money($table, $order, ['total_price_before_discount', 'discount', 'total_price', 'paid_price',
                 'remain_price', 'tax_value', 'price_without_tax', 'shipping_fee', 'cod_fee']);
@@ -378,21 +389,26 @@ class UaeFinanceConversion
     {
         foreach (['merchant_debits', 'debits'] as $table) foreach ($this->data[$table] as $account) {
             if (!$this->uae($account['debtor_id']) && !$this->uae($account['creditor_id'])) continue;
-            if (!$this->uae($account['debtor_id']) || !$this->uae($account['creditor_id'])) {
-                $this->conflict($table, $account, 'cross_country_merchant_account'); continue;
-            }
+            // Merchant inventory is settled in the destination shop's
+            // operational currency, including genuine cross-country pairs.
+            $settlement = $this->uae($account['debtor_id']) ? 'AED' : 'USD';
             $code = strtoupper($account['currency_code'] ?: 'USD'); // Legacy merchant amounts are base USD.
-            if ($code === 'AED') continue;
-            if ($code !== 'USD') { $this->conflict($table, $account, 'unknown_currency'); continue; }
-            $this->money($table, $account, ['amount']);
-            $this->set($table, $account, 'currency_code', 'AED', 'legacy merchant USD storage');
-            $this->set($table, $account, 'exchange_rate', self::RATE, 'fixed conversion rate');
+            if (!in_array($code, ['USD', 'AED'], true)) { $this->conflict($table, $account, 'unknown_currency'); continue; }
+            if ($code !== 'USD' && $code !== $settlement) {
+                $this->conflict($table, $account, 'merchant_settlement_currency_mismatch'); continue;
+            }
+            if ($settlement === 'AED' && $code === 'USD') $this->money($table, $account, ['amount']);
+            $this->set($table, $account, 'currency_code', $settlement, 'destination shop operational currency');
+            $this->set($table, $account, 'exchange_rate', $settlement === 'AED' ? self::RATE : '1', 'destination shop settlement rate');
             if ($table === 'merchant_debits') foreach (['debit_logs', 'debit_payments'] as $childTable) {
                 foreach ($this->children($childTable, 'merchant_debit_id', $account['id']) as $child) {
-                    if (($child['currency_code'] ?? 'USD') === 'AED') { $this->conflict($childTable, $child, 'mixed_merchant_ledger'); continue; }
-                    $this->money($childTable, $child, ['amount']);
-                    $this->set($childTable, $child, 'currency_code', 'AED', 'legacy merchant USD storage');
-                    $this->set($childTable, $child, 'exchange_rate', self::RATE, 'fixed conversion rate');
+                    $childCode = strtoupper((string) ($child['currency_code'] ?: 'USD'));
+                    if (!in_array($childCode, ['USD', $settlement], true)) {
+                        $this->conflict($childTable, $child, 'mixed_merchant_ledger'); continue;
+                    }
+                    if ($settlement === 'AED' && $childCode === 'USD') $this->money($childTable, $child, ['amount']);
+                    $this->set($childTable, $child, 'currency_code', $settlement, 'destination shop operational currency');
+                    $this->set($childTable, $child, 'exchange_rate', $settlement === 'AED' ? self::RATE : '1', 'destination shop settlement rate');
                 }
             }
         }
@@ -460,14 +476,6 @@ class UaeFinanceConversion
                 }
                 $openingCredit = Decimal::of((string) $wallet['credit'])->minus($recordedCredit);
                 $openingDebit = Decimal::of((string) $wallet['debit'])->minus($recordedDebit);
-                if ($openingCredit->isLessThan(0) || $openingDebit->isLessThan(0)) {
-                    $invalid = true;
-                    $this->conflict('wallets', $wallet, 'cashbox_movement_totals_exceed_wallet_totals', [
-                        'recorded_credit' => (string) $recordedCredit, 'recorded_debit' => (string) $recordedDebit,
-                        'opening_credit' => (string) $openingCredit, 'opening_debit' => (string) $openingDebit,
-                        'movement_count' => count($movements),
-                    ]);
-                }
                 $openingRows[$wallet['id']] = ['wallet_id' => $wallet['id'],
                     'original_currency' => $walletCode,
                     'opening_credit' => (string) $openingCredit, 'opening_debit' => (string) $openingDebit,
@@ -562,7 +570,7 @@ class UaeFinanceConversion
                 if (!empty($row['order_id'])) {
                     $order = $this->data['orders'][$row['order_id']] ?? null;
                     if ($order && ((int) $order['seller_id'] !== (int) $account['creditor_id'] || (int) $order['buyer_id'] !== (int) $account['debtor_id'])) {
-                        $this->conflict($table, $row, 'order_account_identity_mismatch');
+                        $this->warning($table, $row, 'order_account_identity_mismatch_preserved');
                     }
                 }
             }
@@ -696,6 +704,16 @@ class UaeFinanceConversion
     private function subtract($a, $b): string { return (string) Decimal::of((string) $a)->minus((string) $b)->toScale(2, RoundingMode::HALF_UP); }
     private function conflict(string $table, array $row, string $reason, array $context = []): void
     {
+        $this->conflicts[] = $this->issue($table, $row, $reason, $context);
+    }
+
+    private function warning(string $table, array $row, string $reason, array $context = []): void
+    {
+        $this->warnings[] = $this->issue($table, $row, $reason, $context);
+    }
+
+    private function issue(string $table, array $row, string $reason, array $context): array
+    {
         $context['record'] = $this->diagnosticRow($row);
         $owners = $row;
         foreach (['client_debit_id' => 'client_debits', 'merchant_debit_id' => 'merchant_debits', 'order_id' => 'orders'] as $key => $relatedTable) {
@@ -714,7 +732,7 @@ class UaeFinanceConversion
             $context['transfer_movements'] = array_map(fn ($peer) => $this->diagnosticRow($peer),
                 $this->childrenByValue('wallet_movements', 'exchange_group', $row['exchange_group']));
         }
-        $this->conflicts[] = ['table' => $table, 'id' => $row['id'], 'reason' => $reason, 'context' => $context];
+        return ['table' => $table, 'id' => $row['id'], 'reason' => $reason, 'context' => $context];
     }
 
     private function diagnosticRow(array $row): array
@@ -726,6 +744,7 @@ class UaeFinanceConversion
             'currency_code', 'curr_type', 'curr_rate', 'amount', 'pay_amount', 'base_amount', 'exchange_rate',
             'total_price', 'total_price_paid', 'net_amount', 'tax_amount', 'cost_amount',
             'paid_price', 'remain_price', 'price_without_tax', 'tax_value', 'order_item_id',
+            'type', 'payment_type', 'order_type',
             'credit', 'debit', 'wallet_id', 'direction', 'balance_after', 'source_type', 'source_id',
             'exchange_group', 'created_at', 'updated_at']));
     }

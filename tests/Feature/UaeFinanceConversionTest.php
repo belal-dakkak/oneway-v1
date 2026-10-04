@@ -103,15 +103,14 @@ class UaeFinanceConversionTest extends TestCase
             && $change['field'] === 'balance_after');
         $this->assertSame('110.25', $movementBalance['after']);
 
-        // A negative opening component is impossible and still blocks the batch.
+        // Signed legacy corrections remain part of the documented opening balance.
         DB::table('wallets')->where('id', $f['wallet']->id)->update(['credit' => 10]);
         $report = $service->report($f['legacy']);
-        $this->assertContains('cashbox_movement_totals_exceed_wallet_totals', array_column($report['conflicts'], 'reason'));
-        $this->assertSame([], array_values(array_filter($report['changes'], fn ($change) =>
-            ($change['table'] === 'wallets' && $change['id'] === $f['wallet']->id) || $change['table'] === 'wallet_movements')));
-        try { $service->apply($report); $this->fail('Expected conflict rejection'); }
-        catch (\RuntimeException $e) { $this->assertStringContainsString('conflicts', $e->getMessage()); }
-        $this->assertDatabaseCount('finance_conversion_changes', 0);
+        $this->assertSame([], $report['conflicts']);
+        $walletChange = collect($report['changes'])->first(fn ($change) => $change['table'] === 'wallets'
+            && $change['id'] === $f['wallet']->id && $change['field'] === 'credit');
+        $this->assertSame('36.75', $walletChange['after']);
+        $this->assertEquals(-10, $walletChange['opening_balances'][0]['opening_credit']);
     }
 
     public function test_legacy_wallet_without_movements_is_converted_as_an_opening_balance(): void
@@ -421,23 +420,50 @@ class UaeFinanceConversionTest extends TestCase
         }
     }
 
-    public function test_real_cross_country_merchant_account_blocks_application_without_changing_either_country(): void
+    public function test_cross_country_merchant_accounts_use_destination_shop_currency_without_changing_countries(): void
     {
         $f = $this->fixture();
         $merchant = $this->user(1);
         $account = DB::table('merchant_debits')->insertGetId(['creditor_id' => $merchant->id,
             'debtor_id' => $f['seller']->id, 'amount' => 96.80]);
+        $log = DB::table('debit_logs')->insertGetId(['merchant_debit_id' => $account, 'amount' => 6.80,
+            'note' => 'cross-country inventory']);
+        $debit = DB::table('debits')->insertGetId(['creditor_id' => $merchant->id,
+            'debtor_id' => $f['seller']->id, 'amount' => 96.80]);
+        $reverse = DB::table('merchant_debits')->insertGetId(['creditor_id' => $f['seller']->id,
+            'debtor_id' => $merchant->id, 'amount' => 58.25]);
         $service = app(UaeFinanceConversion::class);
         $report = $service->report($f['legacy']);
-        $this->assertContains('cross_country_merchant_account', array_column($report['conflicts'], 'reason'));
-        $this->assertFalse(collect($report['changes'])->contains(fn ($row) => $row['table'] === 'merchant_debits' && $row['id'] === $account));
-        try { $service->apply($report); $this->fail('Cross-country evidence must be resolved first'); }
-        catch (\RuntimeException $e) { $this->assertStringContainsString('conflicts', $e->getMessage()); }
-        $this->assertDatabaseHas('merchant_debits', ['id' => $account, 'amount' => 96.80, 'currency_code' => null]);
+        $this->assertSame([], $report['conflicts']);
+        $service->apply($report);
+        $this->assertDatabaseHas('merchant_debits', ['id' => $account, 'amount' => 355.74,
+            'currency_code' => 'AED', 'exchange_rate' => 3.675]);
+        $this->assertDatabaseHas('debit_logs', ['id' => $log, 'amount' => 24.99,
+            'currency_code' => 'AED', 'exchange_rate' => 3.675]);
+        $this->assertDatabaseHas('debits', ['id' => $debit, 'amount' => 355.74,
+            'currency_code' => 'AED', 'exchange_rate' => 3.675]);
+        $this->assertDatabaseHas('merchant_debits', ['id' => $reverse, 'amount' => 58.25,
+            'currency_code' => 'USD', 'exchange_rate' => 1]);
         $this->assertDatabaseHas('users', ['id' => $merchant->id, 'country_id' => 1]);
         $this->assertDatabaseHas('users', ['id' => $f['seller']->id, 'country_id' => 2]);
-        $this->assertDatabaseHas('orders', ['id' => $f['order'], 'total_price' => 100, 'curr_type' => 'USD']);
-        $this->assertDatabaseCount('finance_conversion_changes', 0);
+    }
+
+    public function test_mismatched_historical_order_link_is_reported_without_reassigning_the_customer(): void
+    {
+        $f = $this->fixture();
+        $account = DB::table('client_debits')->insertGetId(['creditor_id' => $f['seller']->id,
+            'debtor_id' => $f['foreign']->id, 'amount' => 0, 'currency_code' => 'AED']);
+        $log = DB::table('client_debit_logs')->insertGetId(['client_debit_id' => $account,
+            'order_id' => $f['order'], 'amount' => 0, 'note' => 'historical mismatched link', 'currency_code' => 'AED',
+            'exchange_rate' => 3.675, 'base_amount' => 0]);
+        $service = app(UaeFinanceConversion::class);
+        $report = $service->report($f['legacy']);
+        $this->assertSame([], $report['conflicts']);
+        $this->assertContains('order_account_identity_mismatch_preserved', array_column($report['warnings'], 'reason'));
+        $service->apply($report);
+        $this->assertDatabaseHas('client_debit_logs', ['id' => $log, 'client_debit_id' => $account,
+            'order_id' => $f['order']]);
+        $this->assertDatabaseHas('client_debits', ['id' => $account, 'debtor_id' => $f['foreign']->id]);
     }
 
     private function mixedRefundFixture(): array

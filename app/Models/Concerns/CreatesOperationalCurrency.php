@@ -16,8 +16,8 @@ trait CreatesOperationalCurrency
                 ? $policy->accountCode(MerchantDebit::findOrFail($model->merchant_debit_id))
                 : $policy->pairCode((int) $model->creditor_id, (int) $model->debtor_id);
             if ($model->currency_code) {
-                if ($code === 'AED' && $model->currency_code !== 'AED') {
-                    throw new \InvalidArgumentException('New UAE merchant transactions must use AED.');
+                if (strtoupper((string) $model->currency_code) !== $code) {
+                    throw new \InvalidArgumentException('Merchant transactions must use the destination shop currency.');
                 }
                 return; // Explicit amounts are already in transaction currency.
             }

@@ -43,12 +43,12 @@ Review all conflicts before application. Examples:
 
 - Missing/changed source account, mismatched customer/shop, prior balance-only correction.
 - Unsupported currency, mixed ledger/payment rates, or amounts already converted independently.
-- Cashbox movement totals exceeding the wallet's stored totals, malformed directions, or mismatched wallet owners/currencies.
-- Missing financial sources, source amounts/owners disagreeing with cash movements, or unresolved cross-country merchant settlement currency.
+- Malformed cashbox directions or mismatched wallet owners/currencies.
+- Missing financial sources or source amounts/owners disagreeing with cash movements.
 
 These cases block the **whole** batch. Do not fix them by editing the signed JSON, assuming an exchange rate or deleting evidence. Investigate the database records and obtain their source evidence, then produce another report.
 
-Conflict entries include a restricted `context` with the current amounts/rates, linked account/order data and owner IDs/countries. Free-text notes, names and contact details are excluded from this diagnostic context. The original wallet migration documents every pre-movement wallet as an old USD base balance. Therefore, the difference between a stored wallet total and its later recorded movements is retained as an opening balance and converted; no synthetic movement is created. The signed report records the opening credit/debit evidence. If movement totals exceed the stored wallet totals, or owner/currency/direction disagrees, the whole owner remains blocked. An empty movement history converts the stored opening totals and never resets them to zero. The command prints grouped conflict counts, with all IDs/details available in the private JSON. An exit code of 1 together with a saved report and a conflict summary means review is required, not that financial changes were applied.
+Conflict entries include a restricted `context` with the current amounts/rates, linked account/order data and owner IDs/countries. Free-text notes, names and contact details are excluded from this diagnostic context. The original wallet migration documents every pre-movement wallet as an old USD base balance. Therefore, the signed difference between a stored wallet total and its later recorded movements is retained as an opening adjustment and converted; no synthetic movement is created. This includes small negative legacy corrections. The signed report records the opening credit/debit evidence. Owner, currency, direction and linked-source inconsistencies still block the batch. An empty movement history converts the stored opening totals and never resets them to zero. The command prints grouped conflict counts, with all IDs/details available in the private JSON. An exit code of 1 together with a saved report and a conflict summary means review is required, not that financial changes were applied.
 
 MySQL returns DECIMAL metadata as strings. The legacy USD evidence check compares zero numerically, so `base_amount = "0.0000"` with `exchange_rate = "1.000000"` is treated like SQLite's numeric zero/one. Previous builds incorrectly used PHP `empty()` on the decimal zero string and reported false mixed-currency conflicts. Nonzero mismatched base amounts and non-USD rates still block conversion. Regenerate previews after deploying this fix; do not edit old reports to remove conflicts. Changed-source-account conflicts also include restricted account log/payment history to investigate later activity without multiplying new AED payments as if they were old USD.
 
@@ -58,15 +58,17 @@ A changed source balance can be reconciled only when the complete account histor
 
 The proposal converts the snapshot and legacy logs once, preserves the actual later AED refunds, and records its calculation in the signed report's `reconciliation` field. For example, an original USD balance of 97.96 followed by two verified AED refunds of 90 produces `97.96 × 3.675 = 360.00`, then `360.00 − 180.00 = 180.00 AED`. The current mixed figure of -82.04 must not itself be multiplied. No refund, payment or cash movement is created by this reconciliation. Production links must pass the checks; the example alone is not proof of the live records.
 
-The owner confirmed that UAE/Lebanon merchant transactions and foreign closures into the admin wallet are genuine cross-country activity. Do not change user countries to clear those conflicts. A structurally matched two-sided USD closure keeps the foreign side unchanged and converts only the UAE wallet side, retaining the original USD base amount and transfer group. Cross-country merchant accounts remain blocked until their explicit settlement currency is established; country membership alone is insufficient.
+The owner confirmed that UAE/Lebanon merchant transactions and foreign closures into the admin wallet are genuine cross-country activity. Do not change user countries. A structurally matched two-sided USD closure keeps the foreign side unchanged and converts only the UAE wallet side, retaining the original USD base amount and transfer group. Merchant inventory transactions use the destination shop's operational currency: AED when the debtor shop is in the UAE, and USD otherwise. The same rule applies to new cross-country merchant transactions.
+
+Historical account/order identity mismatches are preserved as signed report warnings. They do not reassign the customer or order and do not change conversion arithmetic established by the original account snapshot. Warnings are revalidated during application and must be reviewed even though they do not block the batch.
 
 After uploading the updated `app/Services/UaeFinanceConversion.php`, use the following in Plesk's Artisan command box to generate a new preview (no financial writes):
 
 ```text
-finance:convert-uae-to-aed --memory=512 --source=storage/app/client_debits.sql --output=storage/app/uae-finance-preview-v9.json
+finance:convert-uae-to-aed --memory=512 --source=storage/app/client_debits.sql --output=storage/app/uae-finance-preview-v10.json
 ```
 
-This preview verifies the refund links, opening wallet balances, and paired cross-country closures on the server. It is not approval to apply the conversion; remaining merchant settlement, order and identity conflicts still require reconciliation.
+This preview verifies the refund links, opening wallet balances, cross-country merchant settlement, paired closures and warnings on the server. It is not approval to apply the conversion while an order conflict remains.
 
 ## Applying the reviewed report
 

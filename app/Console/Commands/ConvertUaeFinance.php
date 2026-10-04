@@ -35,7 +35,9 @@ class ConvertUaeFinance extends Command
                 throw new RuntimeException('Could not save report.');
             }
             @chmod($path, 0600);
-            $this->info('Preview only: ' . count($report['changes']) . ' field changes; ' . count($report['conflicts']) . ' conflicts.');
+            $warnings = $report['warnings'] ?? [];
+            $this->info('Preview only: ' . count($report['changes']) . ' field changes; '
+                . count($report['conflicts']) . ' conflicts; ' . count($warnings) . ' warnings.');
             $this->line('Report: ' . $path);
             $summary = [];
             foreach ($report['conflicts'] as $conflict) {
@@ -44,6 +46,16 @@ class ConvertUaeFinance extends Command
                 $summary[$key][2]++;
             }
             $this->table(['Table', 'Reason', 'Count'], array_values($summary));
+            if ($warnings) {
+                $warningSummary = [];
+                foreach ($warnings as $warning) {
+                    $key = $warning['table'] . ':' . $warning['reason'];
+                    if (!isset($warningSummary[$key])) $warningSummary[$key] = [$warning['table'], $warning['reason'], 0];
+                    $warningSummary[$key][2]++;
+                }
+                $this->warn('Review warnings (they do not block application):');
+                $this->table(['Table', 'Reason', 'Count'], array_values($warningSummary));
+            }
             if ($report['conflicts']) $this->warn('Application blocked. The JSON report contains record IDs and financial context for each conflict.');
             return $report['conflicts'] ? 1 : 0;
         } catch (\Exception $exception) {
