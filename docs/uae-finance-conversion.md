@@ -63,7 +63,7 @@ The owner confirmed that UAE/Lebanon merchant transactions and Lebanese closures
 After uploading the updated `app/Services/UaeFinanceConversion.php`, use the following in Plesk's Artisan command box to generate a new preview (no financial writes):
 
 ```text
-finance:convert-uae-to-aed --memory=512 --source=storage/app/client_debits.sql --output=storage/app/uae-finance-preview-v6.json
+finance:convert-uae-to-aed --memory=512 --source=storage/app/client_debits.sql --output=storage/app/uae-finance-preview-v7.json
 ```
 
 This preview verifies the refund links on the server. It is not approval to apply the conversion; the remaining cross-country, wallet and identity conflicts still require reconciliation.

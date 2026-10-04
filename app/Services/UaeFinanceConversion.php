@@ -328,7 +328,10 @@ class UaeFinanceConversion
                 return $this->refundReconciliationFailure($account, 'refund_does_not_belong_to_a_snapshot_order', [
                     'refund' => $this->diagnosticRow($refund), 'order' => $this->diagnosticRow($order)]);
             }
-            if (strtoupper((string) $order['curr_type']) !== 'AED' || strtoupper((string) $refund['currency_code']) !== 'AED') {
+            // Older refunds did not store their own currency. They inherit the
+            // linked sale currency, consistently with invoice/refund coverage.
+            $refundCurrency = $refund['currency_code'] ?: $order['curr_type'];
+            if (strtoupper((string) $order['curr_type']) !== 'AED' || strtoupper((string) $refundCurrency) !== 'AED') {
                 return $this->refundReconciliationFailure($account, 'refund_or_order_currency_is_not_aed', [
                     'refund' => $this->diagnosticRow($refund), 'order' => $this->diagnosticRow($order)]);
             }
