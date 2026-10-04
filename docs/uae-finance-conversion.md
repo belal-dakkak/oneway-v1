@@ -62,13 +62,15 @@ The owner confirmed that UAE/Lebanon merchant transactions and foreign closures 
 
 Historical account/order identity mismatches are preserved as signed report warnings. They do not reassign the customer or order and do not change conversion arithmetic established by the original account snapshot. Warnings are revalidated during application and must be reviewed even though they do not block the batch.
 
+A legacy cash sale with a missing `paid_price` is restored as fully paid only when all evidence agrees: cash order and payment type, no customer, zero remaining balance, a positive total, at least one item, and no separate payment rows. The converted report records a warning and updates the paid amount to the converted total. It does not create a payment, cashbox movement or stock transaction. Any other inconsistent order remains a blocking conflict.
+
 After uploading the updated `app/Services/UaeFinanceConversion.php`, use the following in Plesk's Artisan command box to generate a new preview (no financial writes):
 
 ```text
-finance:convert-uae-to-aed --memory=512 --source=storage/app/client_debits.sql --output=storage/app/uae-finance-preview-v10.json
+finance:convert-uae-to-aed --memory=512 --source=storage/app/client_debits.sql --output=storage/app/uae-finance-preview-v11.json
 ```
 
-This preview verifies the refund links, opening wallet balances, cross-country merchant settlement, paired closures and warnings on the server. It is not approval to apply the conversion while an order conflict remains.
+This preview verifies the refund links, opening wallet balances, cross-country merchant settlement, paired closures, legacy cash restoration and warnings on the server. Do not apply it until the final preview has zero conflicts and its warnings and totals have been reviewed.
 
 ## Applying the reviewed report
 

@@ -308,6 +308,36 @@ class UaeFinanceConversionTest extends TestCase
         $this->assertDatabaseHas('orders', ['id' => $f['order'], 'total_price' => 367.50, 'tax_value' => 0]);
     }
 
+    public function test_legacy_cash_sale_with_null_paid_price_and_zero_remaining_is_restored_as_paid(): void
+    {
+        $f = $this->fixture();
+        DB::table('order_payments')->delete();
+        DB::table('wallet_movements')->delete();
+        DB::table('wallets')->where('id', $f['wallet']->id)->update(['credit' => 0, 'debit' => 0]);
+        DB::table('orders')->where('id', $f['order'])->update(['buyer_id' => null, 'type' => \App\Models\Order::TYPE_CASH,
+            'payment_type' => \App\Models\Order::PAY_CASH, 'total_price' => 220, 'paid_price' => null,
+            'remain_price' => 0, 'price_without_tax' => 0, 'tax_value' => 0]);
+        $category = \App\Models\Category::create(['name' => 'Legacy cash']);
+        $color = \App\Models\Color::create(['name' => 'Black', 'code' => '#111111']);
+        $product = \App\Models\Product::create(['name' => 'Legacy item', 'barcode' => 'LEGACY-CASH',
+            'category_id' => $category->id, 'country_id' => 2, 'cost_price' => 1]);
+        $variant = \App\Models\ProductColor::create(['product_id' => $product->id, 'color_id' => $color->id,
+            'country_id' => 2, 'barcode' => 'LEGACY-CASH-C', 'sizes' => '[]', 'stock' => 1]);
+        $stock = \App\Models\UserProduct::create(['product_color_id' => $variant->id, 'user_id' => $f['seller']->id,
+            'country_id' => 2, 'size' => 'M', 'stock' => 1, 'barcode' => 'LEGACY-CASH-S']);
+        DB::table('order_items')->insert(['order_id' => $f['order'], 'user_product_id' => $stock->id,
+            'qty' => 1, 'sold_qty' => 1, 'item_price' => 220]);
+
+        $service = app(UaeFinanceConversion::class);
+        $report = $service->report($f['legacy']);
+        $this->assertSame([], $report['conflicts']);
+        $this->assertContains('legacy_cash_paid_total_restored', array_column($report['warnings'], 'reason'));
+        $service->apply($report);
+        $this->assertDatabaseHas('orders', ['id' => $f['order'], 'curr_type' => 'AED',
+            'total_price' => 808.50, 'paid_price' => 808.50, 'remain_price' => 0]);
+        $this->assertDatabaseCount('order_payments', 0);
+    }
+
     public function test_inconsistent_tax_or_payment_evidence_blocks_the_entire_batch(): void
     {
         $f = $this->fixture();

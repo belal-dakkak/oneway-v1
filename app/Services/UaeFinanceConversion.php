@@ -137,12 +137,26 @@ class UaeFinanceConversion
             if (!in_array($code, ['USD', 'AED'], true)) { $this->conflict($table, $order, 'unknown_currency'); continue; }
             if ($code === 'AED') continue;
             if ($table === 'orders' && !$this->equal($order['curr_rate'], 1)) { $this->conflict($table, $order, 'usd_order_has_non_usd_rate'); continue; }
-            if (!$this->equal($order['total_price'], Decimal::of((string) ($order['paid_price'] ?? 0))->plus((string) ($order['remain_price'] ?? 0)))) {
-                $payments = $table === 'orders' ? $this->children('order_payments', 'order_id', $order['id']) : [];
+            $payments = $table === 'orders' ? $this->children('order_payments', 'order_id', $order['id']) : [];
+            $items = $this->children($itemsTable, $foreign, $order['id']);
+            $legacyCashPaidMissing = $table === 'orders' && $order['paid_price'] === null
+                && (int) ($order['type'] ?? 0) === \App\Models\Order::TYPE_CASH
+                && (int) ($order['payment_type'] ?? -1) === \App\Models\Order::PAY_CASH
+                && empty($order['buyer_id']) && $this->equal($order['remain_price'] ?? 0, 0)
+                && Decimal::of((string) $order['total_price'])->isGreaterThan(0)
+                && count($items) > 0 && count($payments) === 0;
+            $paidForReconciliation = $legacyCashPaidMissing ? $order['total_price'] : ($order['paid_price'] ?? 0);
+            if ($legacyCashPaidMissing) {
+                $this->warning($table, $order, 'legacy_cash_paid_total_restored', [
+                    'item_count' => count($items), 'payment_count' => 0,
+                    'restored_paid_price' => (string) $order['total_price'],
+                ]);
+            }
+            if (!$this->equal($order['total_price'], Decimal::of((string) $paidForReconciliation)->plus((string) ($order['remain_price'] ?? 0)))) {
                 $paymentTotal = Decimal::zero();
                 foreach ($payments as $payment) $paymentTotal = $paymentTotal->plus((string) ($payment['pay_amount'] ?? 0));
                 $this->conflict($table, $order, 'order_payments_do_not_reconcile', [
-                    'item_count' => count($this->children($itemsTable, $foreign, $order['id'])),
+                    'item_count' => count($items),
                     'payment_count' => count($payments), 'payment_total' => (string) $paymentTotal,
                     'payments' => array_map(fn ($payment) => $this->diagnosticRow($payment), $payments),
                 ]); continue;
@@ -150,6 +164,9 @@ class UaeFinanceConversion
             $this->money($table, $order, ['total_price_before_discount', 'discount', 'total_price', 'paid_price',
                 'remain_price', 'tax_value', 'price_without_tax', 'shipping_fee', 'cod_fee']);
             $total = $this->value($table, $order, 'total_price');
+            if ($legacyCashPaidMissing) {
+                $this->set($table, $order, 'paid_price', $total, 'legacy cash sale with zero remaining restored as fully paid');
+            }
             $this->set($table, $order, 'remain_price', $this->subtract($total, $this->value($table, $order, 'paid_price')), 'total minus paid, rounded in AED');
             if (isset($order['price_without_tax'], $order['tax_value'])) {
                 if ($this->equal($order['total_price'], Decimal::of((string) $order['price_without_tax'])->plus((string) $order['tax_value']))) {
@@ -163,7 +180,7 @@ class UaeFinanceConversion
             $this->set($table, $order, 'curr_type', 'AED', 'original USD order');
             $this->set($table, $order, 'curr_rate', self::RATE, 'retained USD base price conversion');
             foreach (['display_currency', 'display_rate'] as $field) if (array_key_exists($field, $order)) $this->set($table, $order, $field, null, 'single UAE transaction currency');
-            foreach ($this->children($itemsTable, $foreign, $order['id']) as $item) {
+            foreach ($items as $item) {
                 $fields = $table === 'orders'
                     ? ['item_price_paid', 'total_price_paid', 'tax_value_paid', 'price_without_tax_paid']
                     : ['item_price', 'item_price_before_discount', 'total_price', 'total_price_before_discount'];
