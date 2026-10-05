@@ -186,6 +186,7 @@
             </tr>
           </tbody>
         </table>
+        <pagination class="mt-10" :links="userProducts.links || []" />
     </MeeTable>
 
     <transition name="modal">
@@ -358,7 +359,6 @@ import Multiselect from "@suadelabs/vue3-multiselect";
 import JetInput from "@/Jetstream/Input";
 import JetInputError from "@/Jetstream/InputError";
 import JetDropdown from '@/Jetstream/Dropdown.vue';
-import {debounce} from "lodash/function";
 import Currency from '@/Utils/Currency.js';
 
 const components = { AppLayout, MeeTable, Pagination, JetButton,  JetLabel, Multiselect, JetInput, JetInputError, JetDropdown }
@@ -631,7 +631,14 @@ export default {
                         timerProgressBar: true,
                         },
                     )
-                    this.$inertia.delete(route('userProducts.destroy', id))
+                    const previousPageUrl = this.userProducts.data.length === 1
+                        ? this.userProducts.prev_page_url
+                        : null
+                    this.$inertia.delete(route('userProducts.destroy', id), {
+                        onSuccess: () => {
+                            if (previousPageUrl) this.$inertia.get(previousPageUrl)
+                        }
+                    })
                 }
             })
 
@@ -681,75 +688,6 @@ export default {
             if (value === '' || value === null || value === undefined) return
             this[field] = Currency.normalizeInput(value, this.currency.code)
         },
-        // new code
-        fetchData() {
-            // Fetch data from the server and update this.items
-            // Update loading state accordingly
-
-            //axios.get(this.userProducts.next_page_url, { params: this.params }).then(response => {
-
-            // axios.get(this.route('userProducts.index',{ params: this.params,page: this.page++ } )).then(response => {
-            //     var data = [];
-            //     for(var i in response.data.data)
-            //         data.push(response.data.data[i]);
-            //     // this.userProducts = {...response.data};
-            //         this.userProducts = {
-            //         ...response.data,
-            //         data: [...this.userProducts.data, ...data]
-            //     }
-
-            //     undefined
-            //     undefined
-            // });
-
-            if(this.page <= this.userProducts.last_page ) {
-
-                //axios.get(this.userProducts.next_page_url, { params: this.params }).then(response => {
-                axios.get(app_url+'admin/userProducts', { params: { params: this.params, page: this.page } }).then(response => {
-                    var data = [];
-                    for(var i in response.data.data)
-                        data.push(response.data.data[i]);
-                    // this.userProducts = {...response.data};
-                        this.userProducts = {
-                        ...response.data,
-                        data: [...this.userProducts.data, ...data]
-                    }
-
-                    // let calc_total_count = 0;
-
-                    // // Using forEach to iterate through the array
-                    // this.userProducts.data.forEach((item) => {
-                    //     calc_total_count += item.qty;
-                    // });
-
-                    // this.all_stock_products =  calc_total_count;
-
-
-                    //undefined
-                });
-            }
-
-
-        },
-        handleScroll() {
-            // let pixelsFromBottom = document.documentElement.offsetHeight - document.documentElement.scrollTop - window.innerHeight;
-            // if (pixelsFromBottom < 50){
-            if (window.innerHeight + window.scrollY + 50 >= document.documentElement.offsetHeight &&!this.loading) {
-                this.page++;
-                this.fetchData();
-
-                let calc_total_count = 0;
-
-                // Using forEach to iterate through the array
-                this.userProducts.data.forEach((item) => {
-                    calc_total_count += item.qty;
-                });
-
-                this.all_stock_products =  calc_total_count;
-            }
-        },
-
-
     },
     watch: {
         params: {
@@ -797,44 +735,6 @@ export default {
             set(value) { this.updateEditPriceBeforeLocal(value) },
         },
     },
-    mounted() {
-
-        // new code
-        this.fetchData();
-        window.addEventListener('scroll', this.handleScroll);
-
-        /*
-        window.addEventListener('scroll', debounce((e) => {
-            let pixelsFromBottom = document.documentElement.offsetHeight - document.documentElement.scrollTop - window.innerHeight;
-
-            if (pixelsFromBottom < 50){
-                axios.get(this.userProducts.next_page_url, { params: this.params }).then(response => {
-                    var data = [];
-                    for(var i in response.data.data)
-                        data.push(response.data.data[i]);
-                    // this.userProducts = {...response.data};
-                     this.userProducts = {
-                        ...response.data,
-                        data: [...this.userProducts.data, ...data]
-                    }
-
-
-                });
-            }
-        }, 100))
-        */
-    },
-
-    // new code
-    beforeDestroy() {
-        window.removeEventListener('scroll', this.handleScroll);
-    },
-    // created() {
-    //     // Set the specific key to 1 for each item in the collection
-    //     this.clsizes.forEach((item) => {
-    //         this.$set(item, 'stock', 1);
-    //     });
-    // }
 }
 </script>
 <style scoped>

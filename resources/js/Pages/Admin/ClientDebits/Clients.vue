@@ -133,6 +133,7 @@
             </tr>
           </tbody>
         </table>
+        <pagination class="mt-8" :links="debitClients.links || []" />
     </MeeTable>
 
       <transition name="modal">
@@ -214,7 +215,6 @@ import JetLabel from "@/Jetstream/Label";
 import Multiselect from "@suadelabs/vue3-multiselect";
 import JetInput from "@/Jetstream/Input";
 import JetInputError from "@/Jetstream/InputError";
-import {debounce} from "lodash/function";
 import Currency from '@/Utils/Currency.js'
 
 const components = { AppLayout, MeeTable, Pagination, JetButton, JetDropdown, JetDropdownLink, JetLabel, Multiselect, JetInput, JetInputError }
@@ -574,40 +574,6 @@ export default {
             return debit;
         },
 
-        // new code
-        fetchData() {
-            // Fetch data from the server and update this.items
-            // Update loading state accordingly
-
-
-            if(this.page <= this.debitClients.last_page ) {
-
-                // axios.get(this.route('clientDebit.clients', { params: this.params,page: this.page++ })).then(response => {
-                //     this.debitClients = {
-                //         ...response.data.debits,
-                //         data: [...this.debitClients.data, ...response.data.debits.data]
-                //     }
-                // });
-
-                //axios.get(this.debitClients.next_page_url, { params: this.params }).then(response => {
-                axios.get(app_url+'admin/clientDebit/clients/all', { params: { params: this.params, page: this.page } }).then(response => {
-                    this.debitClients = {
-                        ...response.data.debits,
-                        data: [...this.debitClients.data, ...response.data.debits.data]
-                    }
-                });
-            }
-
-
-        },
-        handleScroll() {
-            // let pixelsFromBottom = document.documentElement.offsetHeight - document.documentElement.scrollTop - window.innerHeight;
-            // if (pixelsFromBottom < 50){
-            if (window.innerHeight + window.scrollY + 50 >= document.documentElement.offsetHeight &&!this.loading) {
-                this.page++;
-                this.fetchData();
-            }
-        },
     },
     watch: {
         params: {
@@ -644,24 +610,6 @@ export default {
     setup() {
         const admin = computed(() => usePage().props.value.auth.user)
         return { admin }
-    },
-    mounted() {
-
-        this.fetchData();
-        window.addEventListener('scroll', this.handleScroll);
-
-        // window.addEventListener('scroll', debounce((e) => {
-        //     let pixelsFromBottom = document.documentElement.offsetHeight - document.documentElement.scrollTop - window.innerHeight;
-
-        //     if (pixelsFromBottom < 200){
-        //         axios.get(this.debitClients.next_page_url, { params: this.params }).then(response => {
-        //             this.debitClients = {
-        //                 ...response.data.debits,
-        //                 data: [...this.debitClients.data, ...response.data.debits.data]
-        //             }
-        //         });
-        //     }
-        // }, 100))
     },
 }
 </script>

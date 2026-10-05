@@ -1212,7 +1212,7 @@ class OrderRepository
             $profit -= $totalRefunds;
 
             return [
-                'orders' => $pagination ? $orders->paginate(10) : $orders->get(),
+                'orders' => $pagination ? $orders->paginate(10)->withQueryString() : $orders->get(),
                 'profit' => $profit,
                 'count' => $calcCount,
                 'total' => $total_price_with_tax_paid,
@@ -1230,7 +1230,7 @@ class OrderRepository
             $totalAmount -= $totalRefunds;
 
             return [
-                'orders' => $pagination ? $orders->paginate(10) : $orders->get(),
+                'orders' => $pagination ? $orders->paginate(10)->withQueryString() : $orders->get(),
                 'profit' => $profit,
                 'count' => $calcCount,
                 'total' => $total_price_with_tax_paid,
@@ -2175,7 +2175,7 @@ class OrderRepository
         $totalsByCurrency = $this->currencyTotals($query);
 
         if ($pagination) {
-            $orders = $query->paginate(10);
+            $orders = $query->paginate(10)->withQueryString();
         } else {
             $orders = $query->get();
         }

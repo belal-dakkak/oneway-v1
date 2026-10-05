@@ -45,7 +45,7 @@ class ClientDebitRepository
         if (is_string($searchPhone))
             $clients->whereRelation('debtor', 'phone', 'LIKE', "%$searchPhone%");
 
-        return $clients->orderByDesc('client_debits.updated_at')->paginate(15);
+        return $clients->orderByDesc('client_debits.updated_at')->paginate(15)->withQueryString();
 
     }
 
@@ -109,7 +109,7 @@ class ClientDebitRepository
 
 
         if ($pagination)
-            $log = $log->orderByDesc('created_at')->paginate(10);
+            $log = $log->orderByDesc('created_at')->paginate(10)->withQueryString();
         else
             $log = $log->orderBy('created_at');
 

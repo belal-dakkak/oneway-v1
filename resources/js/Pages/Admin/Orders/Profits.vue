@@ -219,6 +219,8 @@
           </tbody>
         </table>
 
+        <pagination class="mt-8" :links="profitOrders.links || []" />
+
     </MeeTable>
 
     <transition name="modal">
@@ -265,7 +267,6 @@ import JetDropdownLink from '@/Jetstream/DropdownLink.vue'
 import {ref} from "vue";
 import Datepicker from '@vuepic/vue-datepicker'
 import '@vuepic/vue-datepicker/dist/main.css'
-import {debounce} from "lodash/function";
 import Currency from '@/Utils/Currency.js';
 
 const components = { AppLayout, MeeTable, Pagination, JetButton, JetDropdown, JetDropdownLink, Datepicker }
@@ -448,7 +449,14 @@ export default {
                         timerProgressBar: true,
                         },
                     )
-                    this.$inertia.delete(route('orders.destroy', id))
+                    const previousPageUrl = this.profitOrders.data.length === 1
+                        ? this.profitOrders.prev_page_url
+                        : null
+                    this.$inertia.delete(route('orders.destroy', id), {
+                        onSuccess: () => {
+                            if (previousPageUrl) this.$inertia.get(previousPageUrl)
+                        }
+                    })
                 }
             })
 
@@ -573,21 +581,6 @@ export default {
 
         return { user, date, handleDate, start_date, handleStartDate, end_date, handleEndDate }
     },
-    mounted() {
-        window.addEventListener('scroll', debounce((e) => {
-            let pixelsFromBottom = document.documentElement.offsetHeight - document.documentElement.scrollTop - window.innerHeight;
-
-            if (pixelsFromBottom < 200){
-                axios.get(this.profitOrders.next_page_url, { params: this.params }).then(response => {
-                    this.profitOrders = {
-                        ...response.data.orders,
-                        data: [...this.profitOrders.data, ...response.data.orders.data]
-                    }
-                });
-            }
-        }, 100))
-    },
-
 }
 </script>
 <style scoped>

@@ -215,6 +215,7 @@
             </tr>
           </tbody>
         </table>
+        <pagination class="mt-8" :links="userRefunds.links || []" />
     </MeeTable>
   </app-layout>
 </template>
@@ -229,7 +230,6 @@ import {computed, ref} from "vue";
 import {usePage} from "@inertiajs/inertia-vue3";
 import JetDropdown from "@/Jetstream/Dropdown";
 import JetDropdownLink from "@/Jetstream/DropdownLink";
-import {debounce} from "lodash/function";
 import Datepicker from '@vuepic/vue-datepicker'
 import '@vuepic/vue-datepicker/dist/main.css'
 import Currency from '@/Utils/Currency';
@@ -266,8 +266,6 @@ export default {
             totalRefunds: this.total,
             totalsByCurrency: this.totals_by_currency,
             currencyExchange: Currency.getExchangeMethod(),
-            loadingMore: false,
-            scrollHandler: null,
         }
     },
     methods: {
@@ -348,27 +346,6 @@ export default {
         const date = ref();
 
         return { admin, start_date, end_date, date }
-    },
-    mounted() {
-        this.scrollHandler = debounce(() => {
-            let pixelsFromBottom = document.documentElement.offsetHeight - document.documentElement.scrollTop - window.innerHeight;
-
-            if (pixelsFromBottom < 200 && this.userRefunds?.next_page_url && !this.loadingMore){
-                this.loadingMore = true
-                axios.get(this.userRefunds.next_page_url, { params: this.params }).then(response => {
-                    const rows = response.data.rows || response.data.refunds || response.data
-                    this.userRefunds = {
-                        ...rows,
-                        data: [...this.userRefunds.data, ...(rows?.data || [])]
-                    }
-                }).finally(() => { this.loadingMore = false });
-            }
-        }, 100)
-        window.addEventListener('scroll', this.scrollHandler)
-    },
-    beforeUnmount() {
-        window.removeEventListener('scroll', this.scrollHandler)
-        this.scrollHandler?.cancel?.()
     },
     computed: {
         cashboxEntries() {

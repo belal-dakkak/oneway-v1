@@ -235,6 +235,7 @@
                     </tr>
                 </tbody>
             </table>
+            <pagination class="mt-10" :links="userOrders.links || []" />
         </MeeTable>
 
         <transition name="modal">
@@ -290,7 +291,7 @@ import AppLayout from '@/Layouts/AppLayout.vue'
 import { MeeTable } from '@/Shared/Ui'
 import { Pagination } from '@/Shared/Common'
 import JetButton from '@/Jetstream/Button.vue'
-import { ref, onMounted, onUnmounted } from 'vue'
+import { ref } from 'vue'
 import { throttle } from 'lodash'
 import axios from 'axios'
 import { refreshWebsiteOrderSummary } from '@/Utils/WebsiteOrderNotifications'
@@ -332,8 +333,6 @@ export default {
             showModal: false,
             products: null,
             activeOrder: null,
-            page: 1,
-            isLoading: false
         }
     },
     methods: {
@@ -440,29 +439,10 @@ export default {
                 this.totalsByCurrency = response.data.totals_by_currency || {};
             });
         }, 500),
-        handleScroll() {
-            if (window.innerHeight + window.scrollY + 50 >= document.documentElement.offsetHeight && !this.isLoading) {
-                this.fetchMore();
-            }
-        },
-        async fetchMore() {
-            if (this.page >= this.userOrders.last_page) return;
-            this.isLoading = true;
-            this.page++;
-            try {
-                const response = await axios.get(this.route('websiteOrders', { ...this.params, page: this.page }));
-                this.userOrders.data.push(...response.data.orders.data);
-            } catch (e) {
-                console.error(e);
-            } finally {
-                this.isLoading = false;
-            }
-        }
     },
     watch: {
         params: {
             handler() {
-                this.page = 1;
                 this.handleFilter();
             },
             deep: true
@@ -531,12 +511,6 @@ export default {
         const user = computed(() => usePage().props.value.auth.user)
         return { start_date, handleStartDate, end_date, handleEndDate, date, handleDate, buyer, user }
     },
-    mounted() {
-        window.addEventListener('scroll', this.handleScroll);
-    },
-    unmounted() {
-        window.removeEventListener('scroll', this.handleScroll);
-    }
 }
 </script>
 

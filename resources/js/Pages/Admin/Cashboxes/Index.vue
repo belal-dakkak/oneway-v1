@@ -30,14 +30,16 @@
           <tbody><tr v-for="item in movements.data" :key="item.id" class="border-t"><td class="p-3">{{ item.created_at }}</td><td class="p-3">{{ item.direction }}</td><td class="p-3">{{ money(item.amount, item.currency_code) }}</td><td class="p-3">{{ money(item.balance_after, item.currency_code) }}</td><td class="p-3">{{ item.note || '-' }}</td></tr></tbody>
         </table>
       </div>
+      <pagination class="mt-8" :links="movements.links || []" />
     </div>
   </app-layout>
 </template>
 
 <script>
 import AppLayout from '@/Layouts/AppLayout.vue'
+import { Pagination } from '@/Shared/Common'
 export default {
-  components: { AppLayout },
+  components: { AppLayout, Pagination },
   props: { wallets: Object, movements: Object, walletOwnerId: Number, canExchange: Boolean, exchangeRate: [Number, String], defaultCurrency: { type: String, default: 'USD' } },
   data() { return { form: this.$inertia.form({ from: 'SYP', to: 'USD', amount: null, rate: this.exchangeRate, note: '' }), refreshing: false } },
   mounted() { window.addEventListener('focus', this.refreshBalances) },

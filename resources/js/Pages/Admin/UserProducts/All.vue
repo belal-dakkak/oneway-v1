@@ -114,6 +114,7 @@
               </tr>
             </tbody>
           </table>
+          <pagination class="mt-10" :links="userProducts.links || []" />
       </MeeTable>
 
       <transition name="modal">
@@ -210,7 +211,6 @@
   import Multiselect from "@suadelabs/vue3-multiselect";
   import JetInput from "@/Jetstream/Input";
   import JetInputError from "@/Jetstream/InputError";
-  import {debounce} from "lodash/function";
   import Currency from '@/Utils/Currency.js';
 
   const components = { AppLayout, MeeTable, Pagination, JetButton,  JetLabel, Multiselect, JetInput, JetInputError }
@@ -419,7 +419,14 @@
                           timerProgressBar: true,
                           },
                       )
-                      this.$inertia.delete(route('userProducts.destroy', id))
+                      const previousPageUrl = this.userProducts.data.length === 1
+                          ? this.userProducts.prev_page_url
+                          : null
+                      this.$inertia.delete(route('userProducts.destroy', id), {
+                          onSuccess: () => {
+                              if (previousPageUrl) this.$inertia.get(previousPageUrl)
+                          }
+                      })
                   }
               })
 
@@ -440,63 +447,6 @@
               document.getElementById(tooltipID).classList.toggle("hidden");
           },
 
-          // new code
-        fetchData() {
-            // Fetch data from the server and update this.items
-            // Update loading state accordingly
-
-
-            if(this.page <= this.userProducts.last_page ) {
-                // axios.get(this.route('userProducts.all', { params: this.params,page: this.page++ })).then(response => {
-                //     this.userProducts = {
-                //           ...response.data,
-                //           data: [...this.userProducts.data, ...responseW.data.data]
-                //       }
-                // });
-
-
-                // axios.get(app_url+'userProducts/all/products', { params: { params: this.params, page: this.page++ } }).then(response => {
-                //     this.userProducts = {
-                //           ...response.data,
-                //           data: [...this.userProducts.data, ...response.data.data]
-                //       }
-                // });
-
-                axios.get(app_url+'admin/userProducts/all/products', { params: { params: this.params, page: this.page } }).then(response => {
-                    this.userProducts = {
-                          ...response.data,
-                          data: [...this.userProducts.data, ...response.data.data]
-                      }
-                });
-
-
-                // axios.get(app_url+'userProducts/all/products', { params: this.params }).then(response => {
-                //     this.userProducts = {
-                //           ...response.data,
-                //           data: [...this.userProducts.data, ...response.data.data]
-                //       }
-                // });
-
-
-                // axios.get(this.userProducts.next_page_url, { params: this.params }).then(response => {
-                //     this.userProducts = {
-                //         ...response.data,
-                //         data: [...this.userProducts.data, ...response.data.data]
-                //     }
-                // });
-            }
-
-
-        },
-
-        handleScroll() {
-            // let pixelsFromBottom = document.documentElement.offsetHeight - document.documentElement.scrollTop - window.innerHeight;
-            // if (pixelsFromBottom < 50){
-            if (window.innerHeight + window.scrollY + 50 >= document.documentElement.offsetHeight &&!this.loading) {
-                this.page++;
-                this.fetchData();
-            }
-        },
       },
       watch: {
           params: {
@@ -519,25 +469,6 @@
               }),
               deep: true
           }
-      },
-      mounted() {
-
-        this.fetchData();
-
-        window.addEventListener('scroll', this.handleScroll);
-
-        //   window.addEventListener('scroll', debounce((e) => {
-        //       let pixelsFromBottom = document.documentElement.offsetHeight - document.documentElement.scrollTop - window.innerHeight;
-
-        //       if (pixelsFromBottom < 200){
-        //           axios.get(this.userProducts.next_page_url, { params: this.params }).then(response => {
-        //               this.userProducts = {
-        //                   ...response.data,
-        //                   data: [...this.userProducts.data, ...response.data.data]
-        //               }
-        //           });
-        //       }
-        //   }, 100))
       },
   }
   </script>

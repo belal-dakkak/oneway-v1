@@ -326,7 +326,7 @@ class RefundRepository
             ->toArray();
         $totalAmount = count($totalsByCurrency) === 1 ? (float) reset($totalsByCurrency) : 0;
 
-        $rows = $refunds->paginate(10);
+        $rows = $refunds->paginate(10)->withQueryString();
         return [
             'rows' => $rows,
             'refunds' => $rows,

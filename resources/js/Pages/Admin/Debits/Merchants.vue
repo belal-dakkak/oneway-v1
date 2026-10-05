@@ -178,6 +178,8 @@
           </tbody>
         </table>
 
+        <pagination class="mt-8" :links="debitMerchants.links || []" />
+
     </MeeTable>
 
       <transition name="modal">
@@ -259,7 +261,6 @@ import JetLabel from "@/Jetstream/Label";
 import Multiselect from "@suadelabs/vue3-multiselect";
 import JetInput from "@/Jetstream/Input";
 import JetInputError from "@/Jetstream/InputError";
-import {debounce} from "lodash/function";
 import JsonCSV from 'vue-json-csv'
 
 const components = { AppLayout, MeeTable, Pagination, JetButton, JetDropdown, JetDropdownLink, JetLabel, Multiselect, JetInput, JetInputError, 'download-csv': JsonCSV}
@@ -594,28 +595,6 @@ export default {
     setup() {
         const admin = computed(() => usePage().props.value.auth.user)
         return { admin }
-    },
-    mounted() {
-        window.addEventListener('scroll', debounce((e) => {
-            let pixelsFromBottom = document.documentElement.offsetHeight - document.documentElement.scrollTop - window.innerHeight;
-
-            if (pixelsFromBottom < 200){
-                axios.get(this.debitMerchants.next_page_url, { params: this.params }).then(response => {
-                    this.debitMerchants = {
-                        ...response.data,
-                        data: [...this.debitMerchants.data, ...response.data.data]
-                    }
-                    this.json_data = []
-                    this.debitMerchants.data.forEach(item => {
-                        this.json_data.push({
-                            'creditor': item.creditor?item.creditor.name:'',
-                            'debtor': item.debtor?item.debtor.name:'',
-                            'date': item.amount
-                        })
-                    });
-                });
-            }
-        }, 100))
     },
 }
 </script>

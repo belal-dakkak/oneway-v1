@@ -44,7 +44,8 @@ class CashboxController extends Controller
             'movements' => WalletMovement::query()
                 ->where('user_id', auth()->id())
                 ->latest('id')
-                ->paginate(30),
+                ->paginate(30)
+                ->withQueryString(),
             'canExchange' => (int) auth()->user()->country_id === Country::SYRIA,
             'exchangeRate' => $exchangeRate,
             'defaultCurrency' => Country::defaultCurrency((int) auth()->user()->country_id),

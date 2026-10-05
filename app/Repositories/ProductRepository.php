@@ -169,7 +169,7 @@ class ProductRepository
         }else{
             $products->orderByDesc('id');
         }
-        return $products->paginate(15);
+        return $products->paginate(15)->withQueryString();
     }
 
     public function delete(Product $product)

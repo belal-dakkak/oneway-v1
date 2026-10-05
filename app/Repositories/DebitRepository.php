@@ -53,7 +53,7 @@ class DebitRepository
             $debits->orderByDesc('id');
         }
 
-        return $debits->paginate(10);
+        return $debits->paginate(10)->withQueryString();
     }
 
     public function getBelalMerchants(Request $request)
@@ -99,7 +99,7 @@ class DebitRepository
         if ($creditor = $request->get('creditor_id'))
             $merchants->where('creditor_id', $creditor);
 
-        return $merchants->orderByDesc('id')->paginate(100);
+        return $merchants->orderByDesc('id')->paginate(100)->withQueryString();
 
     }
 
@@ -119,7 +119,7 @@ class DebitRepository
             $log->whereIn('id', $checked);
 
         if ($pagination)
-            $log = $log->orderByDesc('created_at')->paginate(10);
+            $log = $log->orderByDesc('created_at')->paginate(10)->withQueryString();
         else
             $log = $log->orderBy('created_at');
 

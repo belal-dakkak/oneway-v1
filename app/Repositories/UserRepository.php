@@ -91,7 +91,7 @@ class UserRepository
             $users->orderByDesc('id');
         }
 
-        return $users->paginate(10);
+        return $users->paginate(10)->withQueryString();
     }
 
 }

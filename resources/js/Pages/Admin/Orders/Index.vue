@@ -271,6 +271,7 @@
               </tr>
             </tbody>
           </table>
+          <pagination class="mt-10" :links="userOrders.links || []" />
       </MeeTable>
 
         <transition name="modal">
@@ -316,7 +317,6 @@
   import { usePage } from '@inertiajs/inertia-vue3'
   import JetDropdown from "@/Jetstream/Dropdown";
   import JetDropdownLink from "@/Jetstream/DropdownLink";
-  import {debounce} from "lodash/function";
   import {ref} from "vue";
   import Datepicker from '@vuepic/vue-datepicker'
   import '@vuepic/vue-datepicker/dist/main.css'
@@ -570,7 +570,14 @@
                           timerProgressBar: true,
                           },
                       )
-                      this.$inertia.delete(route('orders.destroy', id))
+                      const previousPageUrl = this.userOrders.data.length === 1
+                          ? this.userOrders.prev_page_url
+                          : null
+                      this.$inertia.delete(route('orders.destroy', id), {
+                          onSuccess: () => {
+                              if (previousPageUrl) this.$inertia.get(previousPageUrl)
+                          }
+                      })
                   }
               })
 
@@ -643,155 +650,6 @@
           handleStartDate(value) { this.params.start_date = this.formatDate(value) },
           handleEndDate(value) { this.params.end_date = this.formatDate(value) },
 
-
-        fetchData: throttle(async function () {
-            if (this.isLoading || !this.userOrders?.next_page_url) return;
-            this.isLoading = true;
-
-
-            try {
-              const response = await axios.get(this.userOrders.next_page_url, { params: this.params });
-                this.totalSales = response.data.total || 0;
-                this.totalPriceWithoutTax = response.data.total_price_without_tax || 0;
-                this.totalTaxValue = response.data.total_tax_value || 0;
-                this.totalsByCurrency = response.data.totals_by_currency || {};
-                this.totalCount = response.data.count || 0;
-
-                const rows = response.data.rows || response.data.orders
-                this.userOrders = {
-                    ...rows,
-                    data: [...this.userOrders.data, ...(rows?.data || [])]
-                };
-
-                this.json_data = this.userOrders.data.map(order => ({
-                    'barcode': order.barcode,
-                    'total_price': order.total_price,
-                    'paid_price': order.paid_price,
-                    'remain_price': order.remain_price,
-                    'seller': order.seller ? order.seller.name : '',
-                    'buyer': order.buyer ? order.buyer.name : '',
-                    'shipper': order.shipper ? order.shipper.name : '',
-                    'date': order.date
-                }));
-            } catch (error) {
-                console.error("Failed to fetch data:", error);
-                this.showErrorMessage('Error fetching data');
-            } finally {
-                this.isLoading = false;
-            }
-        }, 300),
-
-        handleScroll() {
-            if (window.innerHeight + window.scrollY + 50 >= document.documentElement.offsetHeight) {
-                this.fetchData();
-            }
-        },
-
-
-        // new code
-        // fetchData() {
-
-        //     undefined;
-        //     undefined;
-        //     undefined;
-
-        //     // Fetch data from the server and update this.items
-        //     // Update loading state accordingly
-
-        //     if(this.page <= this.userOrders.last_page ) {
-
-        //         undefined;
-
-        //         /*
-        //         axios.get(this.route('orders.index', { params: this.params,page: this.page++ })).then(response => {
-        //               this.totalSales = response.data.total
-        //               this.totalPriceWithoutTax = response.data.total
-        //               this.totalTaxValue = response.data.total_price_without_tax
-        //               this.totalCount = response.data.count
-        //               this.userOrders = {
-        //                   ...response.data.orders,
-        //                   data: [...this.userOrders.data, ...response.data.orders.data]
-        //               }
-        //               this.json_data = []
-        //               this.userOrders.data.forEach(order => {
-        //                   this.json_data.push({
-        //                       'barcode': order.barcode,
-        //                       'total_price': order.total_price,
-        //                       'paid_price': order.paid_price,
-        //                       'remain_price': order.remain_price,
-        //                       'seller': order.seller?order.seller.name:'',
-        //                       'buyer': order.buyer?order.buyer.name:'',
-        //                       'shipper': order.shipper?order.shipper.name:'',
-        //                       'date': order.date
-        //                   })
-        //               });
-        //         });
-        //         */
-
-        //         axios.get(app_url+'orders', { params: { params: this.params, page: this.page++ } }).then(response => {
-        //             this.totalSales = response.data.total
-        //             this.totalPriceWithoutTax = response.data.total_price_without_tax
-        //             this.totalTaxValue = response.data.total_tax_value
-        //             this.totalCount = response.data.count
-        //             this.userOrders = {
-        //                 ...response.data.orders,
-        //                 data: [...this.userOrders.data, ...response.data.orders.data]
-        //             }
-        //             this.json_data = []
-        //             this.userOrders.data.forEach(order => {
-        //                 this.json_data.push({
-        //                     'barcode': order.barcode,
-        //                     'total_price': order.total_price,
-        //                     'paid_price': order.paid_price,
-        //                     'remain_price': order.remain_price,
-        //                     'seller': order.seller?order.seller.name:'',
-        //                     'buyer': order.buyer?order.buyer.name:'',
-        //                     'shipper': order.shipper?order.shipper.name:'',
-        //                     'date': order.date
-        //                 })
-        //             });
-        //         });
-
-
-        //         /*
-        //         axios.get(this.userOrders.next_page_url, { params: this.params }).then(response => {
-        //             this.totalSales = response.data.total
-        //             this.totalPriceWithoutTax = response.data.total_price_without_tax
-        //             this.totalTaxValue = response.data.total_tax_value
-        //             this.totalCount = response.data.count
-        //             this.userOrders = {
-        //                 ...response.data.orders,
-        //                 data: [...this.userOrders.data, ...response.data.orders.data]
-        //             }
-        //             this.json_data = []
-        //             this.userOrders.data.forEach(order => {
-        //                 this.json_data.push({
-        //                     'barcode': order.barcode,
-        //                     'total_price': order.total_price,
-        //                     'paid_price': order.paid_price,
-        //                     'remain_price': order.remain_price,
-        //                     'seller': order.seller?order.seller.name:'',
-        //                     'buyer': order.buyer?order.buyer.name:'',
-        //                     'shipper': order.shipper?order.shipper.name:'',
-        //                     'date': order.date
-        //                 })
-        //             });
-        //         });
-        //         */
-
-        //     }
-
-
-        // },
-        // handleScroll() {
-        //     // let pixelsFromBottom = document.documentElement.offsetHeight - document.documentElement.scrollTop - window.innerHeight;
-        //     // if (pixelsFromBottom < 50){
-        //     if (window.innerHeight + window.scrollY + 50 >= document.documentElement.offsetHeight &&!this.loading) {
-        //         //this.page++;
-        //         undefined;
-        //         this.fetchData();
-        //     }
-        // },
       },
       watch: {
           params: {
@@ -811,42 +669,6 @@
           const date = ref();
 
           return { user, start_date, end_date, date }
-      },
-      mounted() {
-            window.addEventListener('scroll', this.handleScroll);
-
-        //   window.addEventListener('scroll', debounce((e) => {
-        //       let pixelsFromBottom = document.documentElement.offsetHeight - document.documentElement.scrollTop - window.innerHeight;
-
-        //       if (pixelsFromBottom < 200){
-        //           axios.get(this.userOrders.next_page_url, { params: this.params }).then(response => {
-        //               this.totalSales = response.data.total
-                    // this.totalPriceWithoutTax = response.data.total_price_without_tax
-                    // this.totalTaxValue = response.data.total_tax_value
-                    // this.totalCount = response.data.count
-        //               this.userOrders = {
-        //                   ...response.data.orders,
-        //                   data: [...this.userOrders.data, ...response.data.orders.data]
-        //               }
-        //               this.json_data = []
-        //               this.userOrders.data.forEach(order => {
-        //                   this.json_data.push({
-        //                       'barcode': order.barcode,
-        //                       'total_price': order.total_price,
-        //                       'paid_price': order.paid_price,
-        //                       'remain_price': order.remain_price,
-        //                       'seller': order.seller?order.seller.name:'',
-        //                       'buyer': order.buyer?order.buyer.name:'',
-        //                       'shipper': order.shipper?order.shipper.name:'',
-        //                       'date': order.date
-        //                   })
-        //               });
-        //           });
-        //       }
-        //   }, 100))
-      },
-      beforeUnmount() {
-          window.removeEventListener('scroll', this.handleScroll)
       },
   }
   </script>

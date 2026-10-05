@@ -113,6 +113,7 @@
             </tr>
           </tbody>
         </table>
+        <pagination class="mt-10" :links="productModels.links || []" />
     </MeeTable>
   </app-layout>
 </template>
@@ -124,7 +125,6 @@ import { Pagination } from '@/Shared/Common'
 import {throttle} from "lodash";
 import { createPopper } from '@popperjs/core';
 import JetButton from '@/Jetstream/Button.vue'
-import {debounce} from "lodash/function";
 import axios from "axios";
 import Currency from '@/Utils/Currency.js';
 
@@ -173,11 +173,18 @@ export default {
             this.params.direction = this.params.direction === 'asc' ? 'desc' : 'asc';
         },
         deleteProduct(id) {
+            const previousPageUrl = this.productModels.data.length === 1
+                ? this.productModels.prev_page_url
+                : null
+
             axios.delete(this.route('products.destroy', id)).then((response) => {
                 if (response.data.success){
                     this.showSuccessMessage(response.data.msg)
-                    let params = this.params
-                    this.handleFilter(params)
+                    if (previousPageUrl) {
+                        this.$inertia.get(previousPageUrl)
+                    } else {
+                        this.handleFilter(this.params)
+                    }
                 }else{
                     this.showErrorMessage('حدث خطأ ما')
                 }
@@ -254,34 +261,6 @@ export default {
             });
         },
 
-        // new code
-        fetchData() {
-            // Fetch data from the server and update this.items
-            // Update loading state accordingly
-
-            if(this.page <= this.productModels.last_page ) {
-
-                // axios.get(this.productModels.next_page_url, { params: this.params }).then(response => {
-                axios.get(app_url+'admin/products/products', { params: { params: this.params, page: this.page } }).then(response => {
-                    this.productModels = {
-                        ...response.data,
-                        data: [...this.productModels.data, ...response.data.data]
-                    }
-                });
-
-            }
-
-
-        },
-
-        handleScroll() {
-            // let pixelsFromBottom = document.documentElement.offsetHeight - document.documentElement.scrollTop - window.innerHeight;
-            // if (pixelsFromBottom < 50){
-            if (window.innerHeight + window.scrollY + 50 >= document.documentElement.offsetHeight &&!this.loading) {
-                this.page++;
-                this.fetchData();
-            }
-        },
     },
     watch: {
         params: {
@@ -292,24 +271,6 @@ export default {
             }),
             deep: true
         }
-    },
-    mounted() {
-
-        this.fetchData();
-        window.addEventListener('scroll', this.handleScroll);
-
-        // window.addEventListener('scroll', debounce((e) => {
-        //     let pixelsFromBottom = document.documentElement.offsetHeight - document.documentElement.scrollTop - window.innerHeight;
-
-        //     if (pixelsFromBottom < 200){
-        //         axios.get(this.productModels.next_page_url, { params: this.params }).then(response => {
-        //             this.productModels = {
-        //                 ...response.data,
-        //                 data: [...this.productModels.data, ...response.data.data]
-        //             }
-        //         });
-        //     }
-        // }, 500))
     },
 }
 </script>

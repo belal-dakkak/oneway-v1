@@ -57,10 +57,7 @@
             </table>
           </div>
 
-          <!-- Pagination placeholder -->
-          <div class="mt-6 flex justify-center" v-if="messages.links">
-             <!-- Simplified pagination for now -->
-          </div>
+          <Pagination class="mt-6" :links="messages.links || []" />
         </div>
       </div>
     </div>
@@ -112,13 +109,15 @@ import JetSecondaryButton from '@/Jetstream/SecondaryButton.vue'
 import { ref } from 'vue'
 import { useForm, usePage } from '@inertiajs/inertia-vue3'
 import { Inertia } from '@inertiajs/inertia'
+import { Pagination } from '@/Shared/Common'
 
 export default {
   components: {
     AppLayout,
     JetDialogModal,
     JetButton,
-    JetSecondaryButton
+    JetSecondaryButton,
+    Pagination
   },
   props: {
     messages: Object
@@ -167,7 +166,15 @@ export default {
 
     const deleteMessage = (id) => {
       if (confirm(__('Are you sure you want to delete this message?'))) {
-        Inertia.delete(route('contactMessages.destroy', id))
+        const previousPageUrl = props.messages.data.length === 1
+          ? props.messages.prev_page_url
+          : null
+
+        Inertia.delete(route('contactMessages.destroy', id), {
+          onSuccess: () => {
+            if (previousPageUrl) Inertia.get(previousPageUrl)
+          }
+        })
       }
     }
 

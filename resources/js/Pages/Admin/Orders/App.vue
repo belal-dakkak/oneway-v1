@@ -238,6 +238,7 @@
             </tr>
           </tbody>
         </table>
+        <pagination class="mt-10" :links="userOrders.links || []" />
     </MeeTable>
 
       <transition name="modal">
@@ -282,7 +283,6 @@ import { computed } from 'vue'
 import { usePage } from '@inertiajs/inertia-vue3'
 import JetDropdown from "@/Jetstream/Dropdown";
 import JetDropdownLink from "@/Jetstream/DropdownLink";
-import {debounce} from "lodash/function";
 import {ref} from "vue";
 import Datepicker from '@vuepic/vue-datepicker'
 import '@vuepic/vue-datepicker/dist/main.css'
@@ -483,7 +483,14 @@ export default {
                         timerProgressBar: true,
                         },
                     )
-                    this.$inertia.delete(route('orders.destroy', id))
+                    const previousPageUrl = this.userOrders.data.length === 1
+                        ? this.userOrders.prev_page_url
+                        : null
+                    this.$inertia.delete(route('orders.destroy', id), {
+                        onSuccess: () => {
+                            if (previousPageUrl) this.$inertia.get(previousPageUrl)
+                        }
+                    })
                 }
             })
 
@@ -606,21 +613,6 @@ export default {
         }
 
         return { user, start_date, handleStartDate, end_date, handleEndDate, date, handleDate }
-    },
-    mounted() {
-        window.addEventListener('scroll', debounce((e) => {
-            let pixelsFromBottom = document.documentElement.offsetHeight - document.documentElement.scrollTop - window.innerHeight;
-
-            if (pixelsFromBottom < 200){
-                axios.get(this.userOrders.next_page_url, { params: this.params }).then(response => {
-                    this.totalSales = response.data.total
-                    this.userOrders = {
-                        ...response.data.orders,
-                        data: [...this.userOrders.data, ...response.data.orders.data]
-                    }
-                });
-            }
-        }, 100))
     },
 }
 </script>

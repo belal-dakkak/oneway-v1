@@ -72,9 +72,13 @@ class RefundIndexTest extends TestCase
 
         $this->actingAs($admin)->getJson(route('refunds.index', ['page' => 2]))
             ->assertOk()->assertJsonCount(3, 'rows.data');
-        $this->actingAs($admin)->getJson(route('refunds.index', ['shop' => $shop->id]))
+        $filtered = $this->actingAs($admin)->getJson(route('refunds.index', ['shop' => $shop->id]))
             ->assertOk()->assertJsonPath('rows.total', 13)
             ->assertJsonPath('totals_by_currency.USD', 23);
+        $this->assertStringContainsString(
+            'shop=' . $shop->id,
+            (string) $filtered->json('rows.links.1.url')
+        );
         $this->actingAs($admin)->getJson(route('refunds.index', ['search' => 'RF-USD-1']))
             ->assertOk()->assertJsonPath('rows.total', 1)
             ->assertJsonPath('totals_by_currency.USD', 2);

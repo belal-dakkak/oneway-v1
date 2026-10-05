@@ -164,7 +164,7 @@ class ProductColorRepository
             $products->orderByDesc('updated_at');
         }
 
-        return $products->paginate(10);
+        return $products->paginate(10)->withQueryString();
     }
 
 }

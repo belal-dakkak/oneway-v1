@@ -114,6 +114,7 @@
               </tr>
             </tbody>
           </table>
+          <pagination class="mt-8" :links="allUsers.links || []" />
       </MeeTable>
     </app-layout>
   </template>
@@ -127,7 +128,6 @@
   import JetButton from '@/Jetstream/Button.vue'
   import { computed } from 'vue'
   import { usePage } from '@inertiajs/inertia-vue3'
-  import {debounce} from "lodash/function";
 
   const components = { AppLayout, MeeTable, Pagination, JetButton }
 
@@ -272,22 +272,6 @@
               if (Number(this.admin.country_id) === 2) return 'AED'
               return 'USD'
           },
-      },
-      mounted() {
-          window.addEventListener('scroll', debounce((e) => {
-              let pixelsFromBottom = document.documentElement.offsetHeight - document.documentElement.scrollTop - window.innerHeight;
-
-              this.params['type'] = this.type;
-
-              if (pixelsFromBottom < 200){
-                  axios.get(this.allUsers.next_page_url, { params: this.params }).then(response => {
-                      this.allUsers = {
-                          ...response.data,
-                          data: [...this.allUsers.data, ...response.data.data]
-                      }
-                  });
-              }
-          }, 100))
       },
   }
   </script>

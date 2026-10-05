@@ -106,6 +106,7 @@
             </tr>
           </tbody>
         </table>
+        <pagination class="mt-10" :links="productColors.links || []" />
     </MeeTable>
 
       <transition name="modal">
@@ -222,7 +223,6 @@ import {throttle} from "lodash";
 import { createPopper } from '@popperjs/core';
 import JetButton from '@/Jetstream/Button.vue'
 import loading from "@/Shared/loading";
-import {debounce} from "lodash/function";
 import JetLabel from '@/Jetstream/Label.vue'
 import Multiselect from '@suadelabs/vue3-multiselect'
 import JetInput from '@/Jetstream/Input.vue'
@@ -533,7 +533,14 @@ export default {
                         timerProgressBar: true,
                         },
                     )
-                    this.$inertia.delete(route('productColors.destroy', id))
+                    const previousPageUrl = this.productColors.data.length === 1
+                        ? this.productColors.prev_page_url
+                        : null
+                    this.$inertia.delete(route('productColors.destroy', id), {
+                        onSuccess: () => {
+                            if (previousPageUrl) this.$inertia.get(previousPageUrl)
+                        }
+                    })
                 }
             })
 
@@ -549,47 +556,6 @@ export default {
             document.getElementById(tooltipID).classList.toggle("hidden");
         },
 
-        // new code
-        fetchData() {
-            // Fetch data from the server and update this.items
-            // Update loading state accordingly
-
-
-            if(this.page <= this.productColors.last_page ) {
-
-                // axios.get(this.route('productColors.index', { params: this.params,page: this.page++ })).then(response => {
-                //     this.productColors = {
-                //         ...response.data,
-                //         data: [...this.productColors.data, ...response.data.data]
-                //     }
-                // });
-
-                // let params = this.params;
-                // Object.keys(params).forEach(key => {
-                //     if (params[key] == ''){
-                //         delete params[key]
-                //     }
-                // }, 400);
-
-                // axios.get(this.productColors.next_page_url, { params: params }).then(response => {
-                axios.get(app_url+'admin/productColors', { params: { params: this.params, page: this.page } }).then(response => {
-                    this.productColors = {
-                        ...response.data,
-                        data: [...this.productColors.data, ...response.data.data]
-                    }
-                });
-            }
-
-
-        },
-        handleScroll() {
-            // let pixelsFromBottom = document.documentElement.offsetHeight - document.documentElement.scrollTop - window.innerHeight;
-            // if (pixelsFromBottom < 50){
-            if (window.innerHeight + window.scrollY + 50 >= document.documentElement.offsetHeight &&!this.loading) {
-                this.page++;
-                this.fetchData();
-            }
-        },
     },
     watch: {
         params: {
@@ -612,35 +578,6 @@ export default {
         }
 
 
-    },
-    mounted() {
-
-        this.fetchData();
-        window.addEventListener('scroll', this.handleScroll);
-
-        // undefined;
-        // window.addEventListener('scroll', debounce((e) => {
-        //     let pixelsFromBottom = document.documentElement.offsetHeight - document.documentElement.scrollTop - window.innerHeight;
-
-        //     if (pixelsFromBottom < 100){
-        //         let params = this.params;
-        //         Object.keys(params).forEach(key => {
-        //             if (params[key] == ''){
-        //                 delete params[key]
-        //             }
-        //         }, 400);
-        //         axios.get(this.productColors.next_page_url, { params: params }).then(response => {
-        //             this.productColors = {
-        //                 ...response.data,
-        //                 data: [...this.productColors.data, ...response.data.data]
-        //             }
-        //         });
-        //     }
-        // }, 300))
-    },
-    setup() {
-        const admin = computed(() => usePage().props.value.auth.user)
-        return { admin }
     },
 }
 </script>

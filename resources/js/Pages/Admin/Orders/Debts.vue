@@ -141,6 +141,8 @@
           </tbody>
         </table>
 
+        <pagination class="mt-8" :links="debtOrders.links || []" />
+
     </MeeTable>
 
       <transition name="modal">
@@ -185,7 +187,6 @@ import { computed } from 'vue'
 import { usePage } from '@inertiajs/inertia-vue3'
 import JetDropdown from '@/Jetstream/Dropdown.vue'
 import JetDropdownLink from '@/Jetstream/DropdownLink.vue'
-import {debounce} from "lodash/function";
 
 const components = { AppLayout, MeeTable, Pagination, JetButton, JetDropdown, JetDropdownLink }
 
@@ -357,7 +358,14 @@ export default {
                         timerProgressBar: true,
                         },
                     )
-                    this.$inertia.delete(route('orders.destroy', id))
+                    const previousPageUrl = this.debtOrders.data.length === 1
+                        ? this.debtOrders.prev_page_url
+                        : null
+                    this.$inertia.delete(route('orders.destroy', id), {
+                        onSuccess: () => {
+                            if (previousPageUrl) this.$inertia.get(previousPageUrl)
+                        }
+                    })
                 }
             })
 
@@ -393,43 +401,6 @@ export default {
             });
         },
 
-        // new code
-        fetchData() {
-            // Fetch data from the server and update this.items
-            // Update loading state accordingly
-
-
-            if(this.page <= this.debtOrders.last_page ) {
-
-                // axios.get(this.route('orders.debts', { params: this.params,page: this.page++ })).then(response => {
-                //     this.totalSales = response.data.total
-                //     this.debtOrders = {
-                //         ...response.data.orders,
-                //         data: [...this.debtOrders.data, ...response.data.orders.data]
-                //     }
-                // });
-
-                //axios.get(this.debtOrders.next_page_url, { params: this.params }).then(response => {
-                axios.get(app_url+'admin/orders/all/debts', { params: { params: this.params, page: this.page } }).then(response => {
-                    this.totalSales = response.data.total
-                    this.debtOrders = {
-                        ...response.data.orders,
-                        data: [...this.debtOrders.data, ...response.data.orders.data]
-                    }
-                });
-
-            }
-
-
-        },
-        handleScroll() {
-            // let pixelsFromBottom = document.documentElement.offsetHeight - document.documentElement.scrollTop - window.innerHeight;
-            // if (pixelsFromBottom < 50){
-            if (window.innerHeight + window.scrollY + 50 >= document.documentElement.offsetHeight &&!this.loading) {
-                this.page++;
-                this.fetchData();
-            }
-        },
     },
     watch: {
         params: {
@@ -444,25 +415,6 @@ export default {
     setup() {
         const user = computed(() => usePage().props.value.auth.user)
         return { user }
-    },
-    mounted() {
-
-        this.fetchData();
-        window.addEventListener('scroll', this.handleScroll);
-
-        // window.addEventListener('scroll', debounce((e) => {
-        //     let pixelsFromBottom = document.documentElement.offsetHeight - document.documentElement.scrollTop - window.innerHeight;
-
-        //     if (pixelsFromBottom < 200){
-        //         axios.get(this.debtOrders.next_page_url, { params: this.params }).then(response => {
-        //             this.totalSales = response.data.total
-        //             this.debtOrders = {
-        //                 ...response.data.orders,
-        //                 data: [...this.debtOrders.data, ...response.data.orders.data]
-        //             }
-        //         });
-        //     }
-        // }, 100))
     },
 }
 </script>

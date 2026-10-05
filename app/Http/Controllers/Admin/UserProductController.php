@@ -188,14 +188,7 @@ class UserProductController extends Controller
         if ($request->wantsJson()){
             $rate = app(\App\Services\CurrencyService::class)->rate(\App\Support\Country::defaultCurrency(auth()->user()->country_id));
             $paginator = paginate($color_products,10,null,['path' => 'userProducts','stock_products' => $allProductsCount]);
-            $paginator->appends([
-                'totals' => [
-                    'stock_products' => $allProductsCount,
-                    'total_wholesale_price' => $totalWholesalePrice * $rate,
-                    'total_sale_price' => $totalSalePrice * $rate,
-                    'total_retail_price' => $totalRetailPrice * $rate,
-                ]
-            ]);
+            $paginator->appends($request->query());
             return response()->json([
                 'data' => $paginator->items(),
                 'current_page' => $paginator->currentPage(),
@@ -219,6 +212,7 @@ class UserProductController extends Controller
             ]);
         }
         $color_products = paginate($color_products,10,null,['path' => 'userProducts','stock_products' => $allProductsCount]);
+        $color_products->appends($request->query());
 
         $rate = app(\App\Services\CurrencyService::class)->rate(\App\Support\Country::defaultCurrency(auth()->user()->country_id));
 

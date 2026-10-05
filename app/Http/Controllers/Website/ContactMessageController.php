@@ -39,7 +39,7 @@ class ContactMessageController extends Controller
             abort(403);
         }
 
-        $messages = ContactMessage::latest()->paginate(10);
+        $messages = ContactMessage::latest()->paginate(10)->withQueryString();
 
         return Inertia::render('Admin/ContactMessages/Index', [
             'messages' => $messages
