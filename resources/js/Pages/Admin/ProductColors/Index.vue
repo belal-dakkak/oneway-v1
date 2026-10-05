@@ -239,6 +239,12 @@ export default {
 
     components,
 
+    setup() {
+        const admin = computed(() => usePage().props.value.auth?.user ?? { role: null })
+
+        return { admin }
+    },
+
     props: {
         products: Object,
         nproducts: Object,
