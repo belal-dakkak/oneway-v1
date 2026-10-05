@@ -65,6 +65,14 @@ class UaeFinanceConversionTest extends TestCase
         $this->assertDatabaseHas('client_debit_logs', ['id' => $f['log'], 'amount' => 294, 'currency_code' => 'AED']);
         $this->assertDatabaseHas('wallet_movements', ['idempotency_key' => 'old-payment', 'amount' => 73.50, 'currency_code' => 'AED']);
         $this->assertEquals($before, DB::table('orders')->where('id', $f['foreignOrder'])->first());
+        $stored = DB::table('finance_conversion_batches')->where('conversion_key', UaeFinanceConversion::KEY)->first();
+        $manifest = json_decode($stored->report, true, 32, JSON_THROW_ON_ERROR);
+        $this->assertLessThan(2048, strlen($stored->report));
+        $this->assertSame(count($report['changes']), $manifest['change_count']);
+        $this->assertSame($report['signature'], $manifest['report_signature']);
+        $this->assertSame($report['fingerprint'], $manifest['fingerprint']);
+        $this->assertSame(64, strlen($manifest['changes_sha256']));
+        $this->assertArrayNotHasKey('changes', $manifest);
         $count = DB::table('finance_conversion_changes')->count();
         $this->assertGreaterThan(0, $count);
         $this->assertSame('already_applied', $service->apply($report));

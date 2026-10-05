@@ -74,13 +74,17 @@ class UaeFinanceConversion
             throw new RuntimeException('Report signature is invalid. Generate it on this server; do not edit it.');
         }
         if (!empty($report['conflicts'])) throw new RuntimeException('Resolve report conflicts before applying.');
-        return DB::transaction(function () use ($report) {
+        $manifest = $this->auditManifest($report, $signature);
+        return DB::transaction(function () use ($report, $manifest) {
             // One unique batch row serializes even simultaneous first invocations.
             DB::table('finance_conversion_batches')->insertOrIgnore(['conversion_key' => self::KEY,
-                'fingerprint' => $report['fingerprint'], 'report' => json_encode($report),
+                'fingerprint' => $report['fingerprint'], 'report' => $manifest,
                 'created_at' => now(), 'updated_at' => now()]);
             $batch = DB::table('finance_conversion_batches')->where('conversion_key', self::KEY)->lockForUpdate()->first();
             if ($batch->applied_at) return 'already_applied';
+            if (!hash_equals((string) $batch->fingerprint, (string) $report['fingerprint'])) {
+                throw new RuntimeException('An unapplied conversion batch exists for a different financial snapshot. No changes applied.');
+            }
             $fresh = $this->report($report['legacy_source'], true);
             if ($fresh['fingerprint'] !== $report['fingerprint'] || $fresh['conflicts']
                 || ($fresh['warnings'] ?? []) !== ($report['warnings'] ?? [])
@@ -100,6 +104,34 @@ class UaeFinanceConversion
             DB::table('finance_conversion_batches')->where('id', $batch->id)->update(['applied_at' => now(), 'updated_at' => now()]);
             return 'applied';
         }, 3);
+    }
+
+    /** Keep the database audit row well below MySQL packet limits; field history is journalled separately. */
+    private function auditManifest(array $report, string $signature): string
+    {
+        $changesHash = hash_init('sha256');
+        foreach ($report['changes'] ?? [] as $change) {
+            hash_update($changesHash, json_encode($change,
+                JSON_PRESERVE_ZERO_FRACTION | JSON_THROW_ON_ERROR) . "\n");
+        }
+        $warningsHash = hash_init('sha256');
+        foreach ($report['warnings'] ?? [] as $warning) {
+            hash_update($warningsHash, json_encode($warning,
+                JSON_PRESERVE_ZERO_FRACTION | JSON_THROW_ON_ERROR) . "\n");
+        }
+
+        return json_encode([
+            'version' => $report['version'] ?? null,
+            'rate' => $report['rate'] ?? null,
+            'fingerprint' => $report['fingerprint'] ?? null,
+            'report_signature' => $signature,
+            'legacy_source_sha256' => $report['legacy_source']['sha256'] ?? null,
+            'change_count' => count($report['changes'] ?? []),
+            'changes_sha256' => hash_final($changesHash),
+            'conflict_count' => count($report['conflicts'] ?? []),
+            'warning_count' => count($report['warnings'] ?? []),
+            'warnings_sha256' => hash_final($warningsHash),
+        ], JSON_PRESERVE_ZERO_FRACTION | JSON_THROW_ON_ERROR);
     }
 
     private function snapshot(bool $lock): array
