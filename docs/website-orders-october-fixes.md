@@ -29,8 +29,8 @@ The latest approved scope converts all proven UAE USD transaction amounts and hi
 
 Follow [the UAE finance conversion guide](uae-finance-conversion.md) for the required migration, signed private report, conflict review, backup, paused writers, atomic application and verification. The current command is `finance:convert-uae-to-aed`; its default mode only saves a preview. Application uses `--apply=<report>` and requires maintenance mode. Live database conversion has not been performed from this workspace.
 
-## Direct receipt limitation
+## Direct receipt compact-layout contract
 
-Tests inspect the real print-info endpoint for 1, 2 and 3 distinct products, including original quantities, amounts, model count, names and customer TRN. The bridge still posts JSON to `http://localhost:12354/api/orders`; no fabricated rows or layout fields were added.
+Tests inspect the real print-info endpoint for 1, 2 and 3 distinct products, including original quantities, amounts, model count, names and customer TRN. The payload sent to `http://localhost:12354/api/orders` now includes the exact `products_count` and a `compact_layout` boolean. It is `true` for one or two real product rows and `false` for zero or at least three rows. No fabricated rows are added.
 
-The photographed gap between customer details and the item table has **not** been verified as fixed. Correct payloads cannot establish how the local renderer/printer positions content. Compare an actual receipt after deployment; if the gap remains, inspect the bridge's renderer or printer settings. The approved A4 and browser receipt dimensions were not changed.
+The local renderer must place the item table immediately after the customer and seller details when `compact_layout` is `true`. It must not reserve a fixed minimum height for the product area in either mode. Older renderer versions can ignore the new field, but the photographed gap will remain until the local program implements this contract. The approved A4 and browser receipt dimensions are unchanged.

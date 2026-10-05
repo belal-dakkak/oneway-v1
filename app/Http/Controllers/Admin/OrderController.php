@@ -368,6 +368,8 @@ class OrderController extends Controller
         $o->total_model_count = $items->count();
 
         $o->products = $items;
+        $o->products_count = $items->count();
+        $o->compact_layout = $o->products_count > 0 && $o->products_count <= 2;
 
         foreach($o->products as $product) {
             $product->item_price = $product->entered_unit_price;

@@ -23,11 +23,7 @@ class Receipt
 
     static async printOrder(order)
     {
-
-        order.product_name   = " ";
-        order.products_count = order.products.length;
-
-        const body = JSON.stringify(order);
+        const body = JSON.stringify(Receipt.orderPayload(order));
 
 		await fetch(`${Receipt.apiHost}/api/orders`, {
 			body: body,
@@ -56,6 +52,28 @@ class Receipt
         .catch(error => {
             throw new Error('Failed to print')
         });*/
+    }
+
+    static orderPayload(order)
+    {
+        if (!order || typeof order !== 'object' || Array.isArray(order)) {
+            throw new TypeError('Order payload must be an object');
+        }
+
+        if (!Array.isArray(order.products)) {
+            throw new TypeError('Order products must be an array');
+        }
+
+        const products = [...order.products];
+        const productsCount = products.length;
+
+        return {
+            ...order,
+            product_name: ' ',
+            products,
+            products_count: productsCount,
+            compact_layout: productsCount > 0 && productsCount <= 2,
+        };
     }
 
     static async printProduct(product)
@@ -128,4 +146,3 @@ class Receipt
 
 
 export default Receipt;
-

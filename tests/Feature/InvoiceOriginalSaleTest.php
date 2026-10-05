@@ -124,7 +124,10 @@ class InvoiceOriginalSaleTest extends TestCase
             $this->actingAs($order->seller);
             $response = $this->getJson(route('orders.print-info', $order->id))->assertOk()
                 ->assertJsonCount($count, 'products')->assertJsonPath('total_count', $count)
-                ->assertJsonPath('total_model_count', $count)->assertJsonPath('customer_trn', $buyer->trn);
+                ->assertJsonPath('total_model_count', $count)
+                ->assertJsonPath('products_count', $count)
+                ->assertJsonPath('compact_layout', $count <= 2)
+                ->assertJsonPath('customer_trn', $buyer->trn);
             foreach ($response->json('products') as $product) {
                 $this->assertSame(1, $product['qty']);
                 $this->assertNotSame('', trim($product['name']));
