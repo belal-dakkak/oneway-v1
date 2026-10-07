@@ -58,14 +58,24 @@ class WebsiteManualFulfilmentTest extends TestCase
             $this->assertFalse(app(WebsiteOrderStockService::class)->release($website));
             $this->assertSame(10, $stock->fresh()->stock);
         }
+        $this->assertDatabaseCount('wallet_movements', 0);
+
         $this->actingAs($stock->user);
-        $repository->add(new Request([
+        $manualOrder = $repository->add(new Request([
             'order_type' => 'simple', 'type' => Order::TYPE_CASH, 'payment' => ['value' => 0],
             'currency' => ['value' => 'AED', 'code' => 'AED', 'rate' => 3.67],
             'selected_products' => [['product_id' => $stock->id, 'qty' => 2, 'price' => 55]],
             'total_price_before_discount' => 110, 'paid_price' => 110,
         ]));
         $this->assertSame(8, $stock->fresh()->stock);
+        $this->assertDatabaseHas('wallet_movements', [
+            'source_type' => Order::class,
+            'source_id' => $manualOrder->id,
+            'direction' => 'credit',
+            'currency_code' => 'AED',
+            'amount' => 110,
+        ]);
+        $this->assertDatabaseCount('wallet_movements', 1);
     }
 
     public function test_unavailable_quantity_is_still_rejected(): void

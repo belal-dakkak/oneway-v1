@@ -11,7 +11,6 @@ use App\Services\Payment\TapPaymentResult;
 use App\Services\Payment\TapPaymentService;
 use App\Services\Payment\WebsiteOrderStockService;
 use App\Services\InvoiceDataService;
-use App\Services\CashboxService;
 use Illuminate\Database\Schema\Blueprint;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Schema;
@@ -228,7 +227,7 @@ class TapPaymentFinalizerTest extends TestCase
         $this->assertSame(8, $stock->fresh()->stock);
     }
 
-    public function test_syrian_syp_invoice_posts_a_captured_tap_payment_once_to_the_usd_cashbox(): void
+    public function test_captured_tap_payment_is_tracked_without_posting_to_the_cashbox(): void
     {
         $cashboxId = DB::table('users')->insertGetId([
             'name' => 'Website cashbox',
@@ -294,14 +293,14 @@ class TapPaymentFinalizerTest extends TestCase
         $this->finalizer()->finalize($charge);
         $this->finalizer()->finalize($charge);
 
-        $this->assertDatabaseHas('wallets', [
-            'user_id' => $cashboxId,
-            'currency_code' => 'USD',
-            'credit' => 20,
-        ]);
-        $this->assertDatabaseCount('wallet_movements', 1);
-        $this->assertNotNull($order->fresh()->cashbox_posted_at);
-        $this->assertSame(260000.0, (float) $order->fresh()->paid_price);
+        $order->refresh();
+        $this->assertDatabaseCount('wallets', 0);
+        $this->assertDatabaseCount('wallet_movements', 0);
+        $this->assertNull($order->cashbox_posted_at);
+        $this->assertNotNull($order->payment_captured_at);
+        $this->assertSame(260000.0, (float) $order->paid_price);
+        $this->assertSame(0.0, (float) $order->remain_price);
+        $this->assertTrue($order->is_paid);
     }
 
     public function test_explicit_invoice_source_prevents_same_id_collision(): void
@@ -401,10 +400,7 @@ class TapPaymentFinalizerTest extends TestCase
 
     private function finalizer(): TapPaymentFinalizer
     {
-        return new TapPaymentFinalizer(
-            app(WebsiteOrderStockService::class),
-            app(CashboxService::class)
-        );
+        return new TapPaymentFinalizer(app(WebsiteOrderStockService::class));
     }
 
     private function charge(WebsiteOrder $order, string $status): array

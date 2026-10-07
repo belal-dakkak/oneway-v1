@@ -98,7 +98,12 @@ class WebsiteOrder extends Model
         if ($this->payment_type === 'card' || $this->payment_type === 'pay_by_card') {
             return $this->payment_captured_at !== null;
         }
-        return $this->cashbox_posted_at !== null;
+
+        $total = (float) $this->total_price;
+        $paid = (float) $this->paid_price;
+        $remaining = (float) $this->remain_price;
+
+        return $total > 0 && $paid + 0.0001 >= $total && $remaining <= 0.0001;
     }
 
     public function getStatusLabelAttribute()

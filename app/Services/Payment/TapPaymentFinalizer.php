@@ -3,11 +3,8 @@
 namespace App\Services\Payment;
 
 use App\Models\WebsiteOrder;
-use App\Models\CountryCommerceSetting;
-use App\Services\CashboxService;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
-use Throwable;
 
 class TapPaymentFinalizer
 {
@@ -16,12 +13,10 @@ class TapPaymentFinalizer
     ];
 
     private $stockService;
-    private $cashboxes;
 
-    public function __construct(WebsiteOrderStockService $stockService, CashboxService $cashboxes)
+    public function __construct(WebsiteOrderStockService $stockService)
     {
         $this->stockService = $stockService;
-        $this->cashboxes = $cashboxes;
     }
 
     public function finalize(array $charge): TapPaymentResult
@@ -62,8 +57,8 @@ class TapPaymentFinalizer
                 ], true);
 
                 if (!$order->payment_captured_at) {
-                    // Payment confirmation records money only. Stock is deducted
-                    // by the staff's manual sale, including for legacy unpaid orders.
+                    // The gateway result is kept for operational tracking. The
+                    // separate manual sale is the only cashbox and stock event.
 
                     $order->forceFill([
                         'status' => WebsiteOrder::STATUS_PENDING,
@@ -77,7 +72,6 @@ class TapPaymentFinalizer
                     }
                 }
 
-                $this->postCapturedCashbox($order, $chargeId);
                 $order->save();
 
                 return new TapPaymentResult(TapPaymentResult::CAPTURED, $order->fresh());
@@ -101,45 +95,6 @@ class TapPaymentFinalizer
         }
 
         return $result;
-    }
-
-    private function postCapturedCashbox(WebsiteOrder $order, string $chargeId): void
-    {
-        if ($order->cashbox_posted_at) {
-            return;
-        }
-
-        $commerce = CountryCommerceSetting::forCountry((int) $order->country_id);
-        if (!$commerce->website_cashbox_user_id) {
-            return;
-        }
-
-        try {
-            $currency = strtoupper((string) ($order->gateway_currency ?: $order->curr_type));
-            $this->cashboxes->credit(
-                (int) $commerce->website_cashbox_user_id,
-                (float) ($order->gateway_amount ?: $order->total_price),
-                $currency,
-                "website-order:{$order->id}:card-captured",
-                [
-                    'exchange_rate' => $currency === 'USD' ? 1 : (float) ($order->gateway_rate ?: 1),
-                    'payment_method' => 'card',
-                    'source_type' => WebsiteOrder::class,
-                    'source_id' => $order->id,
-                    'note' => "Tap payment for website order #{$order->barcode}",
-                ]
-            );
-            $order->cashbox_posted_at = now();
-        } catch (Throwable $exception) {
-            // A real captured payment must never be reverted merely because its
-            // internal cashbox is temporarily unavailable. The next verified
-            // callback/webhook will retry this idempotent posting.
-            Log::critical('Captured Tap payment needs cashbox reconciliation.', [
-                'order_id' => $order->id,
-                'charge_id' => $chargeId,
-                'error' => $exception->getMessage(),
-            ]);
-        }
     }
 
     private function validateCharge(WebsiteOrder $order, array $charge, string $chargeId): ?string

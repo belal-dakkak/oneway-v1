@@ -259,7 +259,7 @@ Route::middleware(['auth:sanctum'])
         ->group(function () {
             Route::get('website-orders', [OrderController::class, 'websiteOrders'])->name('websiteOrders');
             Route::post('website-orders/change-status/{id}', [OrderController::class, 'changeWebsiteOrderStatus'])->name('websiteOrders.changeStatus');
-            Route::post('website-orders/mark-paid/{id}', [OrderController::class, 'markWebsiteOrderPaid'])->name('orders.websiteOrders.markPaid');
+            Route::post('website-orders/mark-paid/{id}', [OrderController::class, 'markWebsiteOrderPaid'])->name('websiteOrders.markPaid');
             Route::resource('/', '\App\Http\Controllers\Admin\OrderController', ['parameters' => ['' => 'order']]);
 
             Route::get('monthly/orders', [OrderController::class, 'monthly_orders'])->name('monthly_orders');

@@ -8,6 +8,7 @@ use App\Mail\OrderConfirmationEmail;
 use App\Models\User;
 use App\Models\WebsiteOrder;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Mail;
 use Illuminate\Support\Facades\Queue;
 use Tests\TestCase;
@@ -145,6 +146,37 @@ class WebsiteOrderNotificationTest extends TestCase
         $this->assertSame(1, $other->unreadNotifications()->count());
         $this->getJson(route('notification.summary'))->assertJsonPath('website_order_count', 1)
             ->assertJsonCount(0, 'website_order_ids');
+    }
+
+    public function test_cod_status_and_paid_tracking_never_post_website_money_to_the_cashbox(): void
+    {
+        Mail::fake();
+        $shop = $this->badgeUser('cashbox-free', User::ROLE_SHOP, User::COUNTRY_UAE);
+        $order = $this->badgeOrder('TRACK-ONLY');
+        $order->update(['paid_price' => 0, 'remain_price' => 55]);
+
+        foreach ([WebsiteOrder::STATUS_ONGOING, WebsiteOrder::STATUS_DELIVERED] as $status) {
+            $this->actingAs($shop)->postJson(route('orders.websiteOrders.changeStatus', $order->id), [
+                'status' => $status,
+            ])->assertOk()->assertJsonPath('status', $status);
+        }
+
+        $order->refresh();
+        $this->assertSame(0.0, (float) $order->paid_price);
+        $this->assertSame(55.0, (float) $order->remain_price);
+        $this->assertFalse($order->is_paid);
+        $this->assertNull($order->cashbox_posted_at);
+
+        $this->postJson(route('orders.websiteOrders.markPaid', $order->id))
+            ->assertOk()
+            ->assertJsonPath('paid_price', 55)
+            ->assertJsonPath('remain_price', 0)
+            ->assertJsonPath('is_paid', true);
+
+        $order->refresh();
+        $this->assertTrue($order->is_paid);
+        $this->assertNull($order->cashbox_posted_at);
+        $this->assertSame(0, DB::table('wallet_movements')->count());
     }
 
     private function badgeUser(string $name, int $role, int $country): User

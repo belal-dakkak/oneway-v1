@@ -8,7 +8,6 @@ use App\Http\Traits\ReceiptTrait;
 use App\Models\City;
 use App\Models\Order;
 use App\Models\WebsiteOrder;
-use App\Models\CountryCommerceSetting;
 use App\Models\OrderItem;
 use App\Models\ProductColor;
 use App\Models\ProductSize;
@@ -18,7 +17,6 @@ use App\Models\User;
 use App\Models\UserProduct;
 use App\Repositories\OrderRepository;
 use App\Services\ClientAccountService;
-use App\Services\CashboxService;
 use App\Services\CurrencyService;
 use App\Services\InvoiceDataService;
 use App\Services\SalesCurrencyPolicy;
@@ -34,7 +32,6 @@ use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Mail;
 use Illuminate\Support\Facades\Redirect;
-use Illuminate\Validation\ValidationException;
 use Inertia\Inertia;
 use Inertia\Response;
 use Jenssegers\Date\Date;
@@ -49,7 +46,6 @@ class OrderController extends Controller
     private $invoiceDataService;
     private $salesCurrencyPolicy;
     private $clientAccounts;
-    private $cashboxes;
     private $websiteStock;
 
     public function __construct(
@@ -58,7 +54,6 @@ class OrderController extends Controller
         InvoiceDataService $invoiceDataService,
         SalesCurrencyPolicy $salesCurrencyPolicy,
         ClientAccountService $clientAccounts,
-        CashboxService $cashboxes,
         WebsiteOrderStockService $websiteStock
     )
     {
@@ -67,7 +62,6 @@ class OrderController extends Controller
         $this->invoiceDataService = $invoiceDataService;
         $this->salesCurrencyPolicy = $salesCurrencyPolicy;
         $this->clientAccounts = $clientAccounts;
-        $this->cashboxes = $cashboxes;
         $this->websiteStock = $websiteStock;
     }
 
@@ -757,9 +751,6 @@ class OrderController extends Controller
                 $order->status = $order->status + 1;
             }
 
-            if ((int) $order->status === WebsiteOrder::STATUS_DELIVERED && $order->payment_type === 'cod') {
-                $this->postWebsiteCod($order);
-            }
             if ((int) $order->status === WebsiteOrder::STATUS_FAILED && !$order->payment_captured_at) {
                 $this->websiteStock->releaseLocked($order);
             }
@@ -802,7 +793,10 @@ class OrderController extends Controller
             if ($order->payment_type !== 'cod') {
                 abort(422, 'Card orders are marked paid only by the payment gateway.');
             }
-            $this->postWebsiteCod($order);
+            // Website orders are fulfilled through a separate manual sale. This
+            // marker is operational only and must never post money to a cashbox.
+            $order->paid_price = $order->total_price;
+            $order->remain_price = 0;
             $order->save();
 
             return $order;
@@ -814,48 +808,6 @@ class OrderController extends Controller
             'remain_price' => $order->remain_price,
             'is_paid'      => $order->is_paid,
         ]);
-    }
-
-    private function postWebsiteCod(WebsiteOrder $order): void
-    {
-        if ($order->cashbox_posted_at) {
-            return;
-        }
-
-        $commerce = CountryCommerceSetting::forCountry((int) $order->country_id);
-        $cashboxUserId = (int) ($commerce->website_cashbox_user_id ?: 0);
-        $operator = auth()->user();
-        if (!$cashboxUserId && (int) $order->country_id !== Country::SYRIA && $operator) {
-            // Preserve the existing Lebanon/UAE collection flow.
-            $cashboxUserId = (int) $operator->id;
-        }
-        if (!$cashboxUserId
-            && $operator
-            && (int) $operator->country_id === (int) $order->country_id
-            && in_array((int) $operator->role_id, [User::ROLE_SHOP, User::ROLE_WAREHOUSE], true)) {
-            $cashboxUserId = (int) $operator->id;
-        }
-        if (!$cashboxUserId) {
-            throw ValidationException::withMessages([
-                'cashbox' => 'Configure the website receiving cashbox before collecting this COD order.',
-            ]);
-        }
-        $this->cashboxes->credit(
-            $cashboxUserId,
-            (float) $order->total_price,
-            strtoupper((string) ($order->curr_type ?: 'USD')),
-            "website-order:{$order->id}:cod-collected",
-            [
-                'exchange_rate' => (float) ($order->curr_rate ?: 1),
-                'payment_method' => 'cod',
-                'source_type' => WebsiteOrder::class,
-                'source_id' => $order->id,
-                'note' => "COD collected for website order #{$order->barcode}",
-            ]
-        );
-        $order->paid_price = $order->total_price;
-        $order->remain_price = 0;
-        $order->cashbox_posted_at = now();
     }
 
     //public function singlePrint(Request $request)
