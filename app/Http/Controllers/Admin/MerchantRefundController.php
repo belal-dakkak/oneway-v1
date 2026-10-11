@@ -14,7 +14,6 @@ use App\Models\UserProduct;
 use App\Models\UserProductLog;
 use App\Notifications\ShopNotification;
 use App\Services\ClientAccountService;
-use App\Services\CashboxService;
 use Carbon\Carbon;
 use Exception;
 use Illuminate\Http\JsonResponse;
@@ -25,18 +24,18 @@ use Jenssegers\Date\Date;
 class MerchantRefundController extends Controller
 {
     private $clientAccounts;
-    private $cashboxes;
 
-    public function __construct(ClientAccountService $clientAccounts, CashboxService $cashboxes)
+    public function __construct(ClientAccountService $clientAccounts)
     {
         $this->clientAccounts = $clientAccounts;
-        $this->cashboxes = $cashboxes;
     }
 
     public function store(Request $request): JsonResponse
     {
         $request->validate([
             'user_products' => ['required', 'string'],
+            'merchant_id' => ['required', 'integer', 'exists:users,id'],
+            'merchant_debit_id' => ['required', 'integer', 'exists:merchant_debits,id'],
         ]);
 
         $userProduct = null;
@@ -63,25 +62,45 @@ class MerchantRefundController extends Controller
         $now = Carbon::now()->format('Y-m-d');
         $now2 = Carbon::now()->format('Y-m-d h:i A');
 
+        DB::beginTransaction();
         foreach ($products as $key => $product) {
 
             try {
-                DB::beginTransaction();
                 // $qty = $request->get('qty');
-                $qty = $product['qty'];
+                $qty = (int) ($product['qty'] ?? 0);
+                $userProductId = (int) ($product['id'] ?? 0);
+                if ($qty <= 0 || $userProductId <= 0) {
+                    throw new Exception('يجب تحديد منتج وكمية مرتجعة صحيحة.');
+                }
+
+                $userProduct = UserProduct::query()
+                    ->with(['user', 'productColor.product', 'productColor.color'])
+                    ->lockForUpdate()
+                    ->findOrFail($userProductId);
+                $shop = $userProduct->user;
+                $merchant = User::query()->lockForUpdate()->findOrFail((int) $request->get('merchant_id'));
+                $merchantAccount = \App\Models\MerchantDebit::query()
+                    ->lockForUpdate()
+                    ->findOrFail((int) $request->get('merchant_debit_id'));
+
+                if ((int) $merchantAccount->creditor_id !== (int) $merchant->id
+                    || (int) $merchantAccount->debtor_id !== (int) $shop->id
+                    || (int) $shop->country_id !== (int) auth()->user()->country_id
+                    || (int) $merchant->country_id !== (int) $shop->country_id) {
+                    throw new Exception('حساب الدين أو المحل المحدد غير صالح لهذا المرتجع.');
+                }
+                if ($qty > (int) $userProduct->stock) {
+                    throw new Exception('الكمية المرتجعة أكبر من المخزون المتاح.');
+                }
 
                 $merchantRefund = MerchantRefund::query()->create([
-                    'user_product_id' => $product['id'],
+                    'user_product_id' => $userProductId,
                     'merchant_id' => $request->get('merchant_id'),
                     'merchant_debit_id' => $request->get('merchant_debit_id'),
                     'qty' => $product['qty']
                 ]);
 
                 $total_stock = $total_stock + $qty;
-
-                $userProduct = $merchantRefund->userProduct;
-                $shop = $userProduct->user;
-                $merchant = $merchantRefund->merchant;
 
                 $shopName = $shop->name;
                 $product = $userProduct->productColor->product_name;
@@ -133,35 +152,15 @@ class MerchantRefundController extends Controller
                 }
 
 
-                $userProduct->update([
-                    'stock' => DB::raw("stock - $qty")
-                ]);
+                $userProduct->decrement('stock', $qty);
+                $userProduct->refresh()->load(['user', 'productColor.product', 'productColor.color']);
 
-                $cashboxContext = [
-                    'exchange_rate' => 1,
-                    'payment_method' => 'merchant_refund',
-                    'source_type' => MerchantRefund::class,
-                    'source_id' => $merchantRefund->id,
-                    'note' => $note,
-                ];
-                $this->cashboxes->credit(
-                    (int) $shop->id,
-                    (float) $amount,
-                    'USD',
-                    "merchant-refund:{$merchantRefund->id}:shop",
-                    $cashboxContext
-                );
-                $this->cashboxes->debit(
-                    (int) $merchant->id,
-                    (float) $amount,
-                    'USD',
-                    "merchant-refund:{$merchantRefund->id}:merchant",
-                    $cashboxContext
-                );
-
-                $merchantAccount = $merchantRefund->merchantDebit;
                 $merchantCode = app(\App\Services\OperationalCurrency::class)->accountCode($merchantAccount);
-                $merchantAccount->decrement('amount', app(\App\Services\OperationalCurrency::class)->fromBase($amount, $merchantCode));
+                $accountAmount = app(\App\Services\OperationalCurrency::class)->fromBase($amount, $merchantCode);
+                if ((float) $merchantAccount->amount < (float) $accountAmount) {
+                    throw new Exception('قيمة المرتجع أكبر من رصيد دين التاجر.');
+                }
+                $merchantAccount->decrement('amount', $accountAmount);
 
                 ////////////////////////////////////////////
 
@@ -191,12 +190,11 @@ class MerchantRefundController extends Controller
                 DB::rollBack();
                 return response()->json([
                     'error' => $exception->getMessage(),
-                ]);
+                ], 422);
             }
-            DB::commit();
         }
-
-
+        $notificationsToSend = [];
+        try {
         if($userProduct != null && $note != null) {
 
             ///////////////////////////////////////////////
@@ -211,7 +209,7 @@ class MerchantRefundController extends Controller
 
                         $product = $arr['product'];
 
-                        $check_debit_log = DebitLog::where('product_color_id',$product_color_id)->where('shop_id',$shop->id)->where('merchant_id',$request->get('merchant_id'))->where('request_date',$now)->where('type','refound')->first();
+                        $check_debit_log = DebitLog::where('product_color_id',$product_color_id)->where('shop_id',$shop->id)->where('merchant_id',$request->get('merchant_id'))->where('request_date',$now)->where('type','refound')->lockForUpdate()->first();
 
                         $total_stock = $arr['qty'];
                         $total_amount = $arr['amount'];
@@ -251,9 +249,7 @@ class MerchantRefundController extends Controller
 
                         $note = "لقد قام المحل $shopName بمرتجع للمنتج $product بعدد $total_stock للتاجر $merchantName بتاريخ $now2";
 
-                        $shopAccount = $userProduct->user;
                         $user = auth()->user();
-                        $admin = User::query()->where('role_id', User::ROLE_ADMIN)->first();
 
                         foreach($logsArr2 as $index => $colorsArr) {
                             foreach($colorsArr as $ind => $val) {
@@ -264,13 +260,20 @@ class MerchantRefundController extends Controller
                         }
 
                         $new_userProduct = $arr['userProduct'];
-
-                        if($shopAccount && $shopAccount->id != $user->id) {
-                            $shopAccount->notify(new ShopNotification($new_userProduct, $note, $user,$notificationLogsArr));
-                        }
-
-                        $admin->notify(new ShopNotification($new_userProduct, $note, $user,$notificationLogsArr));
-                        $user->notify(new ShopNotification($new_userProduct, $note, $user,$notificationLogsArr));
+                        $recipients = User::query()
+                            ->where('country_id', $user->country_id)
+                            ->where('role_id', User::ROLE_ADMIN)
+                            ->get()
+                            ->push($user)
+                            ->push($new_userProduct->user)
+                            ->unique('id');
+                        $notificationsToSend[] = [
+                            'recipients' => $recipients,
+                            'user_product' => $new_userProduct,
+                            'note' => $note,
+                            'actor' => $user,
+                            'logs' => $notificationLogsArr,
+                        ];
 
                     }
                 }
@@ -279,6 +282,29 @@ class MerchantRefundController extends Controller
 
             ///////////////////////////////////////////////////
 
+        }
+        } catch (Exception $exception) {
+            DB::rollBack();
+            return response()->json(['error' => $exception->getMessage()], 422);
+        }
+        DB::commit();
+
+        foreach ($notificationsToSend as $notificationData) {
+            foreach ($notificationData['recipients'] as $recipient) {
+                try {
+                    $recipient->notify(new ShopNotification(
+                        $notificationData['user_product'],
+                        $notificationData['note'],
+                        $notificationData['actor'],
+                        $notificationData['logs']
+                    ));
+                } catch (\Throwable $exception) {
+                    \Log::warning('Merchant refund notification failed.', [
+                        'recipient_id' => $recipient->id,
+                        'message' => $exception->getMessage(),
+                    ]);
+                }
+            }
         }
 
         return response()->json([

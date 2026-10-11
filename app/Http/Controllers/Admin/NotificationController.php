@@ -12,14 +12,12 @@ use App\Models\ShippingDetails;
 use App\Models\User;
 use App\Models\UserProductLog;
 use App\Models\WebsiteOrder;
-use Carbon\Carbon;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Redirect;
 use Inertia\Inertia;
 use Inertia\Response;
-use Illuminate\Notifications\DatabaseNotification;
 
 class NotificationController extends Controller
 
@@ -40,7 +38,15 @@ class NotificationController extends Controller
         ]);
 
         $user = User::query()->find(auth()->id());
-        $userNotifications = $user->notifications()->latest()->get();
+        $userNotifications = $user->notifications()
+            ->where(function ($query) {
+                $query->where('data->source', 'inventory')
+                    ->orWhere(function ($legacy) {
+                        $legacy->whereNull('data->source')->whereNotNull('data->table->product_color');
+                    });
+            })
+            ->latest()
+            ->get();
 
         if ($request->wantsJson()){
             return $userNotifications;
@@ -58,18 +64,11 @@ class NotificationController extends Controller
         //$table = $request->get('table');
         $notificationId = $request->get('notification');
 
-        $notificationRow = DatabaseNotification::find($notificationId);
-
-        if($notificationRow && $notificationRow->data) {
-            $table = $notificationRow->data['table'];
-        } else {
-            $table = [];
-        }
-
         $user = auth()->user();
-        $notification = $user->unreadNotifications()->whereId($notificationId);
-
-        $notification->update(['read_at' => Carbon::now()]);
+        $notificationRow = $user->notifications()->whereKey($notificationId)->firstOrFail();
+        $table = $notificationRow->data['table'] ?? [];
+        abort_unless(isset($table['product_color'], $table['id']), 404);
+        $notificationRow->markAsRead();
 
         $productColor = $table['product_color'];
         $product = $table['product_color']['product'];
@@ -88,6 +87,7 @@ class NotificationController extends Controller
         }
 
         $data = [
+            'user' => $notificationRow->data['user'] ?? null,
             'userProduct' => $table,
             'productColor' => $productColor,
             'product' => $product,

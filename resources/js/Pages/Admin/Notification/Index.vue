@@ -32,7 +32,7 @@
                         <div class="flex-shrink-0 w-full">
 
                             <div v-if="item.data && item.data['table'] && item.data['table'].product_color">
-                                <img class="w-24 rounded-lg" :src="item.data['table'].product_color.photo_url" alt="" />
+                                <img class="w-24 rounded-lg" :src="item.data.image_url || item.data['table'].product_color.photo_url" alt="" />
                             </div>
 
                         </div>

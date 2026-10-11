@@ -7,11 +7,16 @@ export function refreshWebsiteOrderSummary() {
 }
 
 export class WebsiteOrderNotifications {
-    constructor({ userId, initialIds = [], load, update, ring, document, setInterval, clearInterval }) {
+    constructor({ userId, initialIds = [], initialOtherIds = [], load, update, ring, document, setInterval, clearInterval }) {
         Object.assign(this, { load, update, ring, document, setInterval, clearInterval });
-        if (!sessions.has(userId)) sessions.set(userId, { seen: new Set(), audioEnabled: false });
+        if (!sessions.has(userId)) sessions.set(userId, {
+            seenWebsite: new Set(),
+            seenOther: new Set(),
+            audioEnabled: false,
+        });
         this.session = sessions.get(userId);
-        initialIds.forEach(id => this.session.seen.add(id));
+        initialIds.forEach(id => this.session.seenWebsite.add(id));
+        initialOtherIds.forEach(id => this.session.seenOther.add(id));
         this.busy = false;
         this.refreshQueued = false;
         this.stopped = false;
@@ -40,10 +45,14 @@ export class WebsiteOrderNotifications {
         try {
             const snapshot = await this.load();
             if (this.stopped || this.refreshQueued) return;
-            const fresh = snapshot.website_order_ids.filter(id => !this.session.seen.has(id));
-            snapshot.website_order_ids.forEach(id => this.session.seen.add(id));
+            const websiteIds = snapshot.website_order_ids || [];
+            const otherIds = snapshot.other_notification_ids || [];
+            const freshWebsite = websiteIds.filter(id => !this.session.seenWebsite.has(id));
+            const freshOther = otherIds.filter(id => !this.session.seenOther.has(id));
+            websiteIds.forEach(id => this.session.seenWebsite.add(id));
+            otherIds.forEach(id => this.session.seenOther.add(id));
             this.update(snapshot);
-            if (fresh.length && this.session.audioEnabled && !this.document.hidden) {
+            if ((freshWebsite.length || freshOther.length) && this.session.audioEnabled && !this.document.hidden) {
                 await this.ring().catch(() => {});
             }
         } catch (_) {
@@ -55,6 +64,19 @@ export class WebsiteOrderNotifications {
                 await this.refresh();
             }
         }
+    }
+
+    async receive(notification) {
+        if (this.stopped) return;
+        const id = notification?.id;
+        const isOther = notification?.source === 'inventory' || Boolean(notification?.table?.product_color);
+        const seen = isOther ? this.session.seenOther : this.session.seenWebsite;
+        const fresh = id && !seen.has(id);
+        if (id) seen.add(id);
+        if (fresh && this.session.audioEnabled && !this.document.hidden) {
+            await this.ring().catch(() => {});
+        }
+        await this.refresh({ ensureFresh: true });
     }
 
     stop() {

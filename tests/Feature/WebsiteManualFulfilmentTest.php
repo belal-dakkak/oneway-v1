@@ -113,4 +113,22 @@ class WebsiteManualFulfilmentTest extends TestCase
         $this->assertSame(10, $stock->fresh()->stock);
         $this->assertSame(WebsiteOrder::STATUS_FAILED, WebsiteOrder::latest('id')->first()->status);
     }
+
+    public function test_syria_rejects_a_manually_submitted_card_checkout(): void
+    {
+        $stock = $this->stock();
+        $payload = [
+            'items' => [['color' => ['id' => $stock->product_color_id], 'quantity' => 1, 'size' => 'M']],
+            'first_name' => 'Test', 'last_name' => 'Buyer', 'phone' => '+963947900555',
+            'email' => 'syria-card@example.test', 'address' => 'Aleppo',
+            'city' => \App\Support\SyriaGovernorates::all()[0],
+            'building_name' => '1', 'flat_number' => '1', 'payment_method' => 'card',
+        ];
+
+        $this->withSession(['country' => 'SY'])->post('/checkout', $payload)
+            ->assertSessionHasErrors('payment_method');
+
+        $this->assertSame(0, WebsiteOrder::query()->where('email', 'syria-card@example.test')->count());
+        $this->assertSame(10, $stock->fresh()->stock);
+    }
 }

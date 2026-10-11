@@ -27,6 +27,35 @@ test('polling counts new IDs once and suppresses initial, repeated and pre-inter
     assert.equal(Object.keys(listeners).length, 0);
 });
 
+test('inventory broadcasts update through polling and ring only once when Echo and polling overlap', async () => {
+    let otherIds = ['old-transfer'], rings = 0, updates = 0;
+    const document = { hidden: false, addEventListener() {}, removeEventListener() {} };
+    const sync = new WebsiteOrderNotifications({
+        userId: 99,
+        initialIds: [],
+        initialOtherIds: otherIds,
+        document,
+        load: async () => ({
+            website_order_ids: [],
+            other_notification_ids: otherIds,
+            other_notifications_count: otherIds.length,
+        }),
+        update: () => updates++,
+        ring: async () => rings++,
+        setInterval: () => 1,
+        clearInterval: () => {},
+    });
+    sync.unlock();
+    otherIds = ['old-transfer', 'new-transfer'];
+
+    await sync.receive({ id: 'new-transfer', source: 'inventory', table: { product_color: { id: 1 } } });
+    await sync.refresh();
+    await sync.receive({ id: 'new-transfer', source: 'inventory', table: { product_color: { id: 1 } } });
+
+    assert.equal(rings, 1);
+    assert.equal(updates, 3);
+});
+
 test('hidden tabs and overlapping refreshes do not send requests; unmount ignores pending responses', async () => {
     let requests = 0, updates = 0, finish;
     const document = { hidden: true, addEventListener() {}, removeEventListener() {} };

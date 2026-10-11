@@ -42,19 +42,19 @@
                     <p class="mt-1 text-xs text-gray-500">لن يعرض الموقع مخزوناً قابلاً للشراء قبل اختيار موقع التجهيز.</p>
                     <jet-input-error :message="form.errors[`commerce.${country.id}.website_stock_user_id`]" class="mt-2" />
                 </div>
-                <div class="col-span-8 sm:col-span-4" dir="rtl">
+                <div v-if="country.id !== 4" class="col-span-8 sm:col-span-4" dir="rtl">
                     <jet-label :for="`card_enabled_${country.id}`" :value="`تفعيل الدفع بالبطاقة لمتجر ${country.name}`" />
                     <input :id="`card_enabled_${country.id}`" type="checkbox" class="mt-3" v-model="form.commerce[country.id].card_enabled" />
                     <p class="text-xs text-amber-700 mt-2">Sandbox يحتاج مفتاح Tap تجريبي، وLive يحتاج مفتاحاً حياً وروابط HTTPS.</p>
                 </div>
-                <div class="col-span-8 sm:col-span-4" dir="rtl">
+                <div v-if="country.id !== 4" class="col-span-8 sm:col-span-4" dir="rtl">
                     <jet-label :for="`gateway_mode_${country.id}`" value="وضع بوابة Tap" />
                     <select :id="`gateway_mode_${country.id}`" class="mt-1 block w-full rounded-md border-gray-300" v-model="form.commerce[country.id].gateway_mode">
                         <option value="sandbox">Sandbox</option>
                         <option value="live">Live</option>
                     </select>
                 </div>
-                <div class="col-span-8 sm:col-span-4" dir="rtl">
+                <div v-if="country.id !== 4" class="col-span-8 sm:col-span-4" dir="rtl">
                     <jet-label :for="`gateway_currency_${country.id}`" value="عملة تحصيل Tap" />
                     <select :id="`gateway_currency_${country.id}`" class="mt-1 block w-full rounded-md border-gray-300" v-model="form.commerce[country.id].gateway_currency">
                         <option v-if="country.id !== 2" value="USD">USD</option>
@@ -121,7 +121,7 @@ export default defineComponent({
                 shipping_fee_usd: setting.shipping_fee_usd ?? 0,
                 free_shipping_threshold_usd: setting.free_shipping_threshold_usd ?? null,
                 cod_fee_percent: setting.cod_fee_percent ?? 0,
-                card_enabled: Boolean(setting.card_enabled),
+                card_enabled: countryId === 4 ? false : Boolean(setting.card_enabled),
                 gateway_currency: countryId === 2 ? 'AED' : (setting.gateway_currency || 'USD'),
                 gateway_mode: setting.gateway_mode || 'sandbox',
                 website_cashbox_user_id: setting.website_cashbox_user_id || null,
@@ -164,6 +164,7 @@ export default defineComponent({
             return this.cashboxUsers?.[countryId] || []
         },
         editSettingInformation() {
+            this.form.commerce[4].card_enabled = false
             this.form.post(route('currencies.store'), {
                 errorBag: 'editSettingInformation',
                 preserveScroll: true,

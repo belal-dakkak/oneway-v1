@@ -144,6 +144,11 @@ class OrderController extends Controller
         $request->validate($rules);
 
         $countryId = Country::id();
+        if ($countryId === Country::SYRIA && $request->payment_method === 'card') {
+            return back()->withErrors([
+                'payment_method' => 'الدفع بالبطاقة غير متاح في سوريا. يرجى اختيار الدفع عند الاستلام.',
+            ]);
+        }
         try {
             $currencyCode = $this->salesCurrencyPolicy
                 ->websiteOption($countryId, (bool) Session::get('is_merchant'), $request->currency)

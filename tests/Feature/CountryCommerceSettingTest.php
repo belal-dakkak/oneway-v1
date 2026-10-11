@@ -11,21 +11,14 @@ class CountryCommerceSettingTest extends TestCase
 {
     use RefreshDatabase;
 
-    public function test_sandbox_card_checkout_requires_matching_key_cashbox_and_https_endpoints(): void
+    public function test_uae_card_checkout_requires_matching_key_and_https_endpoints_but_not_a_cashbox(): void
     {
-        $cashbox = User::query()->create([
-            'name' => 'UAE Website Cashbox',
-            'email' => 'uae-cashbox@example.test',
-            'password' => 'secret',
-            'role_id' => User::ROLE_SHOP,
-            'country_id' => User::COUNTRY_UAE,
-        ]);
         $commerce = CountryCommerceSetting::forCountry(User::COUNTRY_UAE);
         $commerce->update([
             'card_enabled' => true,
             'gateway_mode' => 'sandbox',
             'gateway_currency' => 'AED',
-            'website_cashbox_user_id' => $cashbox->id,
+            'website_cashbox_user_id' => null,
         ]);
 
         config([
@@ -45,20 +38,12 @@ class CountryCommerceSettingTest extends TestCase
         $this->assertSame('endpoint_invalid', $commerce->fresh()->cardUnavailableReason());
     }
 
-    public function test_cashbox_must_belong_to_the_same_country(): void
+    public function test_syria_is_cod_only_even_if_an_old_setting_enables_cards(): void
     {
-        $foreignCashbox = User::query()->create([
-            'name' => 'Syrian Cashbox',
-            'email' => 'sy-cashbox@example.test',
-            'password' => 'secret',
-            'role_id' => User::ROLE_SHOP,
-            'country_id' => User::COUNTRY_SYRIA,
-        ]);
-        $commerce = CountryCommerceSetting::forCountry(User::COUNTRY_UAE);
+        $commerce = CountryCommerceSetting::forCountry(User::COUNTRY_SYRIA);
         $commerce->update([
             'card_enabled' => true,
             'gateway_mode' => 'sandbox',
-            'website_cashbox_user_id' => $foreignCashbox->id,
         ]);
         config([
             'services.tap.secret_key' => 'sk_test_example',
@@ -66,6 +51,7 @@ class CountryCommerceSettingTest extends TestCase
             'services.tap.webhook_url' => 'https://test.oneway.fashion/payment/webhook',
         ]);
 
-        $this->assertSame('cashbox_invalid', $commerce->fresh()->cardUnavailableReason());
+        $this->assertSame('country_cod_only', $commerce->fresh()->cardUnavailableReason());
+        $this->assertFalse($commerce->fresh()->cardIsAvailable());
     }
 }

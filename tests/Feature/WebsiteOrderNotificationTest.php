@@ -11,6 +11,7 @@ use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Mail;
 use Illuminate\Support\Facades\Queue;
+use Illuminate\Support\Str;
 use Tests\TestCase;
 
 class WebsiteOrderNotificationTest extends TestCase
@@ -90,7 +91,9 @@ class WebsiteOrderNotificationTest extends TestCase
         }
         $this->actingAs($user)->getJson(route('notification.summary'))->assertOk()
             ->assertJsonPath('website_order_count', 8)->assertJsonCount(8, 'website_order_ids')
-            ->assertJsonCount(5, 'notifications');
+            ->assertJsonPath('other_notifications_count', 0)
+            ->assertJsonCount(0, 'other_notification_ids')
+            ->assertJsonCount(0, 'notifications');
         $user->unreadNotifications()->first()->markAsRead();
         $this->getJson(route('notification.summary'))->assertJsonPath('website_order_count', 8)
             ->assertJsonCount(7, 'website_order_ids');
@@ -177,6 +180,36 @@ class WebsiteOrderNotificationTest extends TestCase
         $this->assertTrue($order->is_paid);
         $this->assertNull($order->cashbox_posted_at);
         $this->assertSame(0, DB::table('wallet_movements')->count());
+    }
+
+    public function test_inventory_notification_summary_returns_its_image_ids_and_unread_count(): void
+    {
+        $shop = $this->badgeUser('inventory-summary', User::ROLE_SHOP, User::COUNTRY_UAE);
+        $notificationId = (string) Str::uuid();
+        DB::table('notifications')->insert([
+            'id' => $notificationId,
+            'type' => \App\Notifications\ShopNotification::class,
+            'notifiable_type' => $shop->getMorphClass(),
+            'notifiable_id' => $shop->id,
+            'data' => json_encode([
+                'source' => 'inventory',
+                'image_url' => '/storage/products/example.jpg',
+                'table' => ['id' => 44, 'country_id' => User::COUNTRY_UAE,
+                    'product_color' => ['id' => 9, 'photo_url' => '/storage/products/example.jpg']],
+                'logsArr' => [],
+                'message' => 'Inventory transfer',
+            ]),
+            'read_at' => null,
+            'created_at' => now(),
+            'updated_at' => now(),
+        ]);
+
+        $this->actingAs($shop)->getJson(route('notification.summary'))
+            ->assertOk()
+            ->assertJsonPath('other_notifications_count', 1)
+            ->assertJsonPath('other_notification_ids.0', $notificationId)
+            ->assertJsonPath('notifications.0.data.image_url', '/storage/products/example.jpg')
+            ->assertJsonPath('website_order_count', 0);
     }
 
     private function badgeUser(string $name, int $role, int $country): User

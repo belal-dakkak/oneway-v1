@@ -402,27 +402,28 @@ class InventoryTransferService
 
     private function notifyTransfer(User $sender, array $result): void
     {
-        try {
-            $recipients = User::query()
-                ->where('country_id', $sender->country_id)
-                ->where('role_id', User::ROLE_ADMIN)
-                ->get()
-                ->push($sender)
-                ->push($result['destination'])
-                ->unique('id');
+        $recipients = User::query()
+            ->where('country_id', $sender->country_id)
+            ->where('role_id', User::ROLE_ADMIN)
+            ->get()
+            ->push($sender)
+            ->push($result['destination'])
+            ->unique('id');
 
-            foreach ($recipients as $recipient) {
+        foreach ($recipients as $recipient) {
+            try {
                 $recipient->notify(new ShopNotification(
                     $result['last_product'],
                     $result['message'],
                     $sender,
                     $result['logs']
                 ));
+            } catch (\Throwable $exception) {
+                Log::warning('Inventory transfer notification failed.', [
+                    'recipient_id' => $recipient->id,
+                    'message' => $exception->getMessage(),
+                ]);
             }
-        } catch (\Throwable $exception) {
-            Log::warning('Inventory transfer notification failed.', [
-                'message' => $exception->getMessage(),
-            ]);
         }
     }
 

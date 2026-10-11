@@ -187,7 +187,7 @@ class WebsitePricingServiceTest extends TestCase
             'card_enabled' => true,
             'gateway_currency' => 'AED',
             'gateway_mode' => 'sandbox',
-            'website_cashbox_user_id' => 2,
+            'website_cashbox_user_id' => null,
             'website_stock_user_id' => 2,
             'created_at' => now(),
             'updated_at' => now(),
@@ -216,6 +216,23 @@ class WebsitePricingServiceTest extends TestCase
         $this->assertSame('AED', $quote['gateway']['currency']);
         $this->assertSame(3.67, $quote['gateway']['rate']);
         $this->assertSame($quote['total'], $quote['gateway']['amount']);
+    }
+
+    public function test_syria_rejects_card_quotes_even_if_legacy_settings_enable_them(): void
+    {
+        $color = $this->product();
+        DB::table('country_commerce_settings')->where('country_id', 4)->update([
+            'card_enabled' => true,
+            'gateway_mode' => 'sandbox',
+            'gateway_currency' => 'USD',
+        ]);
+
+        $this->expectException(\InvalidArgumentException::class);
+        $this->expectExceptionMessage('Card payment is not available in Syria.');
+
+        app(WebsitePricingService::class)->quote([[
+            'product_id' => $color->id, 'size' => 'M', 'qty' => 1,
+        ]], 4, false, 'card');
     }
 
     private function product(): ProductColor

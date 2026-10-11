@@ -75,6 +75,10 @@ class CurrencyController extends Controller
             if ((int) $countryId === Country::UAE) {
                 $data['commerce'][$countryId]['gateway_currency'] = 'AED';
             }
+            if ((int) $countryId === Country::SYRIA) {
+                $data['commerce'][$countryId]['card_enabled'] = false;
+                $data['commerce'][$countryId]['gateway_currency'] = 'USD';
+            }
             $cashboxUserId = $commerce['website_cashbox_user_id'] ?? null;
             $stockUserId = $commerce['website_stock_user_id'] ?? null;
             if ($cashboxUserId && !User::query()
@@ -84,17 +88,6 @@ class CurrencyController extends Controller
                 ->exists()) {
                 return back()->withErrors([
                     "commerce.{$countryId}.website_cashbox_user_id" => 'The website cashbox must belong to the same country.',
-                ]);
-            }
-            if ((bool) ($commerce['card_enabled'] ?? false) && !$cashboxUserId) {
-                return back()->withErrors([
-                    "commerce.{$countryId}.website_cashbox_user_id" => 'Select a website cashbox before enabling card payments.',
-                ]);
-            }
-            if ((int) $countryId === Country::SYRIA
-                && strtoupper((string) ($commerce['gateway_currency'] ?? 'USD')) !== 'USD') {
-                return back()->withErrors([
-                    "commerce.{$countryId}.gateway_currency" => 'Syrian card payments must settle in USD.',
                 ]);
             }
             if ($stockUserId && !User::query()

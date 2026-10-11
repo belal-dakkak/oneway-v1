@@ -6,6 +6,7 @@ use App\Models\Product;
 use App\Models\ProductColor;
 use App\Models\User;
 use App\Models\UserProduct;
+use App\Notifications\ShopNotification;
 use App\Services\InventoryTransferService;
 use Illuminate\Database\Schema\Blueprint;
 use Illuminate\Support\Facades\DB;
@@ -167,6 +168,14 @@ class InventoryTransferTest extends TestCase
             $table->decimal('amount', 24, 4);
             $table->timestamps();
         });
+        Schema::create('merchant_refunds', function (Blueprint $table) {
+            $table->id();
+            $table->unsignedBigInteger('user_product_id');
+            $table->unsignedBigInteger('merchant_id');
+            $table->unsignedBigInteger('merchant_debit_id');
+            $table->integer('qty');
+            $table->timestamps();
+        });
         Schema::create('currencies', function (Blueprint $table) {
             $table->id();
             $table->string('name');
@@ -215,6 +224,77 @@ class InventoryTransferTest extends TestCase
             'wholesale_price' => 50,
         ]);
         $this->assertSame(5, $productColor->fresh()->stock);
+        Notification::assertSentTo($shop, ShopNotification::class, function ($notification, $channels) use ($shop) {
+            $payload = $notification->toArray($shop);
+            return in_array('database', $channels, true)
+                && in_array('broadcast', $channels, true)
+                && $payload['source'] === 'inventory'
+                && !empty($payload['image_url'])
+                && $payload['image_url'] === $payload['table']['product_color']['photo_url'];
+        });
+    }
+
+    public function test_merchant_refund_reduces_stock_and_aed_debt_without_touching_cashboxes(): void
+    {
+        $admin = $this->user(User::ROLE_ADMIN, 2, 'refund-admin@example.test');
+        $shop = $this->user(User::ROLE_SHOP, 2, 'refund-shop@example.test');
+        $merchant = $this->user(User::ROLE_MERCHANT, 2, 'refund-merchant@example.test');
+        $productColor = $this->productColor(2, [
+            ['size' => 'M', 'barcode' => 'REFUND-M', 'stock' => 10],
+        ]);
+        $stock = $this->stock($shop, $productColor, 'M', 'REFUND-M', 10, 20, 10);
+        $accountId = DB::table('merchant_debits')->insertGetId([
+            'creditor_id' => $merchant->id, 'debtor_id' => $shop->id,
+            'currency_code' => 'AED', 'exchange_rate' => 3.67, 'amount' => 367,
+            'created_at' => now(), 'updated_at' => now(),
+        ]);
+
+        $this->actingAs($admin)->postJson(route('merchantRefunds.store'), [
+            'merchant_id' => $merchant->id,
+            'merchant_debit_id' => $accountId,
+            'user_products' => json_encode([['id' => $stock->id, 'qty' => 5]]),
+        ])->assertOk()->assertJsonPath('success', true);
+
+        $this->assertSame(5, $stock->fresh()->stock);
+        $this->assertEquals(183.5, DB::table('merchant_debits')->where('id', $accountId)->value('amount'));
+        $this->assertDatabaseHas('merchant_refunds', ['user_product_id' => $stock->id, 'qty' => 5]);
+        $this->assertDatabaseHas('debit_logs', ['merchant_debit_id' => $accountId, 'amount' => 183.5]);
+        $this->assertSame(0, DB::table('wallet_movements')->count());
+        $this->assertSame(0.0, (float) $shop->wallet->fresh()->credit - (float) $shop->wallet->fresh()->debit);
+        $this->assertSame(0.0, (float) $merchant->wallet->fresh()->credit - (float) $merchant->wallet->fresh()->debit);
+    }
+
+    public function test_failed_multi_item_merchant_refund_rolls_back_every_item(): void
+    {
+        $admin = $this->user(User::ROLE_ADMIN, 2, 'rollback-refund-admin@example.test');
+        $shop = $this->user(User::ROLE_SHOP, 2, 'rollback-refund-shop@example.test');
+        $merchant = $this->user(User::ROLE_MERCHANT, 2, 'rollback-refund-merchant@example.test');
+        $productColor = $this->productColor(2, [
+            ['size' => 'M', 'barcode' => 'ROLLBACK-M', 'stock' => 10],
+            ['size' => 'L', 'barcode' => 'ROLLBACK-L', 'stock' => 1],
+        ]);
+        $medium = $this->stock($shop, $productColor, 'M', 'ROLLBACK-M', 10, 20, 10);
+        $large = $this->stock($shop, $productColor, 'L', 'ROLLBACK-L', 1, 20, 10);
+        $accountId = DB::table('merchant_debits')->insertGetId([
+            'creditor_id' => $merchant->id, 'debtor_id' => $shop->id,
+            'currency_code' => 'AED', 'exchange_rate' => 3.67, 'amount' => 1000,
+            'created_at' => now(), 'updated_at' => now(),
+        ]);
+
+        $this->actingAs($admin)->postJson(route('merchantRefunds.store'), [
+            'merchant_id' => $merchant->id,
+            'merchant_debit_id' => $accountId,
+            'user_products' => json_encode([
+                ['id' => $medium->id, 'qty' => 5],
+                ['id' => $large->id, 'qty' => 2],
+            ]),
+        ])->assertStatus(422);
+
+        $this->assertSame(10, $medium->fresh()->stock);
+        $this->assertSame(1, $large->fresh()->stock);
+        $this->assertEquals(1000, DB::table('merchant_debits')->where('id', $accountId)->value('amount'));
+        $this->assertDatabaseCount('merchant_refunds', 0);
+        $this->assertDatabaseCount('wallet_movements', 0);
     }
 
     public function test_warehouse_transfer_updates_existing_destination_price_and_stock(): void

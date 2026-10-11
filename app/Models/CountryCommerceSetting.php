@@ -2,6 +2,7 @@
 
 namespace App\Models;
 
+use App\Support\Country;
 use Illuminate\Database\Eloquent\Model;
 
 class CountryCommerceSetting extends Model
@@ -48,21 +49,14 @@ class CountryCommerceSetting extends Model
     public function cardUnavailableReason(): ?string
     {
         $secret = (string) config('services.tap.secret_key');
+        if ((int) $this->country_id === Country::SYRIA) {
+            return 'country_cod_only';
+        }
         if (!$this->card_enabled) {
             return 'disabled';
         }
-        if (!$this->website_cashbox_user_id) {
-            return 'cashbox_missing';
-        }
         if ($secret === '') {
             return 'secret_missing';
-        }
-        if (!User::query()
-            ->whereKey($this->website_cashbox_user_id)
-            ->where('country_id', $this->country_id)
-            ->whereIn('role_id', [User::ROLE_SHOP, User::ROLE_WAREHOUSE])
-            ->exists()) {
-            return 'cashbox_invalid';
         }
 
         $mode = strtolower((string) $this->gateway_mode);

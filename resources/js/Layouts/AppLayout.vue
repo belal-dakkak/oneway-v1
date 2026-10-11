@@ -198,14 +198,16 @@
                                             {{ __('Notifications')}}
                                         </div>
 
-                                        <div class="block px-4 py-2 text-sm text-gray-500" v-for="notification in $page.props.auth.user.notifications" v-if="otherNotificationsCount > 0">
-                                            <div v-if="notification.data['table'].product_color" @click="readNotification(notification.data['table'], notification.id, event)" class="mx-auto max-w-xl p-6 text-sm leading-6 sm:text-base sm:leading-7 cursor-pointer" :class="notification.read_at?'bg-white':'bg-gray-200'">
-                                                <div class="flex items-center">
-                                                    <div class="text-sm font-medium">{{ notification.data['message'] }}</div>
-                                                    <img class="w-24 rounded-full" :src="notification.data['table'].product_color?.photo_url" alt="">
+                                        <template v-if="$page.props.auth.user.notifications && $page.props.auth.user.notifications.length">
+                                            <div class="block px-4 py-2 text-sm text-gray-500" v-for="notification in $page.props.auth.user.notifications" :key="notification.id">
+                                                <div v-if="notification.data && notification.data.table && notification.data.table.product_color" @click="readNotification(notification.data.table, notification.id)" class="mx-auto max-w-xl p-6 text-sm leading-6 sm:text-base sm:leading-7 cursor-pointer" :class="notification.read_at?'bg-white':'bg-gray-200'">
+                                                    <div class="flex items-center">
+                                                        <div class="text-sm font-medium">{{ notification.data['message'] }}</div>
+                                                        <img class="w-24 rounded-full" :src="notification.data.image_url || notification.data.table.product_color.photo_url" alt="">
+                                                    </div>
                                                 </div>
                                             </div>
-                                        </div>
+                                        </template>
                                         <div v-else class="block px-4 py-2 text-sm text-gray-300">
                                             {{ __('No Notifications')}}
                                         </div>
@@ -413,6 +415,7 @@ export default defineComponent({
             this.notificationSync = new WebsiteOrderNotifications({
                 userId: user.id,
                 initialIds: user.website_order_ids || [],
+                initialOtherIds: user.other_notification_ids || [],
                 load: async () => (await axios.get(this.route('notification.summary'))).data,
                 update: snapshot => Object.assign(this.$page.props.auth.user, snapshot),
                 ring: () => new Audio('/custom/ringtone.mp3').play(),
@@ -425,15 +428,14 @@ export default defineComponent({
         if (window.Echo) {
             this.notificationChannel = `App.Models.User.${user.id}`;
             window.Echo.private(this.notificationChannel)
-                .notification(notification => {
+                .notification(async notification => {
                     if (this.notificationSync) {
-                        this.notificationSync.refresh();
+                        await this.notificationSync.receive(notification);
                     } else if (!user.notifications.some(row => row.id === notification.id)) {
                         user.notifications.unshift({ id: notification.id, data: notification, read_at: null, type: notification.type });
                         user.notifications_count++;
                     }
-                    // Keep existing stock/other notifications working for every dashboard role.
-                    if (notification.table?.product_color || !this.notificationSync) {
+                    if (!this.notificationSync) {
                         new Audio('/custom/ringtone.mp3').play().catch(() => {});
                     }
                 });
@@ -452,9 +454,15 @@ export default defineComponent({
         logout() {
             this.$inertia.post(route('logout'));
         },
-        readNotification(table, notificationId, event) {
-            this.$page.props.auth.user.notifications_count--;
-            this.$page.props.auth.user.notifications.splice(this.$page.props.auth.user.notifications.indexOf(event), 1);
+        readNotification(table, notificationId) {
+            const user = this.$page.props.auth.user;
+            const notification = user.notifications.find(item => item.id === notificationId);
+            if (notification && !notification.read_at) {
+                notification.read_at = new Date().toISOString();
+                user.notifications_count = Math.max(0, Number(user.notifications_count || 0) - 1);
+                user.other_notifications_count = Math.max(0, Number(user.other_notifications_count || 0) - 1);
+                user.other_notification_ids = (user.other_notification_ids || []).filter(id => id !== notificationId);
+            }
             this.$inertia.get(this.route('notification.show'), {'notification': notificationId})
         },
         readOrderNotification(table, notificationId, event) {
@@ -493,8 +501,10 @@ export default defineComponent({
             return this.$page.props.auth.user.website_order_count || 0;
         },
         otherNotificationsCount() {
-            if (!this.$page.props.auth.user.notifications) return 0;
-            return this.$page.props.auth.user.notifications.filter(notification => {
+            const user = this.$page.props.auth.user;
+            if (user.other_notifications_count !== undefined) return Number(user.other_notifications_count || 0);
+            if (!user.notifications) return 0;
+            return user.notifications.filter(notification => {
                 return notification.data && notification.data.table && notification.data.table.product_color;
             }).length;
         }

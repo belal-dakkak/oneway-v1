@@ -47,7 +47,7 @@ class WebsiteOrderNotificationService
 
     public function snapshot(User $user): array
     {
-        $query = $user->notifications()->where(function ($query) {
+        $websiteQuery = $user->notifications()->where(function ($query) {
             $query->where('data->source', 'website')
                 ->orWhere(function ($legacy) {
                     $legacy->whereNull('data->source')->whereNotNull('data->table->barcode')
@@ -55,21 +55,32 @@ class WebsiteOrderNotificationService
                 });
         });
         if ((int) $user->role_id !== User::ROLE_ADMIN) {
-            $query->where(function ($country) use ($user) {
+            $websiteQuery->where(function ($country) use ($user) {
                 $country->where('data->table->country_id', (int) $user->country_id)
                     ->orWhereNull('data->table->country_id');
             });
         }
-        $ids = (clone $query)->whereNull('read_at')->pluck('id')->all();
+
+        $otherQuery = $user->notifications()->where(function ($query) {
+            $query->where('data->source', 'inventory')
+                ->orWhere(function ($legacy) {
+                    $legacy->whereNull('data->source')->whereNotNull('data->table->product_color');
+                });
+        });
+        $websiteIds = (clone $websiteQuery)->whereNull('read_at')->pluck('id')->all();
+        $otherIds = (clone $otherQuery)->whereNull('read_at')->pluck('id')->all();
+
         return [
             // The badge represents work waiting in the current country's order list,
             // independently of notification delivery and each user's read state.
             'website_order_count' => WebsiteOrder::query()
                 ->where('country_id', $user->country_id)
                 ->where('status', WebsiteOrder::STATUS_PENDING)->count(),
-            'website_order_ids' => $ids,
+            'website_order_ids' => $websiteIds,
+            'other_notification_ids' => $otherIds,
+            'other_notifications_count' => count($otherIds),
             'notifications_count' => $user->unreadNotifications()->count(),
-            'notifications' => $user->notifications()->latest()->limit(5)->get(),
+            'notifications' => (clone $otherQuery)->latest()->limit(5)->get(),
         ];
     }
 
