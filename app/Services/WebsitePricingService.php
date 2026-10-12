@@ -13,12 +13,19 @@ class WebsitePricingService
     private $currencies;
     private $policy;
     private $inventory;
+    private $prices;
 
-    public function __construct(CurrencyService $currencies, SalesCurrencyPolicy $policy, WebsiteInventoryService $inventory)
+    public function __construct(
+        CurrencyService $currencies,
+        SalesCurrencyPolicy $policy,
+        WebsiteInventoryService $inventory,
+        OperationalPriceService $prices
+    )
     {
         $this->currencies = $currencies;
         $this->policy = $policy;
         $this->inventory = $inventory;
+        $this->prices = $prices;
     }
 
     public function quote(array $items, int $countryId, bool $wholesale, string $paymentMethod = 'cod', bool $lock = false): array
@@ -89,10 +96,16 @@ class WebsitePricingService
                 throw new InvalidArgumentException('The requested quantity is no longer available.');
             }
 
-            $basePrice = (float) ($wholesale ? $color->product->sale_price : $color->product->retail_price);
-            $baseOldPrice = (float) ($color->product->price_before_discount ?: $basePrice);
-            $itemPrice = round($basePrice * $currencyRate, $decimals);
-            $oldPrice = round($baseOldPrice * $currencyRate, $decimals);
+            $priceField = $wholesale ? 'sale_price' : 'retail_price';
+            $basePrice = (float) $color->product->getRawOriginal($priceField);
+            $itemPrice = $this->prices->amount($color->product, $priceField, $currencyCode, $basePrice);
+            $baseOldPrice = $color->product->getRawOriginal('price_before_discount');
+            $oldPrice = $this->prices->nullableAmount(
+                $color->product,
+                'price_before_discount',
+                $currencyCode,
+                $baseOldPrice
+            ) ?? $itemPrice;
             $lineTotal = round($itemPrice * $entry['qty'], $decimals);
             $lineBeforeDiscount = round($oldPrice * $entry['qty'], $decimals);
 

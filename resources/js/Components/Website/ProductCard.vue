@@ -56,19 +56,19 @@
       <div class="flex items-center flex-wrap gap-1 mb-1 text-[12px] md:text-sm">
         <template v-if="$page.props.isMerchant">
           <span class="font-bold text-[#c20000]">
-            {{ store.formatPrice(store.convertFromUsd(product.sale_price)) }}
+            {{ store.formatPrice(product.wholesale_price_value) }}
           </span>
           <span class="bg-primary/10 text-primary text-[10px] font-bold px-1 rounded border border-primary/20 uppercase">{{ store.t('wholesalePrice') }}</span>
         </template>
         <template v-else>
           <span class="font-bold text-[#c20000]">
-            {{ store.formatPrice(store.convertFromUsd(product.retail_price)) }}
+            {{ store.formatPrice(product.final_price_value) }}
           </span>
           <span
             v-if="hasDiscount"
             class="text-muted-foreground line-through scale-90 origin-left"
           >
-            {{ store.formatPrice(store.convertFromUsd(product.price_before_discount)) }}
+            {{ store.formatPrice(product.price_before_discount_value) }}
           </span>
           <span
             v-if="hasDiscount"
@@ -135,8 +135,8 @@ export default {
       return barcode.toString().substring(0, 5)
     })
     const discountPercentage = computed(() => {
-      const original = parseFloat(props.product.price_before_discount || 0)
-      const current = parseFloat(props.product.retail_price || 0)
+      const original = parseFloat(props.product.price_before_discount_value || 0)
+      const current = parseFloat(props.product.final_price_value || 0)
       if (original > current && original > 0) {
         return Math.round(((original - current) / original) * 100)
       }

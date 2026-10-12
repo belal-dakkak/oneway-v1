@@ -18,6 +18,7 @@
                         :selected_colors="selected_colors"
                         :rate="rate"
                         :currency="currency"
+                        :input_prices="input_prices"
                     />
 
                     <jet-section-border />
@@ -61,6 +62,7 @@ export default defineComponent({
         selected_colors: Array,
         rate: Number,
         currency: Object,
+        input_prices: Object,
     },
 })
 </script>

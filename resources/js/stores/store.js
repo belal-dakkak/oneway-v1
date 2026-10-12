@@ -18,7 +18,7 @@ export const useStore = defineStore('main', () => {
   const locale = ref(localStorage.getItem('locale') || 'en')
   const currency = ref(localStorage.getItem(`currency_${initialCountry}`) || 'AED')
   const currencyOptions = ref([])
-  const commerce = ref({ shipping_fee_usd: 0, free_shipping_threshold_usd: null, cod_fee_percent: 0 })
+  const commerce = ref({ shipping_fee_usd: 0, free_shipping_threshold_usd: null, cod_fee_percent: 0, card_available: false })
   const transactionCurrency = ref('USD')
   const selectedProduct = ref(null)
   const isProductModalOpen = ref(false)
@@ -57,6 +57,10 @@ export const useStore = defineStore('main', () => {
 
   // Getters
   const getItemPrice = (item) => {
+    const exactPrice = Number(item.product.final_price_value)
+    if (Number.isFinite(exactPrice) && item.product.final_price_currency === currency.value) {
+      return exactPrice
+    }
     const basePrice = Number(isMerchant.value
       ? (item.product.sale_price || 0)
       : (item.product.price || item.product.retail_price || 0))
@@ -107,6 +111,7 @@ export const useStore = defineStore('main', () => {
           sale_price: product.sale_price,
           price: product.price,
           final_price_value: product.final_price_value,
+          final_price_currency: product.final_price_currency,
           final_price: product.final_price
         },
         color: {
@@ -163,10 +168,9 @@ export const useStore = defineStore('main', () => {
 
   const formatPrice = (value) => {
     const decimals = currency.value === 'SYP' ? 0 : 2
-    if (value === undefined || value === null || isNaN(Number(value))) {
-      return Number(0).toLocaleString(undefined, { minimumFractionDigits: decimals, maximumFractionDigits: decimals }) + ` ${currency.value}`
-    }
-    return Number(value).toLocaleString(undefined, { minimumFractionDigits: decimals, maximumFractionDigits: decimals }) + ` ${currency.value}`
+    const amount = value === undefined || value === null || isNaN(Number(value)) ? 0 : Number(value)
+    const minimumDecimals = decimals > 0 && !Number.isInteger(amount) ? decimals : 0
+    return amount.toLocaleString(undefined, { minimumFractionDigits: minimumDecimals, maximumFractionDigits: decimals }) + ` ${currency.value}`
   }
 
   const convertFromUsd = (value) => {

@@ -86,8 +86,7 @@
                 </td>
 
                 <td class="mx-auto max-w-sm p-6 text-sm leading-6 sm:text-base sm:leading-7">
-                    {{ formattedPrice(item.product.cost_price) }} {{ currency.code }}
-                    <syp-equivalent :usd="item.product.cost_price" />
+                    {{ item.product.cost_price_value }} {{ currency.code }}
                 </td>
                 <!-- <td class="mx-auto max-w-sm p-6 text-sm leading-6 sm:text-base sm:leading-7">{{ item.product.raw_sizes }}</td> -->
                 <td class="flex flex-wrap space-x-3 mt-2" v-if="admin.role === 1 || admin.role === 2">
@@ -392,8 +391,8 @@ export default {
                 quantity: 0,
             }))
             this.stock = item.stock;
-            this.wholesale_price = this.displayPrice(item.product.cost_price);
-            this.retail_price    = this.displayPrice(item.product.retail_price);
+            this.wholesale_price = Currency.normalizeInput(item.product.cost_price_value, this.currency.code);
+            this.retail_price    = Currency.normalizeInput(item.product.final_price_value, this.currency.code);
         },
         transferErrorMessage(error) {
             const errors = error.response?.data?.errors || {};

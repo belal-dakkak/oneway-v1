@@ -82,13 +82,13 @@
                   </td>
                   <td class="mx-auto max-w-sm p-6 text-sm leading-6 sm:text-base sm:leading-7">
                       <div class="ml-4">
-                            <div class="text-sm font-medium">{{ formattedPrice(item.retail_price) }} {{ currency.code }}</div>
+                            <div class="text-sm font-medium">{{ formattedPrice(item.final_price_value) }} {{ currency.code }}</div>
                             <syp-equivalent :usd="item.retail_price" :display-currency="currency.display" />
                       </div>
                   </td>
                   <td class="mx-auto max-w-sm p-6 text-sm leading-6 sm:text-base sm:leading-7">
                       <div class="ml-4">
-                            <div class="text-sm font-medium">{{ formattedPrice(item.price_before_discount) }} {{ currency.code }}</div>
+                            <div class="text-sm font-medium">{{ formattedPrice(item.price_before_discount_value) }} {{ currency.code }}</div>
                       </div>
                   </td>
                   <td class="mx-auto max-w-sm p-6 text-sm leading-6 sm:text-base sm:leading-7">
@@ -360,17 +360,14 @@
               this.itemId = item.product_color_id;
               this.item = item;
               this.stock = item.stock;
-              this.wholesale_price = this.displayPrice(item.wholesale_price);
-              this.retail_price = this.displayPrice(item.retail_price);
+              this.wholesale_price = Currency.normalizeInput(item.wholesale_price_value, this.currency.code);
+              this.retail_price = Currency.normalizeInput(item.final_price_value, this.currency.code);
               this.price_before_discount = item.price_before_discount
-                  ? this.displayPrice(item.price_before_discount)
+                  ? Currency.normalizeInput(item.price_before_discount_value, this.currency.code)
                   : '';
           },
-          displayPrice(value) {
-              return Currency.fromUsd(value, this.currency.rate, this.currency.decimals)
-          },
           formattedPrice(value) {
-              return Currency.formatFromUsd(value, this.currency.rate, this.currency.code)
+              return Currency.formatAmount(value, this.currency.code)
           },
           priceStep() {
               return Currency.inputStep(this.currency.code)

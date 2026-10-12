@@ -151,13 +151,15 @@ export default defineComponent({
             if (!product) return
 
             const baseProduct = product.product || {}
-            const wholesale = product.wholesale_price ?? baseProduct.cost_price
-            const retail = product.retail_price ?? baseProduct.retail_price
-            const beforeDiscount = product.price_before_discount ?? baseProduct.price_before_discount
+            const wholesale = product.wholesale_price_value ?? product.wholesale_price ?? baseProduct.cost_price
+            const retail = product.final_price_value ?? product.retail_price ?? baseProduct.final_price_value ?? baseProduct.retail_price
+            const beforeDiscount = product.price_before_discount_value ?? product.price_before_discount ?? baseProduct.price_before_discount_value ?? baseProduct.price_before_discount
 
-            this.form.wholesale_price = this.toDisplay(wholesale)
-            this.form.retail_price = this.toDisplay(retail)
-            this.form.price_before_discount = beforeDiscount ? this.toDisplay(beforeDiscount) : ''
+            this.form.wholesale_price = product.wholesale_price_value !== undefined ? wholesale : this.toDisplay(wholesale)
+            this.form.retail_price = (product.final_price_value !== undefined || baseProduct.final_price_value !== undefined) ? retail : this.toDisplay(retail)
+            this.form.price_before_discount = beforeDiscount
+                ? ((product.price_before_discount_value !== undefined || baseProduct.price_before_discount_value !== undefined) ? beforeDiscount : this.toDisplay(beforeDiscount))
+                : ''
         },
 
         loadExistingPrices() {
@@ -168,10 +170,10 @@ export default defineComponent({
                 product: this.productColorId,
             }).then(response => {
                 if (!response.data) return
-                this.form.retail_price = this.toDisplay(response.data.retail_price)
-                this.form.wholesale_price = this.toDisplay(response.data.wholesale_price)
-                this.form.price_before_discount = response.data.price_before_discount
-                    ? this.toDisplay(response.data.price_before_discount)
+                this.form.retail_price = response.data.final_price_value ?? this.toDisplay(response.data.retail_price)
+                this.form.wholesale_price = response.data.wholesale_price_value ?? this.toDisplay(response.data.wholesale_price)
+                this.form.price_before_discount = response.data.price_before_discount_value
+                    ? response.data.price_before_discount_value
                     : ''
             })
         },

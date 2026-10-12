@@ -23,10 +23,12 @@ class InventoryTransferService
     public const SOURCE_INVENTORY = 'inventory';
 
     private $currency;
+    private $prices;
 
-    public function __construct(CurrencyService $currency)
+    public function __construct(CurrencyService $currency, OperationalPriceService $prices)
     {
         $this->currency = $currency;
+        $this->prices = $prices;
     }
 
     public function destinationsFor(User $sender, string $sourceType = self::SOURCE_INVENTORY): Collection
@@ -48,12 +50,14 @@ class InventoryTransferService
     public function transfer(User $sender, array $data): array
     {
         $sourceType = $data['source_type'] ?? self::SOURCE_INVENTORY;
-        $rate = $this->currency->rate($data['currency_code']);
-        $retailPrice = round($this->currency->toUsdAtRate($data['retail_price'], $rate), 2);
-        $wholesalePrice = round($this->currency->toUsdAtRate($data['wholesale_price'], $rate), 2);
-        $priceBeforeDiscount = isset($data['price_before_discount']) && $data['price_before_discount'] !== ''
-            ? round($this->currency->toUsdAtRate($data['price_before_discount'], $rate), 2)
-            : null;
+        $preparedPrices = $this->prices->prepare(
+            $data,
+            $data['currency_code'],
+            OperationalPriceService::USER_PRODUCT_FIELDS
+        );
+        $retailPrice = $preparedPrices['base']['retail_price'];
+        $wholesalePrice = $preparedPrices['base']['wholesale_price'];
+        $priceBeforeDiscount = $preparedPrices['base']['price_before_discount'];
 
         $result = DB::transaction(function () use (
             $sender,
@@ -61,7 +65,8 @@ class InventoryTransferService
             $sourceType,
             $retailPrice,
             $wholesalePrice,
-            $priceBeforeDiscount
+            $priceBeforeDiscount,
+            $preparedPrices
         ) {
             $destination = User::query()->lockForUpdate()->findOrFail($data['destination_user_id']);
             $productColor = ProductColor::query()->with(['product', 'color'])
@@ -126,6 +131,7 @@ class InventoryTransferService
                     'price_before_discount' => $priceBeforeDiscount,
                     'merchant_id' => $merchant ? $merchant->id : null,
                 ])->save();
+                $this->prices->persist($destinationProduct, $preparedPrices);
 
                 $message = $this->transferMessage(
                     $sender,
@@ -175,6 +181,12 @@ class InventoryTransferService
 
             // Keep the existing storefront behaviour, but persist the normalized USD value.
             $productColor->product->update(['retail_price' => $retailPrice]);
+            $productRetailPrice = $this->prices->prepare(
+                ['retail_price' => $data['retail_price']],
+                $data['currency_code'],
+                ['retail_price']
+            );
+            $this->prices->persist($productColor->product, $productRetailPrice);
 
             if ($merchant) {
                 $this->recordMerchantBalances(

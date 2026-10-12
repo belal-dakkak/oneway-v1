@@ -13,6 +13,7 @@ use App\Models\User;
 use App\Models\Currency;
 use App\Repositories\ProductRepository;
 use App\Services\CurrencyService;
+use App\Services\OperationalPriceService;
 use App\Support\Country;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
@@ -95,8 +96,10 @@ class ProductController extends Controller
         $selectedSizes = getSizes($product->sizes);
         $selectedColors = getColors($product->colors);
 
-        $currencyCode = Country::defaultCurrency((int) $product->country_id === Country::UAE
-            ? Country::UAE : (int) auth()->user()->country_id);
+        $pricingCountryId = (int) $product->country_id === Country::globalProductId()
+            ? (int) auth()->user()->country_id
+            : (int) $product->country_id;
+        $currencyCode = Country::defaultCurrency($pricingCountryId);
         $rate = $this->currencyService->rate($currencyCode);
 
         return Inertia::render('Admin/Products/Edit', [
@@ -108,6 +111,11 @@ class ProductController extends Controller
             'selected_colors' => $selectedColors,
             'rate' => $rate,
             'currency' => ['code' => $currencyCode, 'rate' => $rate, 'decimals' => $currencyCode === 'SYP' ? 0 : 2],
+            'input_prices' => app(OperationalPriceService::class)->values(
+                $product,
+                $currencyCode,
+                OperationalPriceService::PRODUCT_FIELDS
+            ),
         ]);
     }
 

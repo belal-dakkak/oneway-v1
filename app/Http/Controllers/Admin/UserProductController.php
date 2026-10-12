@@ -12,6 +12,7 @@ use App\Models\UserProductLog;
 use App\Repositories\UserProductRepository;
 use App\Services\CurrencyService;
 use App\Services\InventoryTransferService;
+use App\Services\OperationalPriceService;
 use App\Support\Country;
 use Carbon\Carbon;
 use Illuminate\Http\RedirectResponse;
@@ -173,12 +174,12 @@ class UserProductController extends Controller
                 array_push($sub_sizes,$sub_product->size.'     '.$sub_product->stock);
                 $total_qty = $total_qty + $sub_product->stock;
                 $allProductsCount = $allProductsCount + $sub_product->stock;
-                $group_wholesale_price = $sub_product->wholesale_price;
-                $group_retail_price = $sub_product->retail_price;
+                $group_wholesale_price = $sub_product->wholesale_price_value;
+                $group_retail_price = $sub_product->final_price_value;
             }
             $totalWholesalePrice += $group_wholesale_price * $total_qty;
             $totalRetailPrice += $group_retail_price * $total_qty;
-            $totalSalePrice += ($product_color->product->sale_price ?? 0) * $total_qty;
+            $totalSalePrice += ($product_color->product->wholesale_price_value ?? 0) * $total_qty;
             array_push($color_products,['product' => $product_color, 'colors' => $color, 'qty' => $total_qty, 'available_sizes' => implode(' || ', $sub_sizes)]);
         }
 
@@ -205,9 +206,9 @@ class UserProductController extends Controller
                 'total' => $paginator->total(),
                 'totals' => [
                     'stock_products' => $allProductsCount,
-                    'total_wholesale_price' => $totalWholesalePrice * $rate,
-                    'total_sale_price' => $totalSalePrice * $rate,
-                    'total_retail_price' => $totalRetailPrice * $rate,
+                    'total_wholesale_price' => $totalWholesalePrice,
+                    'total_sale_price' => $totalSalePrice,
+                    'total_retail_price' => $totalRetailPrice,
                 ]
             ]);
         }
@@ -225,9 +226,9 @@ class UserProductController extends Controller
             'rate' => $rate,
             'merchants' => $merchants,
             'stock_products' => $allProductsCount,
-            'total_wholesale_price' => $totalWholesalePrice * $rate,
-            'total_sale_price' => $totalSalePrice * $rate,
-            'total_retail_price' => $totalRetailPrice * $rate,
+            'total_wholesale_price' => $totalWholesalePrice,
+            'total_sale_price' => $totalSalePrice,
+            'total_retail_price' => $totalRetailPrice,
             'filters' => $request->all(['search', 'field', 'direction', 'shop']),
             'currency' => $this->currencyData(),
         ]);
@@ -281,9 +282,29 @@ class UserProductController extends Controller
 
     public function update(Request $request, UserProduct $userProduct)
     {
-        $userProduct->update([
-            'price_before_discount' => $request->get('price_before_discount')
+        $validated = $request->validate([
+            'price_before_discount' => ['nullable', 'numeric', 'min:0'],
+            'currency_code' => ['required', 'string', 'in:USD,AED,SYP'],
         ]);
+        $currency = strtoupper($validated['currency_code']);
+        $pattern = $currency === 'SYP' ? '/^\d+$/' : '/^\d+(?:\.\d{1,2})?$/' ;
+        if ($validated['price_before_discount'] !== null
+            && !preg_match($pattern, (string) $request->input('price_before_discount'))) {
+            throw \Illuminate\Validation\ValidationException::withMessages([
+                'price_before_discount' => $currency === 'SYP'
+                    ? 'يجب إدخال مبلغ صحيح دون كسور.'
+                    : 'يجب ألا يتجاوز السعر منزلتين عشريتين.',
+            ]);
+        }
+
+        $prices = app(OperationalPriceService::class);
+        $prepared = $prices->prepare(
+            ['price_before_discount' => $validated['price_before_discount']],
+            $currency,
+            ['price_before_discount']
+        );
+        $userProduct->update(['price_before_discount' => $prepared['base']['price_before_discount']]);
+        $prices->persist($userProduct, $prepared);
 
         return response()->json([
             'success' => true,

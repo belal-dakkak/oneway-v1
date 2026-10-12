@@ -2,6 +2,7 @@
 
 namespace App\Http\Requests;
 
+use App\Support\Country;
 use Illuminate\Foundation\Http\FormRequest;
 
 class ProductRequest extends FormRequest
@@ -36,7 +37,36 @@ class ProductRequest extends FormRequest
             'country' => 'required',
             'country.value' => 'nullable|integer|in:1,2,3,4',
             'country.id' => 'nullable|integer|in:1,2,3,4',
+            'price_currency_code' => 'required|string|in:USD,AED,SYP',
         ];
+    }
+
+    public function withValidator($validator): void
+    {
+        $validator->after(function ($validator) {
+            $currency = strtoupper((string) $this->input('price_currency_code'));
+            $pattern = $currency === 'SYP' ? '/^\d+$/' : '/^\d+(?:\.\d{1,2})?$/' ;
+            foreach (['cost_price', 'retail_price', 'sale_price', 'price_before_discount'] as $field) {
+                $value = $this->input($field);
+                if ($value === null || $value === '') {
+                    continue;
+                }
+                if (!preg_match($pattern, (string) $value)) {
+                    $validator->errors()->add($field, $currency === 'SYP'
+                        ? 'يجب إدخال مبلغ صحيح دون كسور.'
+                        : 'يجب ألا يتجاوز السعر منزلتين عشريتين.');
+                }
+            }
+
+            $country = $this->input('country');
+            $countryId = is_array($country) ? (int) ($country['value'] ?? $country['id'] ?? 0) : 0;
+            if ($countryId && $countryId !== Country::globalProductId()) {
+                $allowed = Country::currencyCodes($countryId);
+                if (!in_array($currency, $allowed, true)) {
+                    $validator->errors()->add('price_currency_code', 'عملة السعر لا تتوافق مع بلد المنتج.');
+                }
+            }
+        });
     }
 
     public function messages()

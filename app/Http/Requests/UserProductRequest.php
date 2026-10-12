@@ -128,6 +128,17 @@ class UserProductRequest extends FormRequest
                 }
             }
 
+            $currency = strtoupper((string) $this->input('currency_code'));
+            $pattern = $currency === 'SYP' ? '/^\d+$/' : '/^\d+(?:\.\d{1,2})?$/' ;
+            foreach (['retail_price', 'wholesale_price', 'price_before_discount'] as $field) {
+                $value = $this->input($field);
+                if ($value !== null && $value !== '' && !preg_match($pattern, (string) $value)) {
+                    $validator->errors()->add($field, $currency === 'SYP'
+                        ? 'يجب إدخال مبلغ صحيح دون كسور.'
+                        : 'يجب ألا يتجاوز السعر منزلتين عشريتين.');
+                }
+            }
+
             if ($validator->errors()->isNotEmpty()) {
                 return;
             }

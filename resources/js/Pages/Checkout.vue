@@ -59,7 +59,7 @@
             <h2 class="text-3xl font-bold mb-8 rtl:text-right">{{ store.t('paymentMethod') }}</h2>
             <div class="grid sm:grid-cols-2 gap-4 rtl:text-right">
               <label class="relative flex items-center p-6 bg-secondary rounded-xl border-2 cursor-pointer transition-all" :class="form.payment_method === 'cod' ? 'border-primary ring-2 ring-primary/20' : 'border-transparent'">
-                <input v-model="form.payment_method" type="radio" value="cod" class="sr-only">
+                <input v-model="form.payment_method" @change="markPaymentMethodSelected" type="radio" value="cod" class="sr-only">
                 <div class="w-6 h-6 rounded-full text-white border-2 flex items-center justify-center rtl:ml-4 ltr:mr-4" :class="form.payment_method === 'cod' ? 'border-white' : 'border-muted-foreground'">
                   <div v-if="form.payment_method === 'cod'" class="w-3 h-3 bg-white rounded-full"></div>
                 </div>
@@ -70,7 +70,7 @@
               </label>
 
               <label v-if="store.commerce.card_available" class="relative flex items-center p-6 bg-secondary rounded-xl border-2 cursor-pointer transition-all" :class="form.payment_method === 'card' ? 'border-primary ring-2 ring-primary/20' : 'border-transparent'">
-                <input v-model="form.payment_method" type="radio" value="card" class="sr-only">
+                <input v-model="form.payment_method" @change="markPaymentMethodSelected" type="radio" value="card" class="sr-only">
                 <div class="w-6 h-6 rounded-full text-white border-2 flex items-center justify-center rtl:ml-4 ltr:mr-4" :class="form.payment_method === 'card' ? 'border-white' : 'border-muted-foreground'">
                   <div v-if="form.payment_method === 'card'" class="w-3 h-3 bg-white rounded-full"></div>
                 </div>
@@ -235,8 +235,10 @@ import Footer from '../Components/Website/Footer.vue'
 import FloatingButtons from '../Components/Website/FloatingButtons.vue'
 import { ref, reactive, computed, onMounted, watch } from 'vue'
 import { useStore } from '@/stores/store'
+import { usePage } from '@inertiajs/inertia-vue3'
 import { Inertia } from '@inertiajs/inertia'
 import axios from 'axios'
+import { defaultPaymentMethod, reconcilePaymentMethod } from '@/Utils/CheckoutPayment'
 
 export default {
   components: {
@@ -251,11 +253,23 @@ export default {
   },
   setup(props) {
     const store = useStore()
+    const page = usePage()
+    const shared = page.props.value
+    if (shared.country) {
+      store.syncContext(
+        shared.country,
+        shared.currency_options,
+        shared.default_currency,
+        shared.commerce,
+        shared.transaction_currency
+      )
+    }
     const loading = ref(false)
     const quoteLoading = ref(false)
     const quoteError = ref('')
     const quote = ref(null)
     let quoteTimer = null
+    const paymentMethodTouched = ref(false)
     const countryOptions = [
       { code: '+971', name: 'UAE', flag: '🇦🇪' },
       { code: '+961', name: 'Lebanon', flag: '🇱🇧' },
@@ -272,7 +286,7 @@ export default {
       city: '',
       building_name: '',
       flat_number: '',
-      payment_method: store.commerce.card_available && store.country !== 'SY' ? 'card' : 'cod',
+      payment_method: defaultPaymentMethod(store.country, store.commerce),
       items: store.cart
     })
 
@@ -298,10 +312,20 @@ export default {
     })
 
     watch(() => store.country, (country) => {
+      paymentMethodTouched.value = false
       form.country_code = country === 'SY' ? '+963' : (country === 'LB' ? '+961' : '+971')
       form.city = ''
-      if (!store.commerce.card_available || country === 'SY') form.payment_method = 'cod'
+      form.payment_method = defaultPaymentMethod(country, store.commerce)
     })
+
+    watch(() => store.commerce.card_available, (available) => {
+      form.payment_method = reconcilePaymentMethod(
+        form.payment_method,
+        store.country,
+        available,
+        paymentMethodTouched.value
+      )
+    }, { immediate: true })
 
     watch([() => store.cart, () => form.payment_method], () => {
       clearTimeout(quoteTimer)
@@ -442,7 +466,11 @@ export default {
       })
     }
 
-    return { store, form, loading, quoteLoading, quoteError, quote, submitOrder, shippingFee, codFeeValue, subtotal, totalWithShipping, shippingMessage, countryOptions, officialCurrency, formatMoney, formatOfficial, syriaGovernorates: props.syriaGovernorates }
+    const markPaymentMethodSelected = () => {
+      paymentMethodTouched.value = true
+    }
+
+    return { store, form, loading, quoteLoading, quoteError, quote, submitOrder, markPaymentMethodSelected, shippingFee, codFeeValue, subtotal, totalWithShipping, shippingMessage, countryOptions, officialCurrency, formatMoney, formatOfficial, syriaGovernorates: props.syriaGovernorates }
   }
 }
 </script>

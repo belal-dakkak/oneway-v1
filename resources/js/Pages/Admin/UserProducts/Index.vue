@@ -138,25 +138,25 @@
                 </td>
                 <td class="mx-auto max-w-sm p-6 text-sm leading-6 sm:text-base sm:leading-7" v-if="admin.role != 3">
                     <div class="ml-4">
-                        <div class="text-sm font-medium">{{ formattedPrice(item.colors[0].wholesale_price) }} {{ currency.code }}</div>
+                        <div class="text-sm font-medium">{{ formattedPrice(item.colors[0].wholesale_price_value) }} {{ currency.code }}</div>
                         <syp-equivalent :usd="item.colors[0].wholesale_price" :display-currency="currency.display" />
                     </div>
                 </td>
                 <td class="mx-auto max-w-sm p-6 text-sm leading-6 sm:text-base sm:leading-7" v-if="admin.role != 3">
                     <div class="ml-4">
-                        <div class="text-sm font-medium">{{ formattedPrice(item?.product?.product?.sale_price != null ? Number(item.product.product.sale_price) : 0) }} {{ currency.code }}</div>
+                        <div class="text-sm font-medium">{{ formattedPrice(item?.product?.product?.wholesale_price_value ?? 0) }} {{ currency.code }}</div>
                         <syp-equivalent :usd="item?.product?.product?.sale_price || 0" :display-currency="currency.display" />
                     </div>
                 </td>
                 <td class="mx-auto max-w-sm p-6 text-sm leading-6 sm:text-base sm:leading-7">
                     <div class="ml-4">
-                        <div class="text-sm font-medium">{{ formattedPrice(item.colors[0].retail_price) }} {{ currency.code }}</div>
+                        <div class="text-sm font-medium">{{ formattedPrice(item.colors[0].final_price_value) }} {{ currency.code }}</div>
                         <syp-equivalent :usd="item.colors[0].retail_price" :display-currency="currency.display" />
                     </div>
                 </td>
                 <td class="mx-auto max-w-sm p-6 text-sm leading-6 sm:text-base sm:leading-7">
                     <div class="ml-4">
-                        <div class="text-sm font-medium">{{ formattedPrice(item.colors[0].price_before_discount || 0) }} {{ currency.code }}</div>
+                        <div class="text-sm font-medium">{{ formattedPrice(item.colors[0].price_before_discount_value || 0) }} {{ currency.code }}</div>
                         <syp-equivalent :usd="item.colors[0].price_before_discount || 0" :display-currency="currency.display" />
                     </div>
                 </td>
@@ -210,26 +210,16 @@
                                   <div class="px-1">
                                       <jet-label for="wholesale_price" :value="__('Wholesale Price')" dir="rtl" />
                                       <div class="flex items-center">
-                                          <jet-input id="wholesale_price" type="number" min="0" :step="priceStep('USD')" class="mt-1 block w-full" v-model="wholesale_price" autocomplete="wholesale_price" @blur="normalizeUsdPrice('wholesale_price')" />
-                                          <jet-label class="ml-2" for="wholesale_price" value="USD" dir="rtl" />
-                                      </div>
-                                      <syp-equivalent :usd="wholesale_price" :display-currency="currency.display" />
-                                      <div v-if="currency.code !== 'USD'" class="flex items-center">
-                                          <jet-input id="wholesale_price_local" type="number" min="0" :step="priceStep(currency.code)" class="mt-1 block w-full" v-model="wholesale_price_local" autocomplete="wholesale_price_local" @blur="normalizeLocalPrice('wholesale_price_local')" />
-                                          <jet-label class="ml-2" for="wholesale_price_local" :value="currency.code" dir="rtl" />
+                                          <jet-input id="wholesale_price" type="number" min="0" :step="priceStep(currency.code)" class="mt-1 block w-full" v-model="wholesale_price" autocomplete="wholesale_price" @blur="normalizeLocalPrice('wholesale_price')" />
+                                          <jet-label class="ml-2" for="wholesale_price" :value="currency.code" dir="rtl" />
                                       </div>
                                   </div>
 
                                   <div class="px-1">
                                       <jet-label for="retail_price" :value="__('Retail Price')" dir="rtl" />
                                       <div class="flex items-center">
-                                          <jet-input id="retail_price" type="number" min="0" :step="priceStep('USD')" class="mt-1 block w-full" v-model="retail_price" autocomplete="retail_price" @blur="normalizeUsdPrice('retail_price')" />
-                                          <jet-label class="ml-2" for="retail_price" value="USD" dir="rtl" />
-                                      </div>
-                                      <syp-equivalent :usd="retail_price" :display-currency="currency.display" />
-                                      <div v-if="currency.code !== 'USD'" class="flex items-center">
-                                          <jet-input id="retail_price_local" type="number" min="0" :step="priceStep(currency.code)" class="mt-1 block w-full" v-model="retail_price_local" autocomplete="retail_price_local" @blur="normalizeLocalPrice('retail_price_local')" />
-                                          <jet-label class="ml-2" for="retail_price_local" :value="currency.code" dir="rtl" />
+                                          <jet-input id="retail_price" type="number" min="0" :step="priceStep(currency.code)" class="mt-1 block w-full" v-model="retail_price" autocomplete="retail_price" @blur="normalizeLocalPrice('retail_price')" />
+                                          <jet-label class="ml-2" for="retail_price" :value="currency.code" dir="rtl" />
                                       </div>
                                   </div>
 
@@ -313,13 +303,8 @@
                                     <div class="px-1">
                                         <jet-label for="edit_price_before_discount" :value="__('Price Before Discount')" dir="rtl" />
                                         <div class="flex items-center">
-                                            <jet-input id="edit_price_before_discount" type="number" min="0" :step="priceStep('USD')" class="mt-1 block w-full" v-model="edit_price_before" autocomplete="price_before_discount" @blur="normalizeUsdPrice('edit_price_before')" />
-                                            <jet-label class="ml-2" for="edit_price_before_discount" value="USD" dir="rtl" />
-                                        </div>
-                                        <syp-equivalent :usd="edit_price_before" :display-currency="currency.display" />
-                                        <div v-if="currency.code !== 'USD'" class="flex items-center">
-                                            <jet-input id="edit_price_before_discount_local" type="number" min="0" :step="priceStep(currency.code)" class="mt-1 block w-full" v-model="edit_price_before_local" autocomplete="price_before_discount_local" @blur="normalizeLocalPrice('edit_price_before_local')" />
-                                            <jet-label class="ml-2" for="edit_price_before_discount_local" :value="currency.code" dir="rtl" />
+                                            <jet-input id="edit_price_before_discount" type="number" min="0" :step="priceStep(currency.code)" class="mt-1 block w-full" v-model="edit_price_before" autocomplete="price_before_discount" @blur="normalizeLocalPrice('edit_price_before')" />
+                                            <jet-label class="ml-2" for="edit_price_before_discount" :value="currency.code" dir="rtl" />
                                         </div>
                                     </div>
                                 </div>
@@ -431,8 +416,8 @@ export default {
             this.params[filter] = value;
         },
         confirmResult(){
-            this.normalizeUsdPrice('retail_price')
-            this.normalizeUsdPrice('wholesale_price')
+            this.normalizeLocalPrice('retail_price')
+            this.normalizeLocalPrice('wholesale_price')
             const destinationId = this.user?.id
             const items = (this.clsizes || []).filter(size => Number(size.quantity) > 0)
             if (!destinationId || !this.retail_price || !this.wholesale_price || !items.length){
@@ -443,7 +428,7 @@ export default {
                 formData.append('destination_user_id', destinationId)
                 formData.append('retail_price', this.retail_price)
                 formData.append('wholesale_price', this.wholesale_price)
-                formData.append('currency_code', 'USD')
+                formData.append('currency_code', this.currency.code)
                 formData.append('source_type', 'inventory')
                 if(this.merchant)
                     formData.append('merchant_id', this.merchant.id)
@@ -483,7 +468,7 @@ export default {
         },
         editPrice(item) {
             this.editItem = item;
-            this.edit_price_before = Currency.normalizeInput(item.colors[0].price_before_discount || 0, 'USD');
+            this.edit_price_before = Currency.normalizeInput(item.colors[0].price_before_discount_value || 0, this.currency.code);
             this.showEditModal = true;
         },
         closeEditModal() {
@@ -492,12 +477,13 @@ export default {
             this.edit_price_before = '';
         },
         submitEditPrice() {
-            this.normalizeUsdPrice('edit_price_before')
+            this.normalizeLocalPrice('edit_price_before')
             this.editLoading = true;
             // Since it's grouped, we'll update all items in the group
             const updatePromises = this.editItem.colors.map(color => {
                 return axios.put(this.route('userProducts.update', color.id), {
-                    price_before_discount: this.edit_price_before
+                    price_before_discount: this.edit_price_before,
+                    currency_code: this.currency.code
                 });
             });
 
@@ -576,8 +562,8 @@ export default {
             // this.stock = item.stock;
             // this.size = item.size;
             // this.barcode = item.barcode;
-            this.wholesale_price = Currency.normalizeInput(item.colors[0].wholesale_price, 'USD');
-            this.retail_price = Currency.normalizeInput(item.colors[0].retail_price, 'USD');
+            this.wholesale_price = Currency.normalizeInput(item.colors[0].wholesale_price_value, this.currency.code);
+            this.retail_price = Currency.normalizeInput(item.colors[0].final_price_value, this.currency.code);
 
         },
         searchForModel(){
@@ -659,29 +645,13 @@ export default {
             document.getElementById(tooltipID).classList.toggle("hidden");
         },
         formattedPrice(value) {
-            return Currency.formatFromUsd(value, this.currency.rate, this.currency.code)
+            return Currency.formatAmount(value, this.currency.code)
         },
         formattedLocalPrice(value) {
             return Currency.formatAmount(value, this.currency.code)
         },
         priceStep(code) {
             return Currency.inputStep(code)
-        },
-        normalizeUsdPrice(field) {
-            if (this[field] === '' || this[field] === null || this[field] === undefined) return
-            this[field] = Currency.normalizeInput(this[field], 'USD')
-        },
-        updateRetailPriceLocal(value) {
-            const usd = Currency.toUsd(value, this.rate)
-            if (Math.abs(usd - this.retail_price) > 0.01) this.retail_price = usd
-        },
-        updateWholesalePriceLocal(value) {
-            const usd = Currency.toUsd(value, this.rate)
-            if (Math.abs(usd - this.wholesale_price) > 0.01) this.wholesale_price = usd
-        },
-        updateEditPriceBeforeLocal(value) {
-            const usd = Currency.toUsd(value, this.rate)
-            if (Math.abs(usd - this.edit_price_before) > 0.01) this.edit_price_before = usd
         },
         normalizeLocalPrice(field) {
             const value = this[field]
@@ -722,18 +692,6 @@ export default {
         },
     },
     computed: {
-        retail_price_local: {
-            get() { return Currency.fromUsd(this.retail_price, this.rate, this.currency.decimals) },
-            set(value) { this.updateRetailPriceLocal(value) },
-        },
-        wholesale_price_local: {
-            get() { return Currency.fromUsd(this.wholesale_price, this.rate, this.currency.decimals) },
-            set(value) { this.updateWholesalePriceLocal(value) },
-        },
-        edit_price_before_local: {
-            get() { return Currency.fromUsd(this.edit_price_before, this.rate, this.currency.decimals) },
-            set(value) { this.updateEditPriceBeforeLocal(value) },
-        },
     },
 }
 </script>

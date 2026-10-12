@@ -5,7 +5,7 @@ namespace App\Repositories;
 use App\Models\Product;
 use App\Models\ProductColor;
 use App\Models\User;
-use App\Services\CurrencyService;
+use App\Services\OperationalPriceService;
 use App\Support\Country;
 use Illuminate\Contracts\Pagination\LengthAwarePaginator;
 use Illuminate\Http\Request;
@@ -14,6 +14,13 @@ use Illuminate\Support\Facades\DB;
 
 class ProductColorRepository
 {
+    private $prices;
+
+    public function __construct(OperationalPriceService $prices)
+    {
+        $this->prices = $prices;
+    }
+
     private function clearHomeCache()
     {
         foreach (Country::allowedIds() as $countryId) {
@@ -29,20 +36,19 @@ class ProductColorRepository
         try {
             if(count($request->get('selected_products')) == 0) return false;
             DB::beginTransaction();
-            $product = new Product($request->all());
-            $currencyCode = Country::defaultCurrency(auth()->user()->country_id);
-            $rate = app(CurrencyService::class)->rate($currencyCode);
-            if ($rate != 1.0) {
-                $product->cost_price = $product->cost_price / $rate;
-                $product->retail_price = $product->retail_price / $rate;
-                $product->sale_price = $product->sale_price / $rate;
-                if ($product->price_before_discount && $product->price_before_discount != 0 && $product->price_before_discount != '0') {
-                    $product->price_before_discount = $product->price_before_discount / $rate;
-                } else {
-                    $product->price_before_discount = null;
-                }
-
-            }
+            $country_id = $this->requestedCountryId($request);
+            $currencyCode = strtoupper((string) $request->input(
+                'price_currency_code',
+                Country::defaultCurrency($country_id === Country::globalProductId()
+                    ? (int) auth()->user()->country_id
+                    : $country_id)
+            ));
+            $preparedPrices = $this->prices->prepare(
+                $request->only(OperationalPriceService::PRODUCT_FIELDS),
+                $currencyCode,
+                OperationalPriceService::PRODUCT_FIELDS
+            );
+            $product = new Product(array_merge($request->all(), $preparedPrices['base']));
             if ($request->hasFile('images'))
                 $product->images = uploadMultiImages('images', 'products');
 
@@ -54,12 +60,6 @@ class ProductColorRepository
                 $product->sizes = [];
             $product->category_id = $request->get('selected_category')['id'];
             // $product->country_id = auth()->user()->country_id;
-            $country_id = auth()->user()->country_id;
-            if($request->get('country'))
-                $country_id = array_key_exists('value',$request->get('country'))? $request->get('country')['value'] : $request->get('country')['id'];
-            if(!in_array(auth()->user()->role_id,[User::ROLE_ADMIN,USER::ROLE_WAREHOUSE])  && $country_id != auth()->user()->country_id )
-                $country_id = auth()->user()->country_id;
-
             $product->country_id = $country_id;
             $barcode = $request->get('barcode');
             if (!$request->get('barcode') || is_null($request->get('barcode')) || $request->get('barcode') == ''){
@@ -70,6 +70,7 @@ class ProductColorRepository
             }
             $product->barcode = $barcode;
             $product->save();
+            $this->prices->persist($product, $preparedPrices);
 
             foreach ($request->get('selected_products') as $subProduct){
                 if (isset($subProduct['image']) && isset($subProduct['color']) && isset($subProduct['sizes'])){
@@ -111,6 +112,20 @@ class ProductColorRepository
         DB::commit();
         $this->clearHomeCache();
         return $product;
+    }
+
+    private function requestedCountryId(Request $request): int
+    {
+        $countryId = (int) auth()->user()->country_id;
+        if ($request->get('country')) {
+            $country = $request->get('country');
+            $countryId = (int) (array_key_exists('value', $country) ? $country['value'] : $country['id']);
+        }
+        if (!in_array(auth()->user()->role_id, [User::ROLE_ADMIN, User::ROLE_WAREHOUSE], true)
+            && $countryId !== (int) auth()->user()->country_id) {
+            return (int) auth()->user()->country_id;
+        }
+        return $countryId;
     }
 
     public function update(Request $request, Product $product)
