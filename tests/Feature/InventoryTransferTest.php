@@ -120,6 +120,20 @@ class InventoryTransferTest extends TestCase
             $table->boolean('approved')->default(false);
             $table->timestamps();
         });
+        Schema::create('operational_prices', function (Blueprint $table) {
+            $table->id();
+            $table->string('priceable_type', 120);
+            $table->unsignedBigInteger('priceable_id');
+            $table->string('currency_code', 3);
+            $table->decimal('exchange_rate', 20, 6);
+            $table->decimal('cost_price', 20, 4)->nullable();
+            $table->decimal('wholesale_price', 20, 4)->nullable();
+            $table->decimal('retail_price', 20, 4)->nullable();
+            $table->decimal('sale_price', 20, 4)->nullable();
+            $table->decimal('price_before_discount', 20, 4)->nullable();
+            $table->timestamps();
+            $table->unique(['priceable_type', 'priceable_id', 'currency_code']);
+        });
         Schema::create('user_product_logs', function (Blueprint $table) {
             $table->id();
             $table->unsignedBigInteger('user_product_id');
