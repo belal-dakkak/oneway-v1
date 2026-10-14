@@ -63,87 +63,72 @@ class ProductRepository
             }
             $product->save();
             $this->prices->persist($product, $preparedPrices);
-            foreach ($request->get('selected_products', []) as $subProduct){
-                if (isset($subProduct['image']) && isset($subProduct['color']) && isset($subProduct['sizes'])){
+            foreach ($request->get('selected_products', []) as $subProduct) {
+                if (!isset($subProduct['image'], $subProduct['color'], $subProduct['sizes'])) {
+                    continue;
+                }
 
-                if (isset($subProduct['id'])){
-
-                    $sizes = array();
+                if (isset($subProduct['id'])) {
+                    $sizes = [];
                     $stock = 0;
                     foreach ($subProduct['sizes'] as $size) {
-
-                        array_push($sizes,['stock' => $size['stock'],'size' => $size['size']['id']]);
+                        $sizes[] = ['stock' => $size['stock'], 'size' => $size['size']['id']];
                         $stock += $size['stock'];
                     }
 
-                    $productColor = ProductColor::query()->where('id', $subProduct['id'])->first();
+                    $productColor = ProductColor::query()->findOrFail($subProduct['id']);
                     $subProductBarcode = $subProduct['barcode'];
-                    if(is_null($subProduct['barcode']) || $subProduct['barcode'] == ''){
+                    if (is_null($subProductBarcode) || $subProductBarcode === '') {
                         sbarcode:
-                            $rand = rand(1, 99);
-                            $char = generateRandomString(1, true);
-                            $subProductBarcode = $product->barcode.$char.$rand;
-                        if (ProductColor::query()->where('barcode', $subProductBarcode)->exists())
+                        $rand = rand(1, 99);
+                        $char = generateRandomString(1, true);
+                        $subProductBarcode = $product->barcode.$char.$rand;
+                        if (ProductColor::query()->where('barcode', $subProductBarcode)->exists()) {
                             goto sbarcode;
+                        }
                     }
                     foreach ($sizes as $key => $size) {
-                        $subsubProductBarcode = $subProductBarcode.convertSizeToNumber($size['size']);
-                        $sizes[$key]['barcode'] = $subsubProductBarcode;
+                        $sizes[$key]['barcode'] = $subProductBarcode.convertSizeToNumber($size['size']);
                     }
                     $productColor->update([
                         'image' => is_array($subProduct['image']) ? $subProduct['image'][0] : $productColor->image,
                         'color_id' => $subProduct['color']['id'] ?? $productColor->color_id,
                         'stock' => $stock,
-                        // 'stock' => $subProduct['stock'] ?? $productColor->stock,
                         'barcode' => $subProductBarcode,
                         'sizes' => json_encode($sizes),
-                        'country_id' => $countryId
+                        'country_id' => $countryId,
                     ]);
-                }else{
-
-                    barcode:
-                    $rand = rand(1, 99);
-                    $char = generateRandomString(1, true);
-                    $subProductBarcode = $product->barcode.$char.$rand;
-                    if (ProductColor::query()->where('barcode', $subProductBarcode)->where('country_id',auth()->user()->country_id)->exists())
-                        goto barcode;
-
-                    $sizes = array();
-
-                    $stock = 0;
-
-                    foreach ($subProduct['sizes'] as $size) {
-
-                        // array_push($sizes,['stock' => $size['stock'],'size' => $size['size']['id']]);
-
-                        $subsubProductBarcode = $subProductBarcode.convertSizeToNumber($size['size']['id']);
-                        array_push($sizes,['stock' => $size['stock'],'barcode' => $subsubProductBarcode,'size' => $size['size']['id']]);
-
-                        $stock += $size['stock'];
-                    }
-
-
-                    foreach ($sizes as $key => $size) {
-                        if(!isset($size['barcode'])){
-                            $subsubProductBarcode = $subProductBarcode.convertSizeToNumber($size['size']);
-                            $size['barcode'] = $subsubProductBarcode;
-                        }
-                    }
-
-                    // dd($sizes);
-
-                    ProductColor::query()->create([
-                        'product_id' => $product->id,
-                        'image' => $subProduct['image'][0],
-                        'color_id' => $subProduct['color']['id'],
-                        'stock' => $stock,
-                        // 'stock' => $subProduct['stock'],
-                        'barcode' => $subProductBarcode,
-                        'sizes' => json_encode($sizes),
-                        'country_id' => $countryId
-                    ]);
+                    continue;
                 }
+
+                barcode:
+                $rand = rand(1, 99);
+                $char = generateRandomString(1, true);
+                $subProductBarcode = $product->barcode.$char.$rand;
+                if (ProductColor::query()->where('barcode', $subProductBarcode)->where('country_id', auth()->user()->country_id)->exists()) {
+                    goto barcode;
                 }
+
+                $sizes = [];
+                $stock = 0;
+                foreach ($subProduct['sizes'] as $size) {
+                    $sizes[] = [
+                        'stock' => $size['stock'],
+                        'barcode' => $subProductBarcode.convertSizeToNumber($size['size']['id']),
+                        'size' => $size['size']['id'],
+                    ];
+                    $stock += $size['stock'];
+                }
+
+                ProductColor::query()->create([
+                    'product_id' => $product->id,
+                    'image' => $subProduct['image'][0],
+                    'color_id' => $subProduct['color']['id'],
+                    'stock' => $stock,
+                    'barcode' => $subProductBarcode,
+                    'sizes' => json_encode($sizes),
+                    'country_id' => $countryId,
+                ]);
             }
         }, 3);
         $this->clearHomeCache();
