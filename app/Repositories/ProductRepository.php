@@ -96,7 +96,7 @@ class ProductRepository
                         // 'stock' => $subProduct['stock'] ?? $productColor->stock,
                         'barcode' => $subProductBarcode,
                         'sizes' => json_encode($sizes),
-                        'country_id' => $country_id
+                        'country_id' => $countryId
                     ]);
                 }else{
 
@@ -139,7 +139,7 @@ class ProductRepository
                         // 'stock' => $subProduct['stock'],
                         'barcode' => $subProductBarcode,
                         'sizes' => json_encode($sizes),
-                        'country_id' => $country_id
+                        'country_id' => $countryId
                     ]);
                 }
             }
