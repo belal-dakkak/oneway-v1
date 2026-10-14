@@ -120,61 +120,28 @@
         <div class="lg:col-span-1">
           <h4 class="text-lg font-bold mb-6 text-white uppercase tracking-wider">{{ store.t('ourBranches') }}</h4>
           <div class="space-y-8 text-sm text-gray-400">
-            <!-- Branch: UAE -->
-            <div class="space-y-2">
+            <div v-for="branch in contactDirectory" :key="branch.code" class="space-y-2">
               <div class="flex items-center gap-2 font-bold text-white">
-                <FlagIcon country="AE" :size="20" />
-                <span>{{ store.locale === 'ar' ? 'الفرع الأول: الإمارات العربية المتحدة' : 'Branch 1: United Arab Emirates' }}</span>
+                <FlagIcon :country="branch.code" :size="20" />
+                <span>{{ branch.name[store.locale] || branch.name.en }}</span>
               </div>
-              <a href="http://maps.app.goo.gl/ANRzyQkoRjKN2cTs6?g_st=iwb" target="_blank" class="flex items-start gap-2 hover:text-white transition-colors">
-                <span class="text-[#c20000]">📍</span>
-                <span>{{ store.locale === 'ar' ? 'عجمان الصناعية 2، شارع بيروت' : 'Ajman Industrial 2 Beirut Street' }}</span>
+              <a :href="branch.map_url" target="_blank" rel="noopener noreferrer" class="flex items-start gap-2 hover:text-white transition-colors">
+                <span class="text-[#c20000]">&#128205;</span>
+                <span>{{ branch.address[store.locale] || branch.address.en }}</span>
               </a>
-              <a v-if="contacts.AE?.whatsapp_url" :href="contacts.AE.whatsapp_url" target="_blank" rel="noopener noreferrer" class="inline-flex items-center gap-2 rounded-lg border border-white/20 px-3 py-2 hover:text-white hover:border-[#c20000] transition-colors" dir="ltr">
-                <span class="text-[#c20000]">WhatsApp</span> {{ contacts.AE.whatsapp }}
-              </a>
-            </div>
-
-            <!-- Branch: Lebanon -->
-            <div class="space-y-2">
-              <div class="flex items-center gap-2 font-bold text-white">
-                <FlagIcon country="LB" :size="20" />
-                <span>{{ store.locale === 'ar' ? 'الفرع الثاني: لبنان' : 'Branch 2: Lebanon' }}</span>
+              <div class="flex flex-col items-start gap-2">
+                <a
+                  v-for="phone in branch.phones"
+                  :key="phone.number"
+                  :href="phone.whatsapp_url"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  class="inline-flex items-center gap-2 rounded-lg border border-white/20 px-3 py-2 hover:text-white hover:border-[#c20000] transition-colors"
+                  dir="ltr"
+                >
+                  <span class="text-[#c20000]">WhatsApp</span> {{ phone.number }}
+                </a>
               </div>
-              <a href="https://maps.app.goo.gl/KLSrobLaMw8TVKdU8?g_st=ic" target="_blank" class="flex items-start gap-2 hover:text-white transition-colors">
-                <span class="text-[#c20000]">📍</span>
-                <span>{{ store.locale === 'ar' ? 'لبنان - بيروت' : 'Lebanon - Beirut' }}</span>
-              </a>
-              <a v-if="contacts.LB?.whatsapp_url" :href="contacts.LB.whatsapp_url" target="_blank" rel="noopener noreferrer" class="inline-flex items-center gap-2 rounded-lg border border-white/20 px-3 py-2 hover:text-white hover:border-[#c20000] transition-colors" dir="ltr">
-                <span class="text-[#c20000]">WhatsApp</span> {{ contacts.LB.whatsapp }}
-              </a>
-            </div>
-
-            <!-- Branch: Syria -->
-            <div class="space-y-2">
-              <div class="flex items-center gap-2 font-bold text-white">
-                <FlagIcon country="SY" :size="20" />
-                <span>{{ store.locale === 'ar' ? 'الفرع الثالث: سوريا' : 'Branch 3: Syria' }}</span>
-              </div>
-              <a href="https://maps.app.goo.gl/rCXcEwsCYmNpxiU7A?g_st=ic" target="_blank" class="flex items-start gap-2 hover:text-white transition-colors">
-                <span class="text-[#c20000]">📍</span>
-                <span>{{ store.locale === 'ar' ? 'سوريا - حلب' : 'Syria - Aleppo' }}</span>
-              </a>
-              <a v-if="contacts.SY?.whatsapp_url" :href="contacts.SY.whatsapp_url" target="_blank" rel="noopener noreferrer" class="inline-flex items-center gap-2 rounded-lg border border-white/20 px-3 py-2 hover:text-white hover:border-[#c20000] transition-colors" dir="ltr">
-                <span class="text-[#c20000]">WhatsApp</span> {{ contacts.SY.whatsapp }}
-              </a>
-            </div>
-
-            <!-- Branch: Turkey -->
-            <div class="space-y-2">
-              <div class="flex items-center gap-2 font-bold text-white">
-                <FlagIcon country="TR" :size="20" />
-                <span>{{ store.locale === 'ar' ? 'الفرع الرابع: تركيا' : 'Branch 4: Turkey' }}</span>
-              </div>
-              <a href="https://maps.app.goo.gl/5Jur4sj3GtYTaXJf7?g_st=ic" target="_blank" class="flex items-start gap-2 hover:text-white transition-colors">
-                <span class="text-[#c20000]">📍</span>
-                <span>{{ store.locale === 'ar' ? 'تركيا، إسطنبول، مارتر' : 'Turkey Istanbul Merter' }}</span>
-              </a>
             </div>
 
             <!-- Email -->
@@ -298,6 +265,7 @@ export default {
     const store = useStore()
     const page = usePage()
     const contacts = computed(() => page.props.value.website_contacts || {})
+    const contactDirectory = computed(() => page.props.value.website_contact_directory || [])
     const showInstagramModal = ref(false)
     const showFacebookModal = ref(false)
 
@@ -309,6 +277,7 @@ export default {
     return {
       store,
       contacts,
+      contactDirectory,
       brandLogo,
       showInstagramModal,
       showFacebookModal,

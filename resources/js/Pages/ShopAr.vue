@@ -192,27 +192,25 @@
                     جميع الحقوق محفوطة.</p>
             </div>
 
-            <div class="flex flex-col items-center py-6">
-                <h2 class="text-3xl font-extrabold">ابق على تواصل</h2>
-                <p class="text-gray-300">الإمارات العربية المتحدة</p>
-                <p class="text-gray-300">+971 545 516 995</p>
-                <p class="text-gray-300">+971 564 533 655</p>
-                <br>
-
-                <p class="text-gray-300">لبنان، بيروت</p>
-                <p class="text-gray-300">+961 76 658 734</p>
-
-                <p class="text-gray-300">theoneway.fashion@gmail.com</p>
-                <!--<p class="text-gray-300">bilalcollections1@gmail.com</p>-->
-            </div>
-
-            <div class="flex flex-col space-y-2 md:space-y-8 justify-around items-center md:mr-12">
-                <h2 class="text-3xl font-extrabold">الفروع</h2>
-                <div class="flex-col text-right">
-                    <div>فرع 1 : عجمان الصناعية 2 شارع بيروت</div>
-                    <div>فرع 2 : الشارقة سيتي سنتر</div>
-                    <div>فرع 3 : بيروت, لبنان</div>
+            <div class="flex flex-col items-center py-6 px-4">
+                <h2 class="text-3xl font-extrabold">ابقَ على تواصل</h2>
+                <div class="grid grid-cols-1 sm:grid-cols-2 gap-x-10 gap-y-4 mt-4">
+                    <div v-for="branch in contactDirectory" :key="branch.code" class="flex flex-col items-center">
+                        <p class="font-bold">{{ branch.name.ar }}</p>
+                        <a
+                            v-for="phone in branch.phones"
+                            :key="phone.number"
+                            :href="phone.whatsapp_url"
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            class="text-gray-300 hover:text-white transition-colors"
+                            dir="ltr"
+                        >
+                            {{ phone.number }}
+                        </a>
+                    </div>
                 </div>
+                <p class="text-gray-300 mt-4">theoneway.fashion@gmail.com</p>
             </div>
 
         </footer>
@@ -312,7 +310,8 @@ export default {
       const store = useStore()
       const page = usePage()
       const whatsappUrl = computed(() => page.props.value.website_contacts?.[store.country]?.whatsapp_url || null)
-      return { store, whatsappUrl, brandLogo }
+      const contactDirectory = computed(() => page.props.value.website_contact_directory || [])
+      return { store, whatsappUrl, contactDirectory, brandLogo }
     },
     data(){
       return {

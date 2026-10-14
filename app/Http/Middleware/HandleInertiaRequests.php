@@ -134,6 +134,11 @@ class HandleInertiaRequests extends Middleware
                     ? []
                     : app(WebsiteContactService::class)->forStorefrontCountries();
             },
+            'website_contact_directory' => function () use ($request) {
+                return $request->is('admin/*')
+                    ? []
+                    : app(WebsiteContactService::class)->directory();
+            },
             'currency_options' => $currencyOptions,
             'default_currency' => $defaultStorefrontCurrency,
             'transaction_currency' => $defaultStorefrontCurrency,

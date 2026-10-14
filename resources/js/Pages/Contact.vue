@@ -60,72 +60,33 @@
                 </div>
 
               <div class="space-y-8">
-                <!-- Branch 1: UAE -->
-                <div class="flex items-start">
+                <div
+                  v-for="branch in contactDirectory"
+                  :key="branch.code"
+                  class="flex items-start"
+                >
                   <div class="p-2.5 bg-primary text-white rounded-lg rtl:ml-4 ltr:mr-4">
-                    <FlagIcon country="AE" :size="30" />
+                    <FlagIcon :country="branch.code" :size="30" />
                   </div>
                   <div>
-                    <h3 class="font-bold text-lg mb-1">{{ store.locale === 'ar' ? 'الفرع الأول: الإمارات العربية المتحدة' : 'Branch 1: United Arab Emirates' }}</h3>
-                    <a href="http://maps.app.goo.gl/ANRzyQkoRjKN2cTs6?g_st=iwb" target="_blank" class="flex items-center gap-2 text-muted-foreground hover:text-primary transition-colors">
-                      <span>📍</span>
-                      <span>{{ store.locale === 'ar' ? 'عجمان الصناعية 2، شارع بيروت' : 'Ajman Industrial 2 Beirut Street' }}</span>
+                    <h3 class="font-bold text-lg mb-1">{{ branch.name[store.locale] || branch.name.en }}</h3>
+                    <a :href="branch.map_url" target="_blank" rel="noopener noreferrer" class="flex items-center gap-2 text-muted-foreground hover:text-primary transition-colors">
+                      <span>&#128205;</span>
+                      <span>{{ branch.address[store.locale] || branch.address.en }}</span>
                     </a>
-                    <div class="flex flex-col mt-1" :class="store.locale === 'ar'?'float-right':''">
-                      <a v-if="contacts.AE?.whatsapp_url" :href="contacts.AE.whatsapp_url" target="_blank" rel="noopener noreferrer" class="text-muted-foreground hover:text-primary transition-colors flex items-center gap-2" dir="ltr">
-                        <span>WhatsApp</span> {{ contacts.AE.whatsapp }}
+                    <div class="flex flex-col items-start mt-1">
+                      <a
+                        v-for="phone in branch.phones"
+                        :key="phone.number"
+                        :href="phone.whatsapp_url"
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        class="text-muted-foreground hover:text-primary transition-colors flex items-center gap-2"
+                        dir="ltr"
+                      >
+                        <span>WhatsApp</span> {{ phone.number }}
                       </a>
                     </div>
-                  </div>
-                </div>
-
-                <!-- Branch 2: Lebanon -->
-                <div class="flex items-start">
-                  <div class="p-2.5 bg-primary text-white rounded-lg rtl:ml-4 ltr:mr-4">
-                    <FlagIcon country="LB" :size="30" />
-                  </div>
-                  <div>
-                    <h3 class="font-bold text-lg mb-1">{{ store.locale === 'ar' ? 'الفرع الثاني: لبنان' : 'Branch 2: Lebanon' }}</h3>
-                    <a href="https://maps.app.goo.gl/KLSrobLaMw8TVKdU8?g_st=ic" target="_blank" class="flex items-center gap-2 text-muted-foreground hover:text-primary transition-colors">
-                      <span>📍</span>
-                      <span>{{ store.locale === 'ar' ? 'لبنان - بيروت' : 'Lebanon - Beirut' }}</span>
-                    </a>
-                    <a v-if="contacts.LB?.whatsapp_url" :href="contacts.LB.whatsapp_url" target="_blank" rel="noopener noreferrer" class="text-muted-foreground hover:text-primary transition-colors flex items-center gap-2 mt-1" dir="ltr">
-                      <span>WhatsApp</span> {{ contacts.LB.whatsapp }}
-                    </a>
-                  </div>
-                </div>
-
-                <!-- Branch 3: Syria -->
-                <div class="flex items-start">
-                  <div class="p-2.5 bg-primary text-white rounded-lg rtl:ml-4 ltr:mr-4">
-                    <FlagIcon country="SY" :size="30" />
-                  </div>
-                  <div>
-                    <h3 class="font-bold text-lg mb-1">{{ store.locale === 'ar' ? 'الفرع الثالث: سوريا' : 'Branch 3: Syria' }}</h3>
-                    <a href="https://maps.app.goo.gl/rCXcEwsCYmNpxiU7A?g_st=ic" target="_blank" class="flex items-center gap-2 text-muted-foreground hover:text-primary transition-colors">
-                      <span>📍</span>
-                      <span>{{ store.locale === 'ar' ? 'سوريا - حلب' : 'Syria - Aleppo' }}</span>
-                    </a>
-                      <div class="flex flex-col mt-1" :class="store.locale === 'ar'?'float-right':''">
-                          <a v-if="contacts.SY?.whatsapp_url" :href="contacts.SY.whatsapp_url" target="_blank" rel="noopener noreferrer" class="text-muted-foreground hover:text-primary transition-colors flex items-center gap-2" dir="ltr">
-                              <span>WhatsApp</span> {{ contacts.SY.whatsapp }}
-                          </a>
-                      </div>
-                  </div>
-                </div>
-
-                <!-- Branch 4: Turkey -->
-                <div class="flex items-start">
-                  <div class="p-2.5 bg-primary text-white rounded-lg rtl:ml-4 ltr:mr-4">
-                    <FlagIcon country="TR" :size="30" />
-                  </div>
-                  <div>
-                    <h3 class="font-bold text-lg mb-1">{{ store.locale === 'ar' ? 'الفرع الرابع: تركيا' : 'Branch 4: Turkey' }}</h3>
-                    <a href="https://maps.app.goo.gl/5Jur4sj3GtYTaXJf7?g_st=ic" target="_blank" class="flex items-center gap-2 text-muted-foreground hover:text-primary transition-colors">
-                      <span>📍</span>
-                      <span>{{ store.locale === 'ar' ? 'تركيا، إسطنبول، مارتر' : 'Turkey Istanbul Merter' }}</span>
-                    </a>
                   </div>
                 </div>
 
@@ -336,6 +297,7 @@ export default {
     const store = useStore()
     const page = usePage()
     const contacts = computed(() => page.props.value.website_contacts || {})
+    const contactDirectory = computed(() => page.props.value.website_contact_directory || [])
     const showInstagramModal = ref(false)
     const showFacebookModal = ref(false)
     const showTelegramModal = ref(false)
@@ -400,6 +362,7 @@ export default {
     return {
       store,
       contacts,
+      contactDirectory,
       showInstagramModal,
       showTelegramModal,
       showFacebookModal,
