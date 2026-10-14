@@ -45,25 +45,26 @@ class ProductRepository
             $currencyCode,
             OperationalPriceService::PRODUCT_FIELDS
         );
-        $data = array_merge(
-            $request->only(['name', 'name_en', 'details', 'details_en', 'barcode']),
-            $preparedPrices['base']
-        );
-        $product->update($data);
-        // $product->sizes = array_column($request->get('selected_sizes'), 'id');
-        if(!is_null($request->get('selected_sizes')))
-                $product->sizes = array_column($request->get('selected_sizes'), 'id');
-            else
-                $product->sizes = [];
-        $product->category_id = $request->get('selected_category')['id'];
-        $product->country_id = $countryId;
-        if ($request->hasFile('images')){
-            $product->images = uploadMultiImages('images', 'products', $product->images);
-        }
-        $product->save();
-        $this->prices->persist($product, $preparedPrices);
-        foreach ($request->get('selected_products') as $subProduct){
-            if (isset($subProduct['image']) && isset($subProduct['color']) && isset($subProduct['sizes'])){
+        DB::transaction(function () use ($request, $product, $preparedPrices, $countryId) {
+            $data = array_merge(
+                $request->only(['name', 'name_en', 'details', 'details_en', 'barcode']),
+                $preparedPrices['base']
+            );
+            $product->update($data);
+            // $product->sizes = array_column($request->get('selected_sizes'), 'id');
+            if(!is_null($request->get('selected_sizes')))
+                    $product->sizes = array_column($request->get('selected_sizes'), 'id');
+                else
+                    $product->sizes = [];
+            $product->category_id = $request->get('selected_category')['id'];
+            $product->country_id = $countryId;
+            if ($request->hasFile('images')){
+                $product->images = uploadMultiImages('images', 'products', $product->images);
+            }
+            $product->save();
+            $this->prices->persist($product, $preparedPrices);
+            foreach ($request->get('selected_products', []) as $subProduct){
+                if (isset($subProduct['image']) && isset($subProduct['color']) && isset($subProduct['sizes'])){
 
                 if (isset($subProduct['id'])){
 
@@ -142,8 +143,9 @@ class ProductRepository
                         'country_id' => $countryId
                     ]);
                 }
+                }
             }
-        }
+        }, 3);
         $this->clearHomeCache();
     }
 

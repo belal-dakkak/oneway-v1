@@ -121,7 +121,13 @@ class ProductController extends Controller
 
     public function update(Product $product, ProductRequest $request)
     {
-        $this->productRepository->update($request, $product);
+        try {
+            $this->productRepository->update($request, $product);
+        } catch (\RuntimeException $exception) {
+            return Redirect::back()
+                ->withErrors(['prices' => $exception->getMessage()])
+                ->withInput();
+        }
         $request->session()->flash('success', 'تم تعديل الموديل بنجاح');
         return Redirect::route('products.index');
     }

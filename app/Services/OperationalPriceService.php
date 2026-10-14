@@ -5,6 +5,7 @@ namespace App\Services;
 use App\Models\OperationalPrice;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Support\Facades\Schema;
+use RuntimeException;
 use WeakMap;
 
 class OperationalPriceService
@@ -27,6 +28,8 @@ class OperationalPriceService
 
     public function prepare(array $values, string $currencyCode, array $fields): array
     {
+        $this->assertStorageReady();
+
         $currencyCode = strtoupper($currencyCode);
         $rate = $this->currencies->rate($currencyCode);
         $local = [];
@@ -49,9 +52,7 @@ class OperationalPriceService
 
     public function persist(Model $model, array $prepared): void
     {
-        if (!Schema::hasTable('operational_prices')) {
-            return;
-        }
+        $this->assertStorageReady();
 
         OperationalPrice::query()->updateOrCreate([
             'priceable_type' => $model->getMorphClass(),
@@ -100,9 +101,10 @@ class OperationalPriceService
         $result = [];
         foreach ($fields as $field) {
             $raw = $model->getRawOriginal($field);
-            $result[$field] = $raw === null
-                ? null
-                : $this->amount($model, $field, $currencyCode, $raw);
+            $stored = $this->storedPrice($model, strtoupper($currencyCode));
+            $result[$field] = $stored && $stored->{$field} !== null
+                ? $this->normalizeInput($stored->{$field}, $currencyCode)
+                : ($raw === null ? null : $this->currencies->fromUsd($raw, $currencyCode));
         }
         return $result;
     }
@@ -121,6 +123,19 @@ class OperationalPriceService
             ? $decimals
             : 0;
         return number_format($amount, $minimumDecimals, '.', '');
+    }
+
+    /**
+     * Price writes must never fall back to the converted USD columns. Doing so
+     * makes a successful save appear to change an operator-entered AED price.
+     */
+    public function assertStorageReady(): void
+    {
+        if (!Schema::hasTable('operational_prices')) {
+            throw new RuntimeException(
+                'تعذر حفظ السعر لأن جدول operational_prices غير جاهز. نفّذ migrate --force ثم أعد المحاولة.'
+            );
+        }
     }
 
     private function storedPrice(Model $model, string $currencyCode): ?OperationalPrice

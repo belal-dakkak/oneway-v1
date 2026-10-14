@@ -72,7 +72,11 @@ class BackfillOperationalPrices extends Command
                 continue;
             }
             $converted = $this->currencies->fromUsdAtRate($raw, $rate, $currency);
-            $values[$field] = $preserveLegacyAedDisplay ? ceil($converted) : $converted;
+            // Freeze the value exactly as the application displays it. The old
+            // ceil() changed values such as 89.01 into 90 during backfilling.
+            $values[$field] = $preserveLegacyAedDisplay
+                ? $this->currencies->round($converted, $currency)
+                : $converted;
         }
 
         DB::table('operational_prices')->insertOrIgnore(array_merge([
