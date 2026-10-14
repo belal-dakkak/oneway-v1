@@ -56,19 +56,19 @@
       <div class="flex items-center flex-wrap gap-1 mb-1 text-[12px] md:text-sm">
         <template v-if="$page.props.isMerchant">
           <span class="font-bold text-[#c20000]">
-            {{ store.formatPrice(product.wholesale_price_value) }}
+            {{ store.formatPrice(wholesalePrice) }}
           </span>
           <span class="bg-primary/10 text-primary text-[10px] font-bold px-1 rounded border border-primary/20 uppercase">{{ store.t('wholesalePrice') }}</span>
         </template>
         <template v-else>
           <span class="font-bold text-[#c20000]">
-            {{ store.formatPrice(product.final_price_value) }}
+            {{ store.formatPrice(retailPrice) }}
           </span>
           <span
             v-if="hasDiscount"
             class="text-muted-foreground line-through scale-90 origin-left"
           >
-            {{ store.formatPrice(product.price_before_discount_value) }}
+            {{ store.formatPrice(beforeDiscountPrice) }}
           </span>
           <span
             v-if="hasDiscount"
@@ -134,9 +134,12 @@ export default {
       const barcode = selectedColor.value?.barcode || ''
       return barcode.toString().substring(0, 5)
     })
+    const retailPrice = computed(() => store.productPrice(props.product, 'retail'))
+    const wholesalePrice = computed(() => store.productPrice(props.product, 'wholesale'))
+    const beforeDiscountPrice = computed(() => store.productPrice(props.product, 'before_discount'))
     const discountPercentage = computed(() => {
-      const original = parseFloat(props.product.price_before_discount_value || 0)
-      const current = parseFloat(props.product.final_price_value || 0)
+      const original = beforeDiscountPrice.value
+      const current = retailPrice.value
       if (original > current && original > 0) {
         return Math.round(((original - current) / original) * 100)
       }
@@ -197,9 +200,7 @@ export default {
         price: store.isMerchant
           ? parseFloat(props.product.sale_price || 0)
           : parseFloat(props.product.retail_price || 0),
-        final_price_value: store.isMerchant
-          ? props.product.wholesale_price_value
-          : props.product.final_price_value
+        final_price_value: store.isMerchant ? wholesalePrice.value : retailPrice.value
       }
 
       const result = store.addToCart(productToAdd, defaultColor, { size: defaultSize }, 1, stock)
@@ -235,6 +236,9 @@ export default {
 
     return {
       store,
+      retailPrice,
+      wholesalePrice,
+      beforeDiscountPrice,
       hasDiscount,
       discountPercentage,
       displayBarcode,

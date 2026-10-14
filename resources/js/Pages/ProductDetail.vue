@@ -64,15 +64,15 @@
               <div class="flex items-center space-x-4 rtl:space-x-reverse">
                 <template v-if="$page.props.isMerchant">
                   <span class="text-2xl font-bold text-primary">
-                    {{ store.formatPrice(product.wholesale_price_value) }}
+                    {{ store.formatPrice(displayWholesalePriceValue) }}
                   </span>
                 </template>
                 <template v-else>
                   <span class="text-2xl font-bold text-primary">
-                    {{ store.formatPrice(product.final_price_value) }}
+                    {{ store.formatPrice(displayPriceValue) }}
                   </span>
                   <span v-if="hasDiscount" class="text-lg text-muted-foreground line-through">
-                    {{ store.formatPrice(product.price_before_discount_value) }}
+                    {{ store.formatPrice(displayOldPriceValue) }}
                   </span>
                 </template>
               </div>
@@ -195,19 +195,19 @@
             <div class="flex items-center space-x-4 rtl:space-x-reverse mb-6">
               <template v-if="$page.props.isMerchant">
                 <span class="text-3xl font-bold text-primary">
-                  {{ store.formatPrice(product.wholesale_price_value) }}
+                  {{ store.formatPrice(displayWholesalePriceValue) }}
                 </span>
                 <span class="text-sm font-bold text-primary underline decoration-2 underline-offset-4 uppercase tracking-tighter">{{ store.t('wholesalePrice') }}</span>
               </template>
               <template v-else>
                 <span class="text-3xl font-bold text-primary">
-                  {{ store.formatPrice(product.final_price_value) }}
+                  {{ store.formatPrice(displayPriceValue) }}
                 </span>
                 <span
                   v-if="hasDiscount"
                   class="text-xl text-muted-foreground line-through"
                 >
-                  {{ store.formatPrice(product.price_before_discount_value) }}
+                  {{ store.formatPrice(displayOldPriceValue) }}
                 </span>
               </template>
             </div>
@@ -463,7 +463,9 @@ export default {
         price_before_discount_value: product.price_before_discount_value,
         sale_price: product.sale_price,
         final_price_value: product.final_price_value,
+        final_price_currency: product.final_price_currency,
         wholesale_price_value: product.wholesale_price_value,
+        prices_by_currency: product.prices_by_currency || {},
         isNew: false,
         colors: product.colors || [],
         rate: 4 + Math.random(),
@@ -517,22 +519,26 @@ export default {
     })
 
     const displayPriceValue = computed(() => {
-      return props.product.final_price_value
+      return store.productPrice(props.product, 'retail')
     })
 
     const displayOldPriceValue = computed(() => {
-      return props.product.price_before_discount_value
+      return store.productPrice(props.product, 'before_discount')
+    })
+
+    const displayWholesalePriceValue = computed(() => {
+      return store.productPrice(props.product, 'wholesale')
     })
 
     const hasDiscount = computed(() => {
-      const original = parseFloat(props.product.price_before_discount_value)
-      const current = parseFloat(props.product.final_price_value)
+      const original = displayOldPriceValue.value
+      const current = displayPriceValue.value
       return original > current
     })
 
     const discountPercentage = computed(() => {
-      const original = parseFloat(props.product.price_before_discount_value)
-      const current = parseFloat(props.product.final_price_value)
+      const original = displayOldPriceValue.value
+      const current = displayPriceValue.value
       if (original > current) {
         return Math.round(((original - current) / original) * 100)
       }
@@ -807,6 +813,7 @@ export default {
       handleMenuToggle,
       displayPriceValue,
       displayOldPriceValue,
+      displayWholesalePriceValue,
       selectedSizeData,
       toggleFavoriteDetail
     }

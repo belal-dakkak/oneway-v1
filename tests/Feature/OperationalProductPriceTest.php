@@ -102,4 +102,25 @@ class OperationalProductPriceTest extends TestCase
         $this->assertSame(12.2, $product->fresh()->final_price_value);
         $this->assertSame(9.75, $product->fresh()->wholesale_price_value);
     }
+
+    public function test_uae_product_exposes_exact_aed_and_base_usd_storefront_prices(): void
+    {
+        $prices = app(OperationalPriceService::class);
+        $prepared = $prices->prepare([
+            'cost_price' => 20,
+            'retail_price' => 89,
+            'sale_price' => 45,
+            'price_before_discount' => 100,
+        ], 'AED', OperationalPriceService::PRODUCT_FIELDS);
+        $product = Product::query()->create(array_merge(['country_id' => 2], $prepared['base']));
+        $prices->persist($product, $prepared);
+
+        $map = $product->fresh()->prices_by_currency;
+
+        $this->assertSame(['AED', 'USD'], array_keys($map));
+        $this->assertSame(89.0, $map['AED']['retail']);
+        $this->assertSame(45.0, $map['AED']['wholesale']);
+        $this->assertSame(24.22, $map['USD']['retail']);
+        $this->assertSame(12.24, $map['USD']['wholesale']);
+    }
 }

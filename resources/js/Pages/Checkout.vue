@@ -162,16 +162,16 @@
             <div class="space-y-4 mb-8 pt-4 border-t">
               <div class="flex justify-between text-muted-foreground">
                 <span>{{ store.t('subtotal') }}</span>
-                <span>{{ formatOfficial(subtotal) }}</span>
+                <span>{{ formatSelected(subtotal) }}</span>
               </div>
               <div class="flex justify-between text-muted-foreground">
                 <span>{{ store.t('shipping') }}</span>
                 <span v-if="shippingFee === 0" class="text-green-600 font-medium">{{ store.t('free') }}</span>
-                <span v-else class="font-medium">{{ formatOfficial(shippingFee) }}</span>
+                <span v-else class="font-medium">{{ formatSelected(shippingFee) }}</span>
               </div>
               <div v-if="codFeeValue > 0" class="flex justify-between text-muted-foreground">
                 <span>{{ store.t('codFee') }}</span>
-                <span class="font-medium">{{ formatOfficial(codFeeValue) }}</span>
+                <span class="font-medium">{{ formatSelected(codFeeValue) }}</span>
               </div>
               <div v-if="shippingFee > 0 && form.payment_method === 'cod'" class="text-[10px] text-muted-foreground rtl:text-left ltr:text-right mt-[-8px]">
                 {{ shippingMessage }}
@@ -179,8 +179,11 @@
               <div class="flex justify-between text-xl font-extrabold pt-4 border-t border-dashed">
                 <span>{{ store.t('total') }}</span>
                 <span class="text-primary">
-                  {{ formatOfficial(totalWithShipping) }}
-                  <small v-if="quote && quote.display" class="block text-xs text-muted-foreground font-normal">
+                  {{ formatSelected(totalWithShipping) }}
+                  <small v-if="store.currency !== officialCurrency" class="block text-xs text-muted-foreground font-normal">
+                    {{ formatOfficial(totalWithShipping) }} {{ store.isRTL ? '(المبلغ الرسمي)' : '(official amount)' }}
+                  </small>
+                  <small v-else-if="quote && quote.display" class="block text-xs text-muted-foreground font-normal">
                     ≈ {{ formatMoney(quote.display.amount, quote.display.currency) }}
                   </small>
                 </span>
@@ -191,7 +194,7 @@
               </div>
             </div>
 
-            <p v-if="store.country === 'SY'" class="mb-4 text-xs text-amber-700 rtl:text-right">
+            <p v-if="store.country === 'SY' || store.currency !== officialCurrency" class="mb-4 text-xs text-amber-700 rtl:text-right">
               {{ store.isRTL ? `عملة الفاتورة والدفع الرسمية: ${officialCurrency}. تبديل العملة في المتجر للعرض فقط.` : `Official invoice currency: ${officialCurrency}. The store currency switch is display-only.` }}
             </p>
             <p v-if="quoteError" class="mb-4 text-sm text-red-600 rtl:text-right">{{ quoteError }}</p>
@@ -390,6 +393,10 @@ export default {
       return `${Number(value || 0).toLocaleString(undefined, { minimumFractionDigits: decimals, maximumFractionDigits: decimals })} ${code}`
     }
     const formatOfficial = value => formatMoney(value, officialCurrency.value)
+    const formatSelected = value => formatMoney(
+      store.convertAmount(value, officialCurrency.value, store.currency),
+      store.currency
+    )
 
     async function refreshQuote() {
       if (!store.cart.length) {
@@ -470,7 +477,7 @@ export default {
       paymentMethodTouched.value = true
     }
 
-    return { store, form, loading, quoteLoading, quoteError, quote, submitOrder, markPaymentMethodSelected, shippingFee, codFeeValue, subtotal, totalWithShipping, shippingMessage, countryOptions, officialCurrency, formatMoney, formatOfficial, syriaGovernorates: props.syriaGovernorates }
+    return { store, form, loading, quoteLoading, quoteError, quote, submitOrder, markPaymentMethodSelected, shippingFee, codFeeValue, subtotal, totalWithShipping, shippingMessage, countryOptions, officialCurrency, formatMoney, formatOfficial, formatSelected, syriaGovernorates: props.syriaGovernorates }
   }
 }
 </script>

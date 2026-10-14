@@ -3,6 +3,7 @@ import { ref, computed, watch } from 'vue'
 import { dictionary } from '../data/dictionary'
 import axios from 'axios'
 import { Inertia } from '@inertiajs/inertia'
+import { convertCurrencyAmount, storefrontProductPrice } from '../Utils/StorefrontPricing'
 
 export const useStore = defineStore('main', () => {
   // State
@@ -29,6 +30,9 @@ export const useStore = defineStore('main', () => {
     const option = currencyOptions.value.find(item => item.code === currency.value)
     return Number(option?.rate || 1)
   })
+  const currencyDisplayOnly = computed(() => Boolean(
+    currencyOptions.value.find(item => item.code === currency.value)?.display_only
+  ))
 
   // Watchers for persistence
   watch(currency, (val) => {
@@ -57,14 +61,11 @@ export const useStore = defineStore('main', () => {
 
   // Getters
   const getItemPrice = (item) => {
-    const exactPrice = Number(item.product.final_price_value)
-    if (Number.isFinite(exactPrice) && item.product.final_price_currency === currency.value) {
-      return exactPrice
-    }
-    const basePrice = Number(isMerchant.value
-      ? (item.product.sale_price || 0)
-      : (item.product.price || item.product.retail_price || 0))
-    return currency.value === 'USD' ? basePrice : basePrice * exchangeRate.value
+    return productPrice(item.product, isMerchant.value ? 'wholesale' : 'retail')
+  }
+
+  const productPrice = (product, kind = 'retail') => {
+    return storefrontProductPrice(product, kind, currency.value, exchangeRate.value)
   }
 
   const getCartTotal = computed(() => {
@@ -112,7 +113,11 @@ export const useStore = defineStore('main', () => {
           price: product.price,
           final_price_value: product.final_price_value,
           final_price_currency: product.final_price_currency,
-          final_price: product.final_price
+          final_price: product.final_price,
+          price_before_discount: product.price_before_discount,
+          price_before_discount_value: product.price_before_discount_value,
+          wholesale_price_value: product.wholesale_price_value,
+          prices_by_currency: product.prices_by_currency || {}
         },
         color: {
           id: colorId,
@@ -179,6 +184,13 @@ export const useStore = defineStore('main', () => {
   }
 
   const rateFor = (code) => Number(currencyOptions.value.find(item => item.code === code)?.rate || 1)
+
+  const convertAmount = (value, fromCode, toCode = currency.value) => {
+    const from = String(fromCode || 'USD').toUpperCase()
+    const to = String(toCode || currency.value).toUpperCase()
+    if (from === to) return Number(value || 0)
+    return convertCurrencyAmount(value, rateFor(from), rateFor(to), to)
+  }
 
   const t = (key) => {
     return dictionary[locale.value][key] || key
@@ -308,6 +320,7 @@ export const useStore = defineStore('main', () => {
     currency,
     exchangeRate,
     currencyOptions,
+    currencyDisplayOnly,
     commerce,
     transactionCurrency,
     selectedProduct,
@@ -318,6 +331,7 @@ export const useStore = defineStore('main', () => {
     getCartTotal,
     getCartCount,
     getItemPrice,
+    productPrice,
 
     // Actions
     addToCart,
@@ -328,6 +342,7 @@ export const useStore = defineStore('main', () => {
     toggleCurrency,
     formatPrice,
     convertFromUsd,
+    convertAmount,
     rateFor,
     t,
     toggleFavorite,

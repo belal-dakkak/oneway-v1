@@ -219,12 +219,18 @@ export default {
           originalPriceValue: rawOriginal,
           discountedPriceValue: rawCurrent,
           final_price_value: product.final_price_value || rawCurrent,
+          final_price_currency: product.final_price_currency,
           discountPercentage: discountPercentage,
           isNew: false,
           colors: product.colors || [],
           rate: parseFloat(product.rate || 0),
           reviews_count: parseInt(product.reviews_count || 0),
           wholesale_price_value: product.wholesale_price_value || 0,
+          price_before_discount: product.price_before_discount,
+          price_before_discount_value: product.price_before_discount_value,
+          sale_price: product.sale_price,
+          retail_price: product.retail_price,
+          prices_by_currency: product.prices_by_currency || {},
           formatted_wholesale_price: product.formatted_wholesale_price || ''
         }
       })

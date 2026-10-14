@@ -22,8 +22,12 @@ return [
             'timezone' => 'Asia/Dubai',
             'phone_code' => '971',
             'admin_currencies' => ['AED'],
-            'storefront_currencies' => ['AED'],
+            'storefront_currencies' => ['AED', 'USD'],
             'default_currency' => 'AED',
+            'sales_currencies' => [
+                'website_retail' => 'AED',
+                'website_wholesale' => 'AED',
+            ],
             'storefront' => true,
         ],
         'SY' => [

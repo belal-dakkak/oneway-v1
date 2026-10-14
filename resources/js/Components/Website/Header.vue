@@ -203,7 +203,7 @@
             @click="store.toggleCurrency"
             class="h-8 px-1 bg-white border border-border text-[12px] font-bold rounded-lg shadow-sm active:scale-95 transition-all whitespace-nowrap"
           >
-            {{ store.t('currency') }}: {{ store.currency }} <span v-if="store.country === 'SY'" class="opacity-60">({{ store.isRTL ? 'للعرض' : 'display' }})</span>
+            {{ store.t('currency') }}: {{ store.currency }} <span v-if="store.currencyDisplayOnly" class="opacity-60">({{ store.isRTL ? 'للعرض' : 'display' }})</span>
           </button>
           <div
             v-else
@@ -322,7 +322,7 @@
             @click="store.toggleCurrency"
             class="flex items-center space-x-1 hover:text-primary transition-colors p-1 text-xs font-bold border border-border rounded px-2 h-8"
           >
-            {{ store.t('currency') }}: {{ store.currency }}
+            {{ store.t('currency') }}: {{ store.currency }} <span v-if="store.currencyDisplayOnly" class="opacity-60">({{ store.isRTL ? 'للعرض' : 'display' }})</span>
           </button>
           <div
             v-else
@@ -436,7 +436,7 @@
                   class="flex items-center justify-center space-x-2 rtl:space-x-reverse font-bold bg-secondary text-secondary-foreground py-3 rounded-md shadow-md active:scale-95 transition-all"
                 >
                   <span class="text-xs text-muted-foreground font-medium">{{ store.t('currency') }}:</span>
-                  <span>{{ store.currency }}</span>
+                  <span>{{ store.currency }} <small v-if="store.currencyDisplayOnly">({{ store.isRTL ? 'للعرض' : 'display' }})</small></span>
                 </button>
                 <div
                   v-else

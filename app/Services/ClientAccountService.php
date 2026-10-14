@@ -157,16 +157,8 @@ class ClientAccountService
             'note' => "مرتجع من الفاتورة #{$order->barcode}",
         ]);
 
-        $cashPart = max(0, $amount - max(0, (float) $order->remain_price));
-        if ($cashPart > 0) {
-            $this->cashboxes->debit(
-                (int) $order->seller_id,
-                $cashPart,
-                $currency,
-                "order-refund:{$order->id}:{$clientRefundId}:{$amount}",
-                $this->cashboxContext($currency, $rate, 'client_refund', $clientRefundId, "Refund for order #{$order->barcode}")
-            );
-        }
+        // Customer-debt refunds are non-cash account adjustments. Cash sale
+        // refunds are posted to the cashbox separately by RefundRepository.
 
         return $account;
     }

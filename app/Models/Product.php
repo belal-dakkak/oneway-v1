@@ -18,7 +18,7 @@ class Product extends Model
         'name', 'name_en', 'details', 'details_en','image', 'category_id', 'country_id', 'barcode', 'sizes','sale_price', 'cost_price', 'retail_price', 'price_before_discount', 'rate','country_id', 'shown_for_merchant'
     ];
     protected $casts = ['sizes' => 'array', 'shown_for_merchant' => 'boolean'];
-    protected $appends = ['photo_url', 'raw_sizes', 'image_url','country_name','app_stock', 'cost_price_value', 'final_price', 'final_price_value', 'final_price_currency', 'formatted_price_before_discount', 'price_before_discount_value', 'price_before_discount_raw', 'wholesale_price_value', 'formatted_wholesale_price'];
+    protected $appends = ['photo_url', 'raw_sizes', 'image_url','country_name','app_stock', 'cost_price_value', 'final_price', 'final_price_value', 'final_price_currency', 'formatted_price_before_discount', 'price_before_discount_value', 'price_before_discount_raw', 'wholesale_price_value', 'formatted_wholesale_price', 'prices_by_currency'];
 
     public function category(): BelongsTo
     {
@@ -252,6 +252,50 @@ class Product extends Model
         $price = $this->wholesale_price_value;
         $currency = $this->presentationCurrency();
         return app(\App\Services\OperationalPriceService::class)->format($price, $currency) . ' ' . $currency;
+    }
+
+    public function getPricesByCurrencyAttribute(): array
+    {
+        $presentationCurrency = $this->presentationCurrency();
+        $service = app(\App\Services\OperationalPriceService::class);
+        $currencies = array_values(array_unique(array_merge(
+            Country::currencyCodes(Country::id(), true),
+            [$presentationCurrency]
+        )));
+        $prices = [];
+
+        foreach ($currencies as $currency) {
+            $currency = strtoupper((string) $currency);
+            if ($currency === $presentationCurrency) {
+                $prices[$currency] = [
+                    'retail' => (float) $this->final_price_value,
+                    'wholesale' => (float) $this->wholesale_price_value,
+                    'before_discount' => (float) $this->price_before_discount_value,
+                ];
+                continue;
+            }
+
+            $retailBase = (float) ($this->getRawOriginal('retail_price') ?: $this->getRawOriginal('cost_price') ?: 0);
+            $wholesaleBase = (float) ($this->getRawOriginal('sale_price') ?: 0);
+            $beforeDiscountBase = $this->getRawOriginal('price_before_discount');
+            if ($beforeDiscountBase === null || $beforeDiscountBase === '') {
+                $beforeDiscountBase = (float) $this->price_before_discount;
+            }
+
+            $prices[$currency] = [
+                'retail' => $currency === 'USD'
+                    ? $service->normalizeInput($retailBase, 'USD')
+                    : $service->amount($this, 'retail_price', $currency, $retailBase),
+                'wholesale' => $currency === 'USD'
+                    ? $service->normalizeInput($wholesaleBase, 'USD')
+                    : $service->amount($this, 'sale_price', $currency, $wholesaleBase),
+                'before_discount' => $currency === 'USD'
+                    ? $service->normalizeInput($beforeDiscountBase, 'USD')
+                    : $service->amount($this, 'price_before_discount', $currency, $beforeDiscountBase),
+            ];
+        }
+
+        return $prices;
     }
 
     private function presentationCurrency(): string

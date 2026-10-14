@@ -48,6 +48,11 @@ class HandleInertiaRequests extends Middleware
         $countryId = Country::id($countryCode);
         $currencyService = app(CurrencyService::class);
         $currencyOptions = $currencyService->optionsForCountry($countryId, true);
+        $currencyOptions = array_map(function (array $option) use ($countryId) {
+            $option['display_only'] = $countryId === Country::UAE
+                && ($option['code'] ?? null) !== 'AED';
+            return $option;
+        }, $currencyOptions);
         $defaultStorefrontCurrency = Country::defaultCurrency($countryId);
         try {
             $currencyService->rate('SYP');

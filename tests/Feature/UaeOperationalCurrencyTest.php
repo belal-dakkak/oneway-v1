@@ -88,14 +88,14 @@ class UaeOperationalCurrencyTest extends TestCase
         $this->assertEquals(10, $toForeign->amount);
     }
 
-    public function test_uae_website_and_admin_options_only_offer_dirhams(): void
+    public function test_uae_storefront_offers_usd_for_display_but_sales_and_admin_stay_in_dirhams(): void
     {
         $currencies = app(CurrencyService::class);
-        $this->assertSame(['AED'], array_column($currencies->optionsForCountry(2, true), 'code'));
+        $this->assertSame(['AED', 'USD'], array_column($currencies->optionsForCountry(2, true), 'code'));
         $this->assertSame(['AED'], array_column($currencies->optionsForCountry(2), 'code'));
         $this->assertSame('USD', app(SalesCurrencyPolicy::class)->websiteOption(1, false)['code']);
-        $this->expectException(\InvalidArgumentException::class);
-        app(SalesCurrencyPolicy::class)->websiteOption(2, false, 'USD');
+        $this->assertSame('AED', app(SalesCurrencyPolicy::class)->websiteOption(2, false, 'USD')['code']);
+        $this->assertSame('AED', app(SalesCurrencyPolicy::class)->websiteOption(2, true, 'USD')['code']);
     }
 
     public function test_internal_base_cash_post_is_converted_once_and_keeps_its_idempotency_key(): void

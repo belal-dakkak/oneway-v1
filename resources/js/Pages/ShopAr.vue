@@ -145,7 +145,7 @@
                             <span class="cursor-pointer text-2xl font-bold text-gray-900 dark:text-black">{{ product.name }}</span>
                         </a>
                         <div class="flex justify-between items-center">
-                            <span class="text-3xl font-bold text-gray-900 dark:text-white" v-if="true">{{ store.formatPrice(product.final_price_value) }}</span>
+                            <span class="text-3xl font-bold text-gray-900 dark:text-white" v-if="true">{{ store.formatPrice(store.productPrice(product, 'retail')) }}</span>
                         </div>
                         <div class="rounded-full bg-gray-900 px-3 flex flex-wrap items-center justify-center mt-5 mb-auto">
                             <div
@@ -156,7 +156,7 @@
                             </div>
                         </div>
                         <div class="flex justify-between items-center">
-                            <span class="text-2xl font-bold text-gray-900 dark:text-white" v-if="true">{{ store.formatPrice(product.final_price_value) }}</span>
+                            <span class="text-2xl font-bold text-gray-900 dark:text-white" v-if="true">{{ store.formatPrice(store.productPrice(product, 'retail')) }}</span>
                         </div>
                     </div>
                 </div>

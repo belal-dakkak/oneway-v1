@@ -362,175 +362,140 @@ class MerchantRefundController extends Controller
 
     }
 
-    public function clientRefund(Request $request)
+    public function clientRefund(Request $request): JsonResponse
     {
         $request->validate([
             'user_products' => ['required', 'string'],
-            'client_id' => ['required', 'integer'],
+            'client_id' => ['required', 'integer', 'exists:users,id'],
         ]);
 
-        $products = json_decode($request->get('user_products'), true);
+        $products = json_decode((string) $request->get('user_products'), true);
         if (! is_array($products) || empty($products)) {
-            return response()->json(['error' => 'بيانات المنتجات المرتجعة غير صالحة.'], 422);
+            return response()->json(['error' => 'Invalid refund product data.'], 422);
         }
 
-        DB::beginTransaction();
-
-        foreach ($products as $key => $product) {
-            try {
-
-                DB::beginTransaction();
-                // $qty = $request->get('qty');
-                // $orderItemId = $request->get('order_item_id');
-                $qty = $product['qty'];
-                $orderItemId = $product['order_item_id'];
-
-                $orderItem = OrderItem::query()->findOrFail($orderItemId);
-                if ((int) $qty <= 0 || (int) $qty > (int) $orderItem->qty) {
-                    throw new Exception('كمية المرتجع غير صالحة.');
-                }
-                if ((int) optional($orderItem->order->seller)->country_id !== (int) auth()->user()->country_id) {
-                    abort(403);
-                }
-                $order = $orderItem->order;
-                if (! $order->buyer_id) {
-                    throw new Exception('لا يوجد زبون مرتبط بهذه الطلبية.');
-                }
-                $currency = strtoupper((string) ($order->curr_type ?: 'USD'));
-                $rate = (float) ($order->curr_rate ?: 1);
-                $decimals = $currency === 'SYP' ? 0 : 2;
-                $calc_new_total = round((float) $orderItem->item_price * $qty * $rate, $decimals);
-                $account = $this->clientAccounts->account(
-                    (int) $order->seller_id,
-                    (int) $order->buyer_id,
-                    $currency
-                );
-                $itemBarcode = $orderItem->product->productColor->barcode;
-                $orderBarcode = $orderItem->order->barcode;
-
-                $refund = new Refund([
-                    'order_item_id' => $orderItemId,
-                    'qty' => $qty,
-                    'item_price' => $orderItem->item_price,
-                    'total_price' => $orderItem->item_price * $qty,
-                    'item_barcode' => $itemBarcode,
-                    'order_barcode' => $orderBarcode,
-                ]);
-                $refund->save();
-
-				// new code
-				// The account and order are adjusted below in their original transaction currency.
-
-
-                $remainingQty = max(0, (int) $orderItem->qty - (int) $qty);
-                $orderItem->update([
-                    'qty' => $remainingQty,
-                    'total_price' => (float) $orderItem->item_price * $remainingQty,
-                    'total_price_paid' => (float) $orderItem->item_price * $remainingQty * $rate,
-                ]);
-
-                $clientRefund = ClientRefund::query()->create([
-                    'refund_id' => $refund->id,
-                    'client_id' => $request->get('client_id'),
-                    'client_debit_id' => $account->id
-                ]);
-
-                $this->clientAccounts->refundToAccount($order, $calc_new_total, $clientRefund->id);
-                $newTotal = max(0, (float) $order->total_price - $calc_new_total);
-                $newRemain = max(0, (float) $order->remain_price - $calc_new_total);
-                $order->update([
-                    'total_price' => $newTotal,
-                    'paid_price' => max(0, $newTotal - $newRemain),
-                    'remain_price' => $newRemain,
-                ]);
-
-                $userProduct = $orderItem->product;
-                $shop = $orderItem->order->seller;
-                $client = $orderItem->order->buyer;
-
-                $shopName = $shop->name;
-                $clientName = $client->name;
-                $product = $userProduct->productColor->product_name;
-
-                $amount = $qty * $orderItem->item_price;
-
-                $newStock = $userProduct->stock + $qty;
-                $userProduct->update(['stock' => $newStock]);
-
-                if (false) {
-                $wallet = $client->wallet;
-
-                if ($wallet->debit >= $amount){
-                    $wallet->update(['debit' => DB::raw("debit - $amount")]);
-                }elseif($wallet->debit == 0){
-                    $wallet->update(['credit' => DB::raw("$amount")]);
-                } else {
-                    $diff = $amount - $wallet->debit;
-                    $wallet->update(['debit' => 0]);
-                    $wallet->update(['credit' => DB::raw("credit + $diff")]);
-                }
-
-                if ($clientRefund->debit->amount > $amount) {
-
-                    $clientRefund->debit->update([
-                        'amount' =>  DB::raw("amount - $amount")
-                    ]);
-
-                } else {
-                    $clientRefund->debit->update(['amount' => 0]);
-                }
-
-
-                $now = Carbon::now()->format('Y-m-d');
-
-                $check_client_debit_log = ClientDebitLog::where('shop_id',$shop->id)->where('client_id',$request->get('client_id'))->where('product_color_id',$orderItem->product->productColor->id)->where('request_date',$now)->first();
-
-                if($check_client_debit_log != null) {
-
-                    $qty = $qty + $check_client_debit_log->qty;
-                    $amount = $amount + $check_client_debit_log->amount;
-
-                    $note = "لقد قام الزبون $clientName بمرتجع للمنتج $product بعدد $qty للمحل $shopName";
-
-                    $check_client_debit_log->update([
-                        'qty' => $qty,
-                        'amount' => $amount,
-                        'note' => $note
-                    ]);
-
-                } else {
-
-                    $note = "لقد قام الزبون $clientName بمرتجع للمنتج $product بعدد $qty للمحل $shopName";
-
-                    ClientDebitLog::query()->create([
-                        'client_debit_id' => $request->get('client_debit_id'),
-                        'client_refund_id' => $clientRefund->id,
-                        'note' => $note,
-                        'amount' => $amount,
-                        'shop_id' => $shop->id,
-                        'client_id' => $request->get('client_id'),
-                        'product_color_id' => $orderItem->product->productColor->id,
-                        'request_date' => $now,
-                        'qty' => $qty
-                    ]);
-                }
-                }
-
-            }catch (Exception $exception){
-                while (DB::transactionLevel() > 0) {
-                    DB::rollBack();
-                }
-                return response()->json([
-                    'error' => $exception->getMessage(),
-                ]);
+        foreach ($products as $product) {
+            if (! is_array($product)
+                || (int) ($product['qty'] ?? 0) <= 0
+                || (int) ($product['order_item_id'] ?? 0) <= 0) {
+                return response()->json(['error' => 'Each refund row requires a valid item and quantity.'], 422);
             }
-
-            DB::commit();
         }
-        DB::commit();
+
+        try {
+            DB::transaction(function () use ($products, $request) {
+                $clientId = (int) $request->get('client_id');
+                $sellerId = null;
+                $currencyCode = null;
+
+                foreach ($products as $product) {
+                    $qty = (int) $product['qty'];
+                    $orderItem = OrderItem::query()
+                        ->lockForUpdate()
+                        ->findOrFail((int) $product['order_item_id']);
+                    $order = \App\Models\Order::query()
+                        ->with(['seller', 'buyer'])
+                        ->lockForUpdate()
+                        ->findOrFail((int) $orderItem->order_id);
+
+                    if (! $order->buyer_id || (int) $order->buyer_id !== $clientId) {
+                        throw new Exception('The selected item does not belong to this customer account.');
+                    }
+                    if ((int) optional($order->seller)->country_id !== (int) auth()->user()->country_id) {
+                        abort(403);
+                    }
+
+                    $currency = strtoupper((string) ($order->curr_type ?: 'USD'));
+                    if (($sellerId !== null && $sellerId !== (int) $order->seller_id)
+                        || ($currencyCode !== null && $currencyCode !== $currency)) {
+                        throw new Exception('All returned items must belong to the same customer account and currency.');
+                    }
+                    $sellerId = (int) $order->seller_id;
+                    $currencyCode = $currency;
+
+                    if ($qty > (int) $orderItem->qty) {
+                        throw new Exception('The refund quantity exceeds the remaining sold quantity.');
+                    }
+
+                    $userProduct = UserProduct::query()
+                        ->with(['productColor.product', 'productColor.color'])
+                        ->lockForUpdate()
+                        ->findOrFail((int) $orderItem->user_product_id);
+                    if ((int) $userProduct->user_id !== (int) $order->seller_id) {
+                        throw new Exception('The sold inventory row does not belong to the order seller.');
+                    }
+
+                    $rate = max((float) ($order->curr_rate ?: 1), 0.000001);
+                    $decimals = $currency === 'SYP' ? 0 : 2;
+                    $baseUnit = (float) $orderItem->item_price;
+                    $transactionUnit = (float) $orderItem->item_price_paid;
+                    if ($transactionUnit == 0.0 && $baseUnit != 0.0) {
+                        $transactionUnit = $baseUnit * $rate;
+                    }
+                    $refundAmount = round($transactionUnit * $qty, $decimals);
+                    $baseTotal = $baseUnit * $qty;
+                    $taxUnit = (float) $orderItem->tax_value_paid;
+                    if ($taxUnit == 0.0 && (float) $orderItem->tax_value != 0.0) {
+                        $taxUnit = (float) $orderItem->tax_value * $rate;
+                    }
+                    $netUnit = (float) $orderItem->price_without_tax_paid;
+                    if ($netUnit == 0.0) {
+                        $netUnit = max(0, $transactionUnit - $taxUnit);
+                    }
+
+                    $refund = Refund::query()->create([
+                        'order_item_id' => $orderItem->id,
+                        'qty' => $qty,
+                        'item_price' => $baseUnit,
+                        'total_price' => $baseTotal,
+                        'total_price_paid' => $refundAmount,
+                        'currency_code' => $currency,
+                        'net_amount' => round($netUnit * $qty, $decimals),
+                        'tax_amount' => round($taxUnit * $qty, $decimals),
+                        'cost_amount' => round((float) $orderItem->unit_cost * $rate * $qty, $decimals),
+                        'item_barcode' => (string) $userProduct->productColor->barcode,
+                        'order_barcode' => (string) $order->barcode,
+                    ]);
+
+                    $account = $this->clientAccounts->account(
+                        (int) $order->seller_id,
+                        $clientId,
+                        $currency
+                    );
+                    $clientRefund = ClientRefund::query()->create([
+                        'refund_id' => $refund->id,
+                        'client_id' => $clientId,
+                        'client_debit_id' => $account->id,
+                    ]);
+                    $this->clientAccounts->refundToAccount($order, $refundAmount, $clientRefund->id);
+
+                    $remainingQty = (int) $orderItem->qty - $qty;
+                    $orderItem->update([
+                        'qty' => $remainingQty,
+                        'total_price' => $baseUnit * $remainingQty,
+                        'total_price_paid' => round($transactionUnit * $remainingQty, $decimals),
+                    ]);
+
+                    $newTotal = max(0, round((float) $order->total_price - $refundAmount, $decimals));
+                    $newRemain = max(0, round((float) $order->remain_price - $refundAmount, $decimals));
+                    $order->update([
+                        'total_price' => $newTotal,
+                        'paid_price' => max(0, round($newTotal - $newRemain, $decimals)),
+                        'remain_price' => $newRemain,
+                        'tax_value' => max(0, round((float) $order->tax_value - ($taxUnit * $qty), $decimals)),
+                        'price_without_tax' => max(0, round((float) $order->price_without_tax - ($netUnit * $qty), $decimals)),
+                    ]);
+
+                    $userProduct->increment('stock', $qty);
+                }
+            }, 3);
+        } catch (\Throwable $exception) {
+            return response()->json(['error' => $exception->getMessage()], 422);
+        }
+
         return response()->json([
             'success' => true,
-            'msg' => 'تم إنشاء المرتجعات بنجاح'
+            'msg' => 'Customer debt refund created successfully.',
         ]);
     }
 
