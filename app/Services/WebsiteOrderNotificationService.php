@@ -98,7 +98,10 @@ class WebsiteOrderNotificationService
         $productColor = is_array($table['product_color'] ?? null)
             ? $table['product_color']
             : [];
-        $imageUrl = $data['image_url'] ?? $productColor['photo_url'] ?? null;
+        $imageUrl = $data['image_url'] ?? null;
+        if (!is_string($imageUrl) || trim($imageUrl) === '') {
+            $imageUrl = $productColor['photo_url'] ?? null;
+        }
 
         return [
             'id' => (string) $notification->id,

@@ -219,6 +219,7 @@ class WebsiteOrderNotificationTest extends TestCase
         $largeLog = str_repeat('legacy-transfer-details-', 60000);
         $storedData = [
             'source' => 'inventory',
+            'image_url' => '',
             'table' => [
                 'id' => 44,
                 'country_id' => User::COUNTRY_UAE,
