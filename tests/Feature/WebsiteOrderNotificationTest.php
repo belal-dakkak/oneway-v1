@@ -212,6 +212,65 @@ class WebsiteOrderNotificationTest extends TestCase
             ->assertJsonPath('website_order_count', 0);
     }
 
+    public function test_large_legacy_inventory_notification_is_compacted_without_changing_stored_details(): void
+    {
+        $shop = $this->badgeUser('large-inventory-summary', User::ROLE_SHOP, User::COUNTRY_UAE);
+        $notificationId = (string) Str::uuid();
+        $largeLog = str_repeat('legacy-transfer-details-', 60000);
+        $storedData = [
+            'source' => 'inventory',
+            'table' => [
+                'id' => 44,
+                'country_id' => User::COUNTRY_UAE,
+                'product_color' => [
+                    'id' => 9,
+                    'product_id' => 3,
+                    'photo_url' => '/storage/products/legacy.jpg',
+                    'product' => [
+                        'id' => 3,
+                        'name' => 'Legacy product',
+                        'details' => $largeLog,
+                    ],
+                ],
+            ],
+            'logsArr' => [['note' => $largeLog]],
+            'message' => 'Large legacy inventory transfer',
+        ];
+        $storedJson = json_encode($storedData, JSON_THROW_ON_ERROR);
+        $this->assertGreaterThan(1048576, strlen($storedJson));
+
+        DB::table('notifications')->insert([
+            'id' => $notificationId,
+            'type' => \App\Notifications\ShopNotification::class,
+            'notifiable_type' => $shop->getMorphClass(),
+            'notifiable_id' => $shop->id,
+            'data' => $storedJson,
+            'read_at' => null,
+            'created_at' => now(),
+            'updated_at' => now(),
+        ]);
+
+        $response = $this->actingAs($shop)->getJson(route('notification.summary'))
+            ->assertOk()
+            ->assertJsonPath('other_notifications_count', 1)
+            ->assertJsonPath('other_notification_ids.0', $notificationId)
+            ->assertJsonPath('notifications.0.id', $notificationId)
+            ->assertJsonPath('notifications.0.data.source', 'inventory')
+            ->assertJsonPath('notifications.0.data.message', 'Large legacy inventory transfer')
+            ->assertJsonPath('notifications.0.data.image_url', '/storage/products/legacy.jpg')
+            ->assertJsonPath('notifications.0.data.table.id', 44)
+            ->assertJsonPath('notifications.0.data.table.product_color.id', 9)
+            ->assertJsonPath('notifications.0.data.table.product_color.product_id', 3);
+
+        $summaryData = $response->json('notifications.0.data');
+        $this->assertArrayNotHasKey('logsArr', $summaryData);
+        $this->assertArrayNotHasKey('product', $summaryData['table']['product_color']);
+        $this->assertLessThan(64 * 1024, strlen($response->getContent()));
+        $persisted = DB::table('notifications')->where('id', $notificationId)->value('data');
+        $this->assertSame($storedJson, $persisted);
+        $this->assertGreaterThan(1048576, strlen($persisted));
+    }
+
     private function badgeUser(string $name, int $role, int $country): User
     {
         return User::query()->create(['name' => $name, 'email' => $name . '@badge.example.test',

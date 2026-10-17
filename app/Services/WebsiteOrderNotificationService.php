@@ -5,6 +5,7 @@ namespace App\Services;
 use App\Models\User;
 use App\Models\WebsiteOrder;
 use App\Notifications\OrderNotification;
+use Illuminate\Notifications\DatabaseNotification;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
 
@@ -80,7 +81,45 @@ class WebsiteOrderNotificationService
             'other_notification_ids' => $otherIds,
             'other_notifications_count' => count($otherIds),
             'notifications_count' => $user->unreadNotifications()->count(),
-            'notifications' => (clone $otherQuery)->latest()->limit(5)->get(),
+            // Notification rows can contain large legacy inventory snapshots. The
+            // dropdown needs only a small card; the original row remains intact
+            // and is loaded by NotificationController when the user opens it.
+            'notifications' => (clone $otherQuery)->latest()->limit(5)->get()
+                ->map(fn (DatabaseNotification $notification) => $this->summaryCard($notification))
+                ->values()
+                ->all(),
+        ];
+    }
+
+    private function summaryCard(DatabaseNotification $notification): array
+    {
+        $data = is_array($notification->data) ? $notification->data : [];
+        $table = is_array($data['table'] ?? null) ? $data['table'] : [];
+        $productColor = is_array($table['product_color'] ?? null)
+            ? $table['product_color']
+            : [];
+        $imageUrl = $data['image_url'] ?? $productColor['photo_url'] ?? null;
+
+        return [
+            'id' => (string) $notification->id,
+            'type' => (string) $notification->type,
+            'read_at' => $notification->read_at?->toJSON(),
+            'created_at' => $notification->created_at?->toJSON(),
+            'data' => [
+                'source' => (string) ($data['source'] ?? 'inventory'),
+                'message' => (string) ($data['message'] ?? ''),
+                'image_url' => $imageUrl ? (string) $imageUrl : null,
+                'table' => [
+                    'id' => isset($table['id']) ? (int) $table['id'] : null,
+                    'product_color' => $productColor ? [
+                        'id' => isset($productColor['id']) ? (int) $productColor['id'] : null,
+                        'product_id' => isset($productColor['product_id'])
+                            ? (int) $productColor['product_id']
+                            : null,
+                        'photo_url' => $imageUrl ? (string) $imageUrl : null,
+                    ] : null,
+                ],
+            ],
         ];
     }
 
