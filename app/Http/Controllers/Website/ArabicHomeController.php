@@ -15,6 +15,7 @@ use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Session;
 use App\Support\Country;
 use App\Services\WebsiteInventoryService;
+use App\Services\StorefrontProductPresenter;
 use Illuminate\Support\Facades\Cache;
 use Inertia\Inertia;
 use Inertia\Response;
@@ -35,24 +36,18 @@ class ArabicHomeController extends Controller
             ->whereHas('colors.userProducts', function($query) use ($countryId, $stockUserId) {
                 $query->where('country_id', $countryId)->where('user_id', $stockUserId ?: 0)->where('stock', '>', 0);
             })
+            ->with('operationalPrices')
             ->with(['colors' => function($query) use ($countryId, $stockUserId) {
                 $query->whereHas('userProducts', function($q) use ($countryId, $stockUserId) {
                     $q->where('country_id', $countryId)->where('user_id', $stockUserId ?: 0)->where('stock', '>', 0);
-                })->with(['userProducts' => function($q) use ($countryId, $stockUserId) {
+                })->with(['color', 'userProducts' => function($q) use ($countryId, $stockUserId) {
                     $q->where('country_id', $countryId)->where('user_id', $stockUserId ?: 0);
                 }]);
             }])
             ->limit(12)
             ->get();
 
-        foreach ($featuredProducts as $product) {
-            $product->final_price = $product->getFinalPriceAttribute();
-            if (Session::get('is_merchant')) {
-                $product->wholesale_price_value = $product->getWholesalePriceValueAttribute();
-                $product->formatted_wholesale_price = $product->getFormattedWholesalePriceAttribute();
-                $product->append(['wholesale_price_value', 'formatted_wholesale_price']);
-            }
-        }
+        $featuredProducts = app(StorefrontProductPresenter::class)->collection($featuredProducts);
         // Cache Settings for 1 hour
         $settings = Cache::remember("settings_{$country}_{$language}", 3600, function() use ($country, $language) {
             return Setting::where('country', $country)->where('language', $language)->pluck('value', Setting::keyColumn())->toArray();
@@ -98,7 +93,7 @@ class ArabicHomeController extends Controller
         $stockUserId = app(WebsiteInventoryService::class)->stockUserId($country_id);
 
         $userProducts = Product::query()
-            ->with(['category', 'colors' => function($query) use ($country_id, $stockUserId) {
+            ->with(['category', 'operationalPrices', 'colors' => function($query) use ($country_id, $stockUserId) {
                 $query->whereHas('userProducts', function ($q) use ($country_id, $stockUserId) {
                     $q->where('country_id', $country_id)->where('user_id', $stockUserId ?: 0)->where('stock', '>', 0);
                 })->with(['color', 'userProducts' => function($q) use ($country_id, $stockUserId) {
@@ -136,26 +131,9 @@ class ArabicHomeController extends Controller
 
         $products = $userProducts->paginate(24);
 
-        foreach($products as $product) {
-            $product->final_price = $product->getFinalPriceAttribute();
-
-            if (Session::get('is_merchant')) {
-                $product->wholesale_price_value = $product->getWholesalePriceValueAttribute();
-                $product->formatted_wholesale_price = $product->getFormattedWholesalePriceAttribute();
-                $product->append(['wholesale_price_value', 'formatted_wholesale_price']);
-            }
-
-            // Extract sizes from preloaded userProducts to avoid N+1
-            $sizes_arr = [];
-            foreach ($product->colors as $color) {
-                foreach ($color->userProducts as $up) {
-                    if ($up->size && $up->stock > 0) {
-                        $sizes_arr[] = $up->size;
-                    }
-                }
-            }
-            $product->sizes = array_unique($sizes_arr);
-        }
+        $products->setCollection(collect(
+            app(StorefrontProductPresenter::class)->collection($products->getCollection())
+        ));
 
 
         if ($request->wantsJson()){

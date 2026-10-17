@@ -16,6 +16,7 @@ use App\Models\MerchantCode;
 use App\Models\Currency;
 use App\Support\Country;
 use App\Services\WebsiteInventoryService;
+use App\Services\StorefrontProductPresenter;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Session;
@@ -36,15 +37,24 @@ class HomeController extends Controller
         $baseQuery = function () use ($countryId, $stockUserId) {
             return Product::query()
                 ->withCount('reviews')
-                ->with([
-                    'colors.color',
-                    'colors.userProducts' => function ($q) use ($countryId, $stockUserId) {
+                ->with('operationalPrices')
+                ->with(['colors' => function ($query) use ($countryId, $stockUserId) {
+                    $query->whereHas('userProducts', function ($q) use ($countryId, $stockUserId) {
                         $q->where('country_id', $countryId)
                             ->where('user_id', $stockUserId ?: 0)
                             ->where('stock', '>', 0)
-                            ->select(['id','product_color_id','size','stock','country_id']);
-                    }
-                ])
+                            ->whereNotNull('size');
+                    })->with([
+                        'color',
+                        'userProducts' => function ($q) use ($countryId, $stockUserId) {
+                            $q->where('country_id', $countryId)
+                                ->where('user_id', $stockUserId ?: 0)
+                                ->where('stock', '>', 0)
+                                ->whereNotNull('size')
+                                ->select(['id','product_color_id','size','stock','country_id']);
+                        },
+                    ]);
+                }])
                 ->join('product_colors', 'products.id', '=', 'product_colors.product_id')
                 ->join('user_products', 'product_colors.id', '=', 'user_products.product_color_id')
                 ->where('user_products.country_id', $countryId)
@@ -102,31 +112,10 @@ class HomeController extends Controller
             }
         );
 
-        // Post-processing
-        $allCollections = [$newProducts, $offerProducts, $randomProducts];
-
-        foreach ($allCollections as $collection) {
-            foreach ($collection as $product) {
-
-                $product->final_price = $product->getFinalPriceAttribute();
-
-                $sizes = $product->colors
-                    ->flatMap(function ($color) {
-                        return $color->userProducts;
-                    })
-                    ->pluck('size')
-                    ->unique()
-                    ->values();
-
-                $product->sizes = $sizes;
-
-                if ($isMerchant) {
-                    $product->wholesale_price_value = $product->getWholesalePriceValueAttribute();
-                    $product->formatted_wholesale_price = $product->getFormattedWholesalePriceAttribute();
-                    $product->append(['wholesale_price_value', 'formatted_wholesale_price']);
-                }
-            }
-        }
+        $presenter = app(StorefrontProductPresenter::class);
+        $newProducts = $presenter->collection($newProducts);
+        $offerProducts = $presenter->collection($offerProducts);
+        $randomProducts = $presenter->collection($randomProducts);
 
         $wnumber = $countryCode === 'LB' ? '+96176658734'
             : ($countryCode === 'SY' ? '' : '+971545516995');
@@ -219,6 +208,7 @@ class HomeController extends Controller
             ->where('user_products.stock', '>', 0)
             ->with([
                 'category',
+                'operationalPrices',
                 'colors.color',
                 'colors.userProducts' => function ($q) use ($countryId, $stockUserId) {
                     $q->where('country_id', $countryId)
@@ -276,27 +266,9 @@ class HomeController extends Controller
         // Pagination
         $products = $query->paginate(24)->withQueryString();
 
-        // Post-processing
-        foreach ($products as $product) {
-
-            $product->final_price = $product->getFinalPriceAttribute();
-
-            if ($isMerchant) {
-                $product->wholesale_price_value = $product->getWholesalePriceValueAttribute();
-                $product->formatted_wholesale_price = $product->getFormattedWholesalePriceAttribute();
-                $product->append(['wholesale_price_value', 'formatted_wholesale_price']);
-            }
-
-            $sizes = $product->colors
-                ->flatMap(function ($color) {
-                    return $color->userProducts;
-                })
-                ->pluck('size')
-                ->unique()
-                ->values();
-
-            $product->sizes = $sizes;
-        }
+        $products->setCollection(collect(
+            app(StorefrontProductPresenter::class)->collection($products->getCollection())
+        ));
 
         if ($request->wantsJson()) {
             return $products;
