@@ -113,6 +113,7 @@ class ProductRepositoryUpdateTest extends TestCase
                     'image' => ['new.jpg'],
                     'color' => ['id' => $secondColorId],
                     'barcode' => 'MODEL-1-W',
+                    'is_cover' => true,
                     'sizes' => [['stock' => 3, 'size' => ['id' => 'L']]],
                 ],
             ],
@@ -132,6 +133,11 @@ class ProductRepositoryUpdateTest extends TestCase
             'country_id' => 2,
             'stock' => 3,
         ]);
+        $cover = ProductColor::query()
+            ->where('product_id', $product->id)
+            ->where('color_id', $secondColorId)
+            ->firstOrFail();
+        $this->assertSame($cover->id, (int) $product->fresh()->cover_product_color_id);
         $this->assertDatabaseHas('operational_prices', [
             'priceable_type' => $product->getMorphClass(),
             'priceable_id' => $product->id,
@@ -219,6 +225,7 @@ class ProductRepositoryUpdateTest extends TestCase
                     'image' => ['product.jpg'],
                     'color' => ['id' => $colorId],
                     'barcode' => $barcode.'-B',
+                    'is_cover' => true,
                     'sizes' => [['stock' => 1, 'size' => ['id' => 'M']]],
                 ]],
             ]);
@@ -227,6 +234,7 @@ class ProductRepositoryUpdateTest extends TestCase
 
             $this->assertInstanceOf(Product::class, $product);
             $this->assertSame($countryId, (int) $product->country_id);
+            $this->assertNotNull($product->fresh()->cover_product_color_id);
             $this->assertDatabaseHas('operational_prices', [
                 'priceable_type' => $product->getMorphClass(),
                 'priceable_id' => $product->id,

@@ -35,6 +35,7 @@
                         </div>
                         <div class="ml-4">
                             <div class="text-sm font-medium">{{ slider.position }}</div>
+                            <div class="text-xs text-gray-500">{{ slider.country_name }}</div>
                         </div>
                     </div>
                 </td>

@@ -7,6 +7,11 @@
                     <Multiselect v-model="form.place" :options="[{ name: 'Left', value: '1' },{ name: 'Center', value: '2' },{ name: 'Right', value: '3' }]" :multiple="false" :close-on-select="true" placeholder="اختر مكان التموضع" label="name" track-by="value" />
                     <jet-input-error :message="form.errors.place" class="mt-2" />
                 </div>
+                <div class="col-span-8 sm:col-span-4 mt-4" dir="rtl">
+                    <jet-label for="country" value="Country (الدولة)" />
+                    <Multiselect v-model="form.country" :options="countries" :multiple="false" :close-on-select="true" placeholder="اختر الدولة" label="name" track-by="value" />
+                    <jet-input-error :message="form.errors.country" class="mt-2" />
+                </div>
                 <MeeFile
                     :title="__('Drag files here to add image')"
                     :name="'image'"
@@ -47,12 +52,16 @@
             Multiselect,
             MeeFile
         },
+        props: {
+            countries: { type: Array, default: () => [] }
+        },
         data() {
             return {
                 form: this.$inertia.form({
                     _method: 'POST',
                     place: null,
-                    image: ''
+                    image: '',
+                    country: this.countries[0] || null
                 }),
             }
         },

@@ -7,8 +7,6 @@ use App\Models\Category;
 use App\Models\Order;
 use App\Models\Product;
 use App\Models\Setting;
-use App\Models\Slider;
-use App\Models\MobileSlider;
 use App\Models\User;
 use App\Models\UserProduct;
 use App\Models\ProductColor;
@@ -17,6 +15,7 @@ use App\Models\Currency;
 use App\Support\Country;
 use App\Services\WebsiteInventoryService;
 use App\Services\StorefrontProductPresenter;
+use App\Services\StorefrontSliderService;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Session;
@@ -38,6 +37,7 @@ class HomeController extends Controller
             return Product::query()
                 ->withCount('reviews')
                 ->with('operationalPrices')
+                ->with('coverColor')
                 ->with(['colors' => function ($query) use ($countryId, $stockUserId) {
                     $query->whereHas('userProducts', function ($q) use ($countryId, $stockUserId) {
                         $q->where('country_id', $countryId)
@@ -138,21 +138,9 @@ class HomeController extends Controller
         );
 
         // Sliders Cache
-        $sliders = Cache::remember(
-            "home_sliders",
-            3600,
-            function () {
-                return Slider::all();
-            }
-        );
-
-        $mobileSliders = Cache::remember(
-            "mobile_home_sliders",
-            3600,
-            function () {
-                return MobileSlider::all();
-            }
-        );
+        $sliderService = app(StorefrontSliderService::class);
+        $sliders = $sliderService->desktop($countryId);
+        $mobileSliders = $sliderService->mobile($countryId);
 
         return Inertia::render('Welcome', [
             'newProducts' => $newProducts,
@@ -191,8 +179,11 @@ class HomeController extends Controller
             ->select([
                 'products.id',
                 'products.name',
+                'products.name_en',
                 'products.category_id',
                 'products.country_id',
+                'products.image',
+                'products.cover_product_color_id',
                 'products.retail_price',
                 'products.sale_price',
                 'products.price_before_discount'
@@ -209,6 +200,7 @@ class HomeController extends Controller
             ->with([
                 'category',
                 'operationalPrices',
+                'coverColor',
                 'colors.color',
                 'colors.userProducts' => function ($q) use ($countryId, $stockUserId) {
                     $q->where('country_id', $countryId)
@@ -317,6 +309,7 @@ class HomeController extends Controller
 
         $product->load([
             'category',
+            'coverColor',
             'colors' => function ($q) use ($countryId, $stockUserId) {
                 $q->whereHas('userProducts', function ($uq) use ($countryId, $stockUserId) {
                     $uq->where('country_id', $countryId)

@@ -9,8 +9,8 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
 class Slider extends Model
 {
     use HasFactory;
-    protected $fillable = ['image', 'type'];
-    protected $appends = ['image_url','position'];
+    protected $fillable = ['image', 'type', 'country_id'];
+    protected $appends = ['image_url','position','country_name'];
 
     const TYPE_FIRST = 1;
     const TYPE_SECOND = 2;
@@ -26,5 +26,12 @@ class Slider extends Model
         if($this->type == 2) return "Center";
         if($this->type == 3) return "Right";
         return "Left";
+    }
+
+    public function getCountryNameAttribute(): string
+    {
+        return $this->country_id
+            ? (\App\Support\Country::definitionFromId((int) $this->country_id)['name'] ?? 'Global')
+            : 'All Countries';
     }
 }

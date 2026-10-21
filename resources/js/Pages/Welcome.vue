@@ -71,7 +71,7 @@
                 <span class="text-2xl">🚚</span>
               </div>
               <h3 class="font-semibold mb-2">{{ store.t('freeShipping') }}</h3>
-              <p class="text-sm text-muted-foreground">{{ store.t('freeShippingDesc') }}</p>
+              <p class="text-sm text-muted-foreground">{{ freeShippingDescription }}</p>
             </div>
             <div class="text-center">
               <div class="w-16 h-16 bg-accent/50 rounded-full flex items-center justify-center mx-auto mb-4">
@@ -212,6 +212,14 @@ export default {
     return { store, isMobile }
   },
   computed: {
+    freeShippingDescription() {
+      if (this.store.country === 'SY') {
+        return this.store.locale === 'ar'
+          ? 'شحن مجاني لكافة الأراضي السورية'
+          : 'Free shipping across Syria'
+      }
+      return this.store.t('freeShippingDesc')
+    },
     heroSlides() {
       const activeSliders = (this.isMobile && this.mobileSliders.length > 0) 
         ? this.mobileSliders 

@@ -31,6 +31,7 @@ class StorefrontProductPresenterTest extends TestCase
             'name_en' => 'Test product',
             'details' => str_repeat('large-description-', 100000),
             'image' => 'products/product.webp',
+            'cover_product_color_id' => 202,
             'country_id' => 2,
             'retail_price' => 90,
             'sale_price' => 70,
@@ -73,14 +74,37 @@ class StorefrontProductPresenterTest extends TestCase
         ]);
         $color->setRelation('color', $colorName);
         $color->setRelation('userProducts', new Collection([$available, $empty]));
-        $product->setRelation('colors', new Collection([$color]));
+
+        $blueName = new Color();
+        $blueName->forceFill(['id' => 6, 'name' => 'أزرق', 'name_en' => 'Blue', 'code' => '#0000ff']);
+        $blueStock = new UserProduct();
+        $blueStock->forceFill([
+            'id' => 303,
+            'product_color_id' => 202,
+            'user_id' => 805,
+            'country_id' => 2,
+            'size' => 'L',
+            'stock' => 2,
+        ]);
+        $blue = new ProductColor();
+        $blue->forceFill([
+            'id' => 202,
+            'product_id' => 91,
+            'image' => 'products/blue.webp',
+            'barcode' => 'BLUE-91',
+        ]);
+        $blue->setRelation('color', $blueName);
+        $blue->setRelation('userProducts', new Collection([$blueStock]));
+        $product->setRelation('colors', new Collection([$color, $blue]));
 
         $payload = app(StorefrontProductPresenter::class)->product($product);
         $json = json_encode($payload, JSON_THROW_ON_ERROR | JSON_UNESCAPED_UNICODE);
 
         $this->assertSame(91, $payload['id']);
         $this->assertSame(90.0, $payload['final_price_value']);
-        $this->assertSame(['M'], $payload['sizes']);
+        $this->assertSame(['M', 'L'], $payload['sizes']);
+        $this->assertSame(202, $payload['cover_product_color_id']);
+        $this->assertStringContainsString('products/blue.webp', $payload['image_url']);
         $this->assertSame(3, $payload['colors'][0]['stock']);
         $this->assertSame('RED-91', $payload['colors'][0]['barcode']);
         $this->assertSame('M', $payload['colors'][0]['user_products'][0]['size']);

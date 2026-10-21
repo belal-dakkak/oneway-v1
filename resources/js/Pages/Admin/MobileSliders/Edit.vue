@@ -8,7 +8,7 @@
 
         <div>
             <div class="max-w-full mx-auto py-10 sm:px-6 lg:px-8">
-                <edit-mobile-slider-information-form :slider="slider" />
+                <edit-mobile-slider-information-form :slider="slider" :countries="countries" />
 
                 <jet-section-border />
             </div>
@@ -30,6 +30,7 @@ export default defineComponent({
     },
     props:{
         slider: Object,
+        countries: { type: Array, default: () => [] },
     },
 })
 </script>

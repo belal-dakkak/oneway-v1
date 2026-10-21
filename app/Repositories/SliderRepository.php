@@ -5,13 +5,20 @@ namespace App\Repositories;
 use App\Models\Slider;
 use Illuminate\Contracts\Pagination\LengthAwarePaginator;
 use Illuminate\Http\Request;
-use Illuminate\Support\Facades\Cache;
+use App\Services\StorefrontSliderService;
 
 class SliderRepository
 {
     private function clearSliderCache()
     {
-        Cache::forget('home_sliders');
+        app(StorefrontSliderService::class)->clear();
+    }
+
+    private function countryId(Request $request): ?int
+    {
+        $country = $request->input('country');
+        $value = is_array($country) ? ($country['id'] ?? $country['value'] ?? null) : $country;
+        return $value === null || $value === '' ? null : (int) $value;
     }
 
     public function add(Request $request): Slider
@@ -20,13 +27,16 @@ class SliderRepository
         if ($id = $request->get('id'))
         {
             $slider =  Slider::find($id);
-            $slider->type = $request->get('place');
+            $place = $request->get('place');
+            $slider->type = is_array($place) ? $place['value'] : $place;
+            $slider->country_id = $this->countryId($request);
             if ($request->get('image') && is_array($request->get('image')))
                 $slider->image = $request->get('image')[0];
             $slider->save();
         } else {
             $slider =  new Slider();
             $slider->type = $request->get('place')['value'];
+            $slider->country_id = $this->countryId($request);
             if ($request->get('image') && is_array($request->get('image')))
                 $slider->image = $request->get('image')[0];
             $slider->save();
@@ -39,7 +49,9 @@ class SliderRepository
     {
         if ($request->get('image') && is_array($request->get('image')))
             $slider->image = $request->get('image')[0];
-        $slider->type = $request->get('value');
+        $place = $request->get('place', $request->get('value'));
+        $slider->type = is_array($place) ? $place['value'] : $place;
+        $slider->country_id = $this->countryId($request);
         $slider->save();
         $this->clearSliderCache();
     }

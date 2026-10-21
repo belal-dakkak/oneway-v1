@@ -586,7 +586,7 @@ class OrderController extends Controller
         $productId = $request->get('product');
         if(strlen($productId) < 8) return false;
         $items = UserProduct::query()
-            ->with(['productColor'])
+            ->with(['productColor.product'])
             ->where('user_id', $userId)
             ->where('barcode','LIKE', '%'.$productId."%")
             ->where('stock', '>', 0)
@@ -610,6 +610,7 @@ class OrderController extends Controller
                 })
                 ->findOrFail($request->get('order'));
             $this->clientAccounts->payOrder($order, (float) $request->get('amount'));
+            $order->refresh();
         }catch (Exception $exception){
             return response()->json([
                 'error' => $exception->getMessage()
@@ -617,7 +618,13 @@ class OrderController extends Controller
         }
 
         return response()->json([
-            'success' => true
+            'success' => true,
+            'order' => [
+                'id' => $order->id,
+                'paid_price' => (float) $order->paid_price,
+                'remain_price' => (float) $order->remain_price,
+                'is_paid' => (float) $order->remain_price <= 0,
+            ],
         ]);
     }
 

@@ -6,8 +6,6 @@ use App\Http\Controllers\Controller;
 use App\Models\Category;
 use App\Models\Product;
 use App\Models\Setting;
-use App\Models\Slider;
-use App\Models\MobileSlider;
 use App\Models\User;
 use App\Models\UserProduct;
 use App\Models\ProductColor;
@@ -16,6 +14,7 @@ use Illuminate\Support\Facades\Session;
 use App\Support\Country;
 use App\Services\WebsiteInventoryService;
 use App\Services\StorefrontProductPresenter;
+use App\Services\StorefrontSliderService;
 use Illuminate\Support\Facades\Cache;
 use Inertia\Inertia;
 use Inertia\Response;
@@ -37,6 +36,7 @@ class ArabicHomeController extends Controller
                 $query->where('country_id', $countryId)->where('user_id', $stockUserId ?: 0)->where('stock', '>', 0);
             })
             ->with('operationalPrices')
+            ->with('coverColor')
             ->with(['colors' => function($query) use ($countryId, $stockUserId) {
                 $query->whereHas('userProducts', function($q) use ($countryId, $stockUserId) {
                     $q->where('country_id', $countryId)->where('user_id', $stockUserId ?: 0)->where('stock', '>', 0);
@@ -53,8 +53,9 @@ class ArabicHomeController extends Controller
             return Setting::where('country', $country)->where('language', $language)->pluck('value', Setting::keyColumn())->toArray();
         });
 
-        $sliders = Cache::remember("home_sliders", 3600, fn() => Slider::all());
-        $mobileSliders = Cache::remember("mobile_home_sliders", 3600, fn() => MobileSlider::all());
+        $sliderService = app(StorefrontSliderService::class);
+        $sliders = $sliderService->desktop($countryId);
+        $mobileSliders = $sliderService->mobile($countryId);
         $categories = Cache::remember("shop_categories", 3600, fn() => transformDataForVue(Category::all()));
 
         $title     = $settings['title'] ?? '';
@@ -93,7 +94,7 @@ class ArabicHomeController extends Controller
         $stockUserId = app(WebsiteInventoryService::class)->stockUserId($country_id);
 
         $userProducts = Product::query()
-            ->with(['category', 'operationalPrices', 'colors' => function($query) use ($country_id, $stockUserId) {
+            ->with(['category', 'operationalPrices', 'coverColor', 'colors' => function($query) use ($country_id, $stockUserId) {
                 $query->whereHas('userProducts', function ($q) use ($country_id, $stockUserId) {
                     $q->where('country_id', $country_id)->where('user_id', $stockUserId ?: 0)->where('stock', '>', 0);
                 })->with(['color', 'userProducts' => function($q) use ($country_id, $stockUserId) {

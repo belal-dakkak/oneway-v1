@@ -21,6 +21,29 @@ class SalesReportServiceTest extends TestCase
 {
     use RefreshDatabase;
 
+    public function test_unpaid_orders_report_excludes_fully_paid_orders(): void
+    {
+        $admin = User::query()->create([
+            'name' => 'Admin', 'email' => 'debts-admin@example.test', 'password' => 'secret',
+            'role_id' => User::ROLE_ADMIN, 'country_id' => User::COUNTRY_UAE,
+        ]);
+        $shop = User::query()->create([
+            'name' => 'Shop', 'email' => 'debts-shop@example.test', 'password' => 'secret',
+            'role_id' => User::ROLE_SHOP, 'country_id' => User::COUNTRY_UAE,
+        ]);
+        $this->actingAs($admin);
+
+        $paid = $this->order($shop, 'PAID-ORDER', 'AED', 1, 100, now()->toDateTimeString());
+        $unpaid = $this->order($shop, 'UNPAID-ORDER', 'AED', 1, 100, now()->toDateTimeString());
+        $unpaid->update(['paid_price' => 60, 'remain_price' => 40]);
+
+        $report = app(SalesReportService::class)->orders(new Request(), true, [], false);
+        $ids = collect($report['orders'])->pluck('id')->all();
+
+        $this->assertContains($unpaid->id, $ids);
+        $this->assertNotContains($paid->id, $ids);
+    }
+
     public function test_refunds_are_counted_on_refund_day_and_currencies_are_never_merged(): void
     {
         $admin = User::query()->create([

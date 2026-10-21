@@ -104,7 +104,7 @@
                         <th scope="col" class="px-6 py-3 text-center font-semibold text-sm tracking-wider cursor-pointer">
                             المنتجات
                         </th>
-                        <th style="min-width: 200px;"></th>
+                        <th style="min-width: 320px;">ملخص الأصناف</th>
                         <th scope="col" class="px-2 py-3 text-center font-semibold text-sm tracking-wider cursor-pointer" @click="sort('id')">
                             الترميز (ID)
                             <vue-feather :type="'chevron-up'" stroke-width="2" class="p-1 h-4 w-8 place-self-center inline-block" v-if="params.field==='id' && params.direction==='asc'"></vue-feather>
@@ -141,9 +141,29 @@
                             </button>
                         </td>
                         <td class="p-4">
-                            <div class="flex flex-wrap gap-2">
-                                <div v-for="order_item in item.items" :key="order_item.id">
-                                    <img v-if="order_item?.product?.product_color" :src="order_item.product.product_color.photo_url" class="w-16 h-16 rounded shadow-sm object-cover">
+                            <div class="flex flex-col gap-2 min-w-[320px]" dir="rtl">
+                                <div
+                                    v-for="product in item.product_summary"
+                                    :key="product.id"
+                                    class="flex items-center gap-3 rounded-lg border border-gray-200 bg-gray-50 p-2"
+                                >
+                                    <img
+                                        v-if="product.image_url"
+                                        :src="product.image_url"
+                                        class="w-14 h-14 rounded shadow-sm object-cover flex-shrink-0"
+                                        alt=""
+                                    >
+                                    <div class="flex flex-col text-xs leading-5 text-right">
+                                        <span class="font-bold text-gray-800">{{ product.name || product.name_en }}</span>
+                                        <span class="text-gray-600">
+                                            {{ product.color_name || product.color_name_en }}
+                                            <template v-if="product.size"> · {{ product.size }}</template>
+                                        </span>
+                                        <span class="text-gray-700">
+                                            الكمية: <strong>{{ product.qty }}</strong>
+                                            · {{ formatMoney(product.item_price, item) }}
+                                        </span>
+                                    </div>
                                 </div>
                             </div>
                         </td>
@@ -336,7 +356,10 @@ export default {
         }
     },
     methods: {
-        formatMoney(value, code) {
+        formatMoney(value, currencyOrOrder) {
+            const code = typeof currencyOrOrder === 'string'
+                ? currencyOrOrder
+                : currencyOrOrder?.curr_type
             const currency = String(code || 'USD').toUpperCase();
             const decimals = currency === 'SYP' ? 0 : 2;
             return Number(value || 0).toLocaleString(undefined, { minimumFractionDigits: decimals, maximumFractionDigits: decimals }) + ' ' + currency;
@@ -373,14 +396,6 @@ export default {
             this.showModal = false;
             this.products = null;
             this.activeOrder = null;
-        },
-        formatMoney(value, order) {
-            const currency = String(order?.curr_type || 'USD').toUpperCase();
-            const decimals = currency === 'SYP' ? 0 : 2;
-            return Number(value || 0).toLocaleString(undefined, {
-                minimumFractionDigits: decimals,
-                maximumFractionDigits: decimals,
-            }) + ' ' + currency;
         },
         orderDisplayCurrency(order) {
             if (!order?.display_currency || Number(order?.display_rate) <= 0) return null;

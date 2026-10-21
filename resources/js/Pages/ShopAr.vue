@@ -215,6 +215,8 @@
 
         </footer>
 
+        <FloatingButtons :is-r-t-l="true" />
+
     </div>
     <transition name="modal">
           <modal v-if="showModal" @close="showModal = false"
@@ -296,8 +298,9 @@ import { useStore } from '@/stores/store';
 import { usePage } from '@inertiajs/inertia-vue3';
 import { computed } from 'vue';
 import { brandLogo } from '@/Utils/brand';
+import FloatingButtons from '@/Components/Website/FloatingButtons.vue';
 
-const components = { Carousel, Slide, Pagination, Navigation, Arrow, ArrowDown, ProductCarousel, ColorTag }
+const components = { Carousel, Slide, Pagination, Navigation, Arrow, ArrowDown, ProductCarousel, ColorTag, FloatingButtons }
 
 export default {
     props:{

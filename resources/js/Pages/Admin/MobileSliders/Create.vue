@@ -8,7 +8,7 @@
 
         <div>
             <div class="max-w-full mx-auto py-10 sm:px-6 lg:px-8">
-                <create-mobile-slider-information-form/>
+                <create-mobile-slider-information-form :countries="countries" />
 
                 <jet-section-border />
             </div>
@@ -27,6 +27,9 @@ export default defineComponent({
         AppLayout,
         JetSectionBorder,
         CreateMobileSliderInformationForm
+    },
+    props: {
+        countries: { type: Array, default: () => [] },
     },
 })
 </script>

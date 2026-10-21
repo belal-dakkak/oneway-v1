@@ -15,7 +15,7 @@ class Product extends Model
 {
     use HasFactory;
     protected $fillable = [
-        'name', 'name_en', 'details', 'details_en','image', 'category_id', 'country_id', 'barcode', 'sizes','sale_price', 'cost_price', 'retail_price', 'price_before_discount', 'rate','country_id', 'shown_for_merchant'
+        'name', 'name_en', 'details', 'details_en','image', 'cover_product_color_id', 'category_id', 'country_id', 'barcode', 'sizes','sale_price', 'cost_price', 'retail_price', 'price_before_discount', 'rate','country_id', 'shown_for_merchant'
     ];
     protected $casts = ['sizes' => 'array', 'shown_for_merchant' => 'boolean'];
     protected $appends = ['photo_url', 'raw_sizes', 'image_url','country_name','app_stock', 'cost_price_value', 'final_price', 'final_price_value', 'final_price_currency', 'formatted_price_before_discount', 'price_before_discount_value', 'price_before_discount_raw', 'wholesale_price_value', 'formatted_wholesale_price', 'prices_by_currency'];
@@ -28,6 +28,11 @@ class Product extends Model
     public function colors(): HasMany
     {
         return $this->hasMany(ProductColor::class);
+    }
+
+    public function coverColor(): BelongsTo
+    {
+        return $this->belongsTo(ProductColor::class, 'cover_product_color_id');
     }
 
     public function operationalPrices(): MorphMany
@@ -135,7 +140,19 @@ class Product extends Model
      */
     public function getImageUrlAttribute()
     {
-        return $this->colors()->first() ? $this->colors()->first()->photo_url : $this->photo_url;
+        $cover = $this->relationLoaded('coverColor')
+            ? $this->coverColor
+            : $this->coverColor()->first();
+
+        if ($cover && (int) $cover->product_id === (int) $this->id) {
+            return $cover->photo_url;
+        }
+
+        $firstColor = $this->relationLoaded('colors')
+            ? $this->colors->sortBy('id')->first()
+            : $this->colors()->orderBy('id')->first();
+
+        return $firstColor ? $firstColor->photo_url : $this->photo_url;
     }
 
     /**

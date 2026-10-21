@@ -38,6 +38,8 @@ class ProductRequest extends FormRequest
             'country.value' => 'nullable|integer|in:1,2,3,4',
             'country.id' => 'nullable|integer|in:1,2,3,4',
             'price_currency_code' => 'required|string|in:USD,AED,SYP',
+            'selected_products' => 'required|array|min:1',
+            'selected_products.*.is_cover' => 'nullable|boolean',
         ];
     }
 
@@ -65,6 +67,15 @@ class ProductRequest extends FormRequest
                 if (!in_array($currency, $allowed, true)) {
                     $validator->errors()->add('price_currency_code', 'عملة السعر لا تتوافق مع بلد المنتج.');
                 }
+            }
+
+            $coverCount = collect($this->input('selected_products', []))
+                ->filter(function ($product) {
+                    return filter_var($product['is_cover'] ?? false, FILTER_VALIDATE_BOOLEAN);
+                })
+                ->count();
+            if ($coverCount > 1) {
+                $validator->errors()->add('selected_products', 'يمكن اختيار صورة غلاف واحدة فقط.');
             }
         });
     }

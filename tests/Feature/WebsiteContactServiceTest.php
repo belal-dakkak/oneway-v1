@@ -51,7 +51,8 @@ class WebsiteContactServiceTest extends TestCase
         $contacts = app(WebsiteContactService::class)->forStorefrontCountries();
 
         $this->assertSame('https://wa.me/971501234567', $contacts['AE']['whatsapp_url']);
-        $this->assertSame('https://wa.me/963944123456', $contacts['SY']['whatsapp_url']);
+        $this->assertSame('+963947900555', $contacts['SY']['whatsapp']);
+        $this->assertSame('https://wa.me/963947900555', $contacts['SY']['whatsapp_url']);
         $this->assertSame('syria@example.test', $contacts['SY']['email']);
         $this->assertNull($contacts['LB']['whatsapp_url']);
         $this->assertArrayNotHasKey('TR', $contacts);
@@ -74,7 +75,7 @@ class WebsiteContactServiceTest extends TestCase
         ])->assertRedirect(route('settings.index'));
 
         $this->actingAs($admin)->get(route('settings.edit', 'en'))->assertOk();
-        $this->assertSame('https://wa.me/963944111222',
+        $this->assertSame('https://wa.me/963947900555',
             app(WebsiteContactService::class)->forStorefrontCountries()['SY']['whatsapp_url']);
     }
 }

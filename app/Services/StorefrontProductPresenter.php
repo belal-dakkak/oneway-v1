@@ -43,7 +43,16 @@ class StorefrontProductPresenter
             ->unique()
             ->values()
             ->all();
-        $firstColor = $colors->first();
+        $selectedCover = $product->relationLoaded('coverColor')
+            ? $product->getRelation('coverColor')
+            : null;
+        $coverColor = $colors->first(function (array $color) use ($product): bool {
+            return (int) $color['id'] === (int) $product->cover_product_color_id;
+        });
+        $firstColor = $coverColor ?: $colors->first();
+        $imageUrl = $selectedCover
+            ? $selectedCover->photo_url
+            : ($firstColor['photo_url'] ?? $product->photo_url);
 
         return [
             'id' => (int) $product->getKey(),
@@ -51,7 +60,10 @@ class StorefrontProductPresenter
             'name_en' => (string) ($product->name_en ?: $product->name),
             'image' => $product->image,
             'photo_url' => $product->photo_url,
-            'image_url' => $firstColor['photo_url'] ?? $product->photo_url,
+            'image_url' => $imageUrl,
+            'cover_product_color_id' => $product->cover_product_color_id
+                ? (int) $product->cover_product_color_id
+                : null,
             'retail_price' => $this->number($product->retail_price),
             'sale_price' => $this->number($product->sale_price),
             'price_before_discount' => $this->number($product->price_before_discount),

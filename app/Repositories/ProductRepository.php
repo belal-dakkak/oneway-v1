@@ -63,6 +63,7 @@ class ProductRepository
             }
             $product->save();
             $this->prices->persist($product, $preparedPrices);
+            $coverProductColorId = null;
             foreach ($request->get('selected_products', []) as $subProduct) {
                 if (!isset($subProduct['image'], $subProduct['color'], $subProduct['sizes'])) {
                     continue;
@@ -76,7 +77,9 @@ class ProductRepository
                         $stock += $size['stock'];
                     }
 
-                    $productColor = ProductColor::query()->findOrFail($subProduct['id']);
+                    $productColor = ProductColor::query()
+                        ->where('product_id', $product->id)
+                        ->findOrFail($subProduct['id']);
                     $subProductBarcode = $subProduct['barcode'];
                     if (is_null($subProductBarcode) || $subProductBarcode === '') {
                         sbarcode:
@@ -98,6 +101,9 @@ class ProductRepository
                         'sizes' => json_encode($sizes),
                         'country_id' => $countryId,
                     ]);
+                    if (filter_var($subProduct['is_cover'] ?? false, FILTER_VALIDATE_BOOLEAN)) {
+                        $coverProductColorId = $productColor->id;
+                    }
                     continue;
                 }
 
@@ -120,7 +126,7 @@ class ProductRepository
                     $stock += $size['stock'];
                 }
 
-                ProductColor::query()->create([
+                $productColor = ProductColor::query()->create([
                     'product_id' => $product->id,
                     'image' => $subProduct['image'][0],
                     'color_id' => $subProduct['color']['id'],
@@ -129,6 +135,14 @@ class ProductRepository
                     'sizes' => json_encode($sizes),
                     'country_id' => $countryId,
                 ]);
+                if (filter_var($subProduct['is_cover'] ?? false, FILTER_VALIDATE_BOOLEAN)) {
+                    $coverProductColorId = $productColor->id;
+                }
+            }
+
+            if ($coverProductColorId) {
+                $product->cover_product_color_id = $coverProductColorId;
+                $product->save();
             }
         }, 3);
         $this->clearHomeCache();
@@ -151,14 +165,22 @@ class ProductRepository
     public function getProducts(Request $request): LengthAwarePaginator
     {
         $products = Product::query()
-            ->with(['category', 'colors'])
+            ->with(['category', 'colors.color', 'coverColor'])
+            ->withMax('colors', 'updated_at')
+            ->withMax('colors', 'id')
             ->whereIn('country_id', [auth()->user()->country_id, Country::globalProductId()]);
         // $products = Product::query()->with(['category', 'colors'])->where('country_id',auth()->user()->country_id);
         if ($category = $request->get('category_id'))
             $products->where('category_id', $category);
         if ($search = $request->get('search')){
-            $products->where('name', 'LIKE', "%$search%")
-                ->orWhere('barcode', 'LIKE', "%$search%");
+            $products->where(function ($query) use ($search) {
+                $query->where('name', 'LIKE', "%$search%")
+                    ->orWhere('name_en', 'LIKE', "%$search%")
+                    ->orWhere('barcode', 'LIKE', "%$search%")
+                    ->orWhereHas('colors', function ($colors) use ($search) {
+                        $colors->where('barcode', 'LIKE', "%$search%");
+                    });
+            });
         }
         if ($request->has(['field', 'direction'])){
             $field = $request->get('field');
@@ -168,10 +190,14 @@ class ProductRepository
             if(in_array($field, $sortableArray)){
                 $products->orderBy($field, $direction);
             }else{
-                $products->orderByDesc('id');
+                $products->orderByRaw('CASE WHEN colors_max_updated_at IS NULL OR products.updated_at >= colors_max_updated_at THEN products.updated_at ELSE colors_max_updated_at END DESC')
+                    ->orderByDesc('colors_max_id')
+                    ->orderByDesc('products.id');
             }
         }else{
-            $products->orderByDesc('id');
+            $products->orderByRaw('CASE WHEN colors_max_updated_at IS NULL OR products.updated_at >= colors_max_updated_at THEN products.updated_at ELSE colors_max_updated_at END DESC')
+                ->orderByDesc('colors_max_id')
+                ->orderByDesc('products.id');
         }
         return $products->paginate(15)->withQueryString();
     }

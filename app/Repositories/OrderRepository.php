@@ -2141,14 +2141,26 @@ class OrderRepository
 
     public function getWebsiteOrders(Request $request, $pagination = true)
     {
-        $with = ['buyer', 'items.product'];
+        $with = [
+            'items:id,website_order_id,product_color_id,size,qty,item_price,total_price',
+            'items.product:id,product_id,color_id,image,barcode',
+            'items.product.color:id,name,name_en,code',
+            'items.product.product:id,name,name_en',
+        ];
         $query = WebsiteOrder::query()->with($with);
         $country = auth()->user()->country_id;
 
         $query->where('country_id', $country);
 
-        if ($search = $request->get('search'))
-            $query->where('barcode', 'LIKE', "%$search%");
+        if ($search = $request->get('search')) {
+            $query->where(function ($orders) use ($search) {
+                $orders->where('barcode', 'LIKE', "%$search%")
+                    ->orWhere('first_name', 'LIKE', "%$search%")
+                    ->orWhere('last_name', 'LIKE', "%$search%")
+                    ->orWhere('phone', 'LIKE', "%$search%")
+                    ->orWhere('email', 'LIKE', "%$search%");
+            });
+        }
 
         if ($buyerId = $request->get('buyer_id') ?: $request->get('buyer'))
             $query->where('buyer_id', $buyerId);
@@ -2176,8 +2188,11 @@ class OrderRepository
 
         if ($pagination) {
             $orders = $query->paginate(10)->withQueryString();
+            $orders->setCollection(
+                $orders->getCollection()->map(fn (WebsiteOrder $order) => $this->websiteOrderListItem($order))
+            );
         } else {
-            $orders = $query->get();
+            $orders = $query->get()->map(fn (WebsiteOrder $order) => $this->websiteOrderListItem($order));
         }
 
         return [
@@ -2187,6 +2202,59 @@ class OrderRepository
             'total_price_without_tax' => 0,
             'total_tax_value' => 0,
             'totals_by_currency' => $totalsByCurrency,
+        ];
+    }
+
+    private function websiteOrderListItem(WebsiteOrder $order): array
+    {
+        $products = $order->items->map(function (WebsiteOrderItem $item): array {
+            $color = $item->product;
+            $model = $color ? $color->product : null;
+            $colorModel = $color ? $color->color : null;
+
+            return [
+                'id' => (int) $item->id,
+                'image_url' => $color ? $color->photo_url : null,
+                'name' => (string) ($model->name ?? ''),
+                'name_en' => (string) ($model->name_en ?? $model->name ?? ''),
+                'color_name' => (string) ($colorModel->name ?? $colorModel->name_en ?? ''),
+                'color_name_en' => (string) ($colorModel->name_en ?? $colorModel->name ?? ''),
+                'color_code' => (string) ($colorModel->code ?? ''),
+                'barcode' => (string) ($color->barcode ?? ''),
+                'size' => (string) ($item->size ?? ''),
+                'qty' => (int) $item->qty,
+                'item_price' => (float) $item->item_price,
+                'total_price' => (float) $item->total_price,
+            ];
+        })->values()->all();
+
+        return [
+            'id' => (int) $order->id,
+            'barcode' => (string) ($order->barcode ?: $order->id),
+            'first_name' => (string) $order->first_name,
+            'last_name' => (string) $order->last_name,
+            'phone' => (string) $order->phone,
+            'email' => (string) $order->email,
+            'address' => (string) $order->address,
+            'city' => (string) $order->city,
+            'building_name' => (string) $order->building_name,
+            'flat_number' => (string) $order->flat_number,
+            'total_price' => (float) $order->total_price,
+            'shipping_fee' => (float) $order->shipping_fee,
+            'cod_fee' => (float) $order->cod_fee,
+            'paid_price' => (float) $order->paid_price,
+            'remain_price' => (float) $order->remain_price,
+            'curr_type' => (string) $order->curr_type,
+            'display_currency' => $order->display_currency,
+            'display_rate' => (float) $order->display_rate,
+            'payment_type' => (string) $order->payment_type,
+            'payment_label' => $order->payment_label,
+            'is_paid' => $order->is_paid,
+            'status' => (int) $order->status,
+            'status_label' => $order->status_label,
+            'date' => $order->date,
+            'product_summary' => $products,
+            'products_count' => count($products),
         ];
     }
 

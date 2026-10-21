@@ -72,6 +72,7 @@ class ProductColorRepository
             $product->save();
             $this->prices->persist($product, $preparedPrices);
 
+            $coverProductColorId = null;
             foreach ($request->get('selected_products') as $subProduct){
                 if (isset($subProduct['image']) && isset($subProduct['color']) && isset($subProduct['sizes'])){
                     $subProductBarcode = '';
@@ -92,7 +93,7 @@ class ProductColorRepository
                         array_push($sizes,['stock' => $size['stock'],'barcode' => $subsubProductBarcode,'size' => $size['size']['id']]);
                         $stock += $size['stock'];
                     }
-                    ProductColor::query()->create([
+                    $productColor = ProductColor::query()->create([
                         'product_id' => $product->id,
                         'image' => $subProduct['image'][0],
                         'color_id' => $subProduct['color']['id'],
@@ -102,7 +103,15 @@ class ProductColorRepository
                         'sizes' => json_encode($sizes),
                         'country_id' => $country_id
                     ]);
+                    if (filter_var($subProduct['is_cover'] ?? false, FILTER_VALIDATE_BOOLEAN)) {
+                        $coverProductColorId = $productColor->id;
+                    }
                 }
+            }
+
+            if ($coverProductColorId) {
+                $product->cover_product_color_id = $coverProductColorId;
+                $product->save();
             }
 
         }catch (\Exception $exception){
@@ -142,44 +151,75 @@ class ProductColorRepository
 
     public function getProducts(Request $request): LengthAwarePaginator
     {
-        $country = auth()->user()->country_id;
-        $products = ProductColor::query()->with(['color', 'product', 'product.category'])
-        // ->where('country_id',$country)
-        ->where('sizes','<>','')
-        ->whereIn('country_id', [auth()->user()->country_id, Country::globalProductId()])
-        ->whereNotNull('sizes');
-        if ($category = $request->get('category_id'))
-            $products->whereHas('product', function ($query) use ($category){
-                $query->where('category_id', $category);
-            });
+        $countryIds = [auth()->user()->country_id, Country::globalProductId()];
+        $category = $request->get('category_id');
+        $color = $request->get('color_id');
+        $search = trim((string) $request->get('search', ''));
 
-        if ($color = $request->get('color_id'))
-            $products->where('color_id', $color);
-
-        if ($search = $request->get('search')){
-            $products->Where('sizes', 'LIKE', "%$search%");
-            // $products->whereHas('product', function ($query) use ($search){
-            //     $query->where('name', 'LIKE', "%$search%")
-            //         ->orWhere('barcode', 'LIKE', "%$search%");
-            // })->orWhere('barcode', 'LIKE', "%$search%");
-        }
-
-        if ($request->has(['field', 'direction'])){
-            $field = $request->get('field');
-            $direction = $request->get('direction');
-
-            $sortableArray = app(ProductColor::class)->getFillable();
-            $sortableArray[] = 'updated_at';
-            if(in_array($field, $sortableArray)){
-                $products->orderBy($field, $direction);
-            }else{
-                $products->orderByDesc('updated_at');
+        $eligibleColors = function ($query) use ($countryIds, $color) {
+            $query->whereIn('country_id', $countryIds)
+                ->whereNotNull('sizes')
+                ->where('sizes', '<>', '');
+            if ($color) {
+                $query->where('color_id', $color);
             }
-        }else{
-            $products->orderByDesc('updated_at');
+        };
+
+        $products = Product::query()
+            ->withMax(['colors' => $eligibleColors], 'updated_at')
+            ->withMax(['colors' => $eligibleColors], 'id')
+            ->with([
+                'category',
+                'colors' => function ($query) use ($eligibleColors) {
+                    $eligibleColors($query);
+                    $query->with(['color', 'product.category'])->orderBy('id');
+                },
+            ])
+            ->whereIn('country_id', $countryIds)
+            ->whereHas('colors', $eligibleColors);
+
+        if ($category) {
+            $products->where('category_id', $category);
         }
 
-        return $products->paginate(10)->withQueryString();
+        if ($search !== '') {
+            $products->where(function ($query) use ($search) {
+                $query->where('name', 'LIKE', "%$search%")
+                    ->orWhere('name_en', 'LIKE', "%$search%")
+                    ->orWhere('barcode', 'LIKE', "%$search%")
+                    ->orWhereHas('colors', function ($colors) use ($search, $countryIds, $color) {
+                        $colors->whereIn('country_id', $countryIds)
+                            ->whereNotNull('sizes')
+                            ->where('sizes', '<>', '')
+                            ->when($color, function ($query) use ($color) {
+                                $query->where('color_id', $color);
+                            })
+                            ->where(function ($matching) use ($search) {
+                                $matching->where('barcode', 'LIKE', "%$search%")
+                                    ->orWhere('sizes', 'LIKE', "%$search%");
+                            });
+                    });
+            });
+        }
+
+        $field = (string) $request->get('field', '');
+        $direction = strtolower((string) $request->get('direction')) === 'asc' ? 'asc' : 'desc';
+        if (in_array($field, ['id', 'cost_price', 'updated_at'], true)) {
+            $products->orderBy('products.'.$field, $direction);
+        } else {
+            $products->orderByRaw('CASE WHEN colors_max_updated_at IS NULL OR products.updated_at >= colors_max_updated_at THEN products.updated_at ELSE colors_max_updated_at END DESC')
+                ->orderByDesc('colors_max_id')
+                ->orderByDesc('products.id');
+        }
+
+        $paginator = $products->paginate(10)->withQueryString();
+        $paginator->setCollection(
+            $paginator->getCollection()->flatMap(function (Product $product) {
+                return $product->colors;
+            })->values()
+        );
+
+        return $paginator;
     }
 
 }

@@ -64,7 +64,7 @@ class WebsiteContactService
                 return '';
             };
 
-            $whatsapp = $value('whatsapp');
+            $whatsapp = (string) (config('website_contacts.primary_whatsapp.'.$code) ?: $value('whatsapp'));
             $digits = $this->internationalDigits($whatsapp);
             $contacts[$code] = [
                 'whatsapp' => $whatsapp,

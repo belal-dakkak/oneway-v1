@@ -1,6 +1,9 @@
 <?php
 
 return [
+    'primary_whatsapp' => [
+        'SY' => '+963947900555',
+    ],
     'branches' => [
         [
             'code' => 'AE',

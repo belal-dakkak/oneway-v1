@@ -10,6 +10,8 @@ use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Redirect;
 use Inertia\Inertia;
 use Inertia\Response;
+use App\Services\StorefrontSliderService;
+use App\Support\Country;
 class SliderController extends Controller
 {
     private $sliderRepository;
@@ -47,11 +49,12 @@ class SliderController extends Controller
 
     public function create(): Response
     {
-        return Inertia::render('Admin/Sliders/Create');
+        return Inertia::render('Admin/Sliders/Create', ['countries' => $this->countryOptions()]);
     }
 
     public function store(Request $request)
     {
+        $request->validate(['country.value' => ['nullable', 'integer', 'in:1,2,4']]);
         $this->sliderRepository->add($request);
         $request->session()->flash('success', 'تم إنشاء السلايدر بنجاح');
         return Redirect::route('sliders.index');
@@ -63,11 +66,13 @@ class SliderController extends Controller
         $slider = transformItemForVue($slider, Slider::class);
         return Inertia::render('Admin/Sliders/Edit',[
             'slider' => $slider,
+            'countries' => $this->countryOptions(),
         ]);
     }
 
     public function update(Slider $slider, Request $request): RedirectResponse
     {
+        $request->validate(['country.value' => ['nullable', 'integer', 'in:1,2,4']]);
         $this->sliderRepository->update($request, $slider);
         $request->session()->flash('success', 'تم تعديل السلايدر بنجاح');
         return Redirect::route('sliders.index');
@@ -76,9 +81,18 @@ class SliderController extends Controller
     public function destroy(Slider $slider, Request $request)
     {
         $slider->delete();
-        \Illuminate\Support\Facades\Cache::forget('home_sliders');
+        app(StorefrontSliderService::class)->clear();
         $request->session()->flash('success', 'تم حذف السلايدر بنجاح');
         return Redirect::route('sliders.index');
 
+    }
+
+    private function countryOptions(): array
+    {
+        $options = [['name' => 'All Countries', 'value' => '']];
+        foreach (Country::storefront() as $country) {
+            $options[] = ['name' => $country['name'], 'value' => (string) $country['id']];
+        }
+        return $options;
     }
 }

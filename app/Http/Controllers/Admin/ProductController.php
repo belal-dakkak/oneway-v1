@@ -95,6 +95,9 @@ class ProductController extends Controller
 
         $selectedSizes = getSizes($product->sizes);
         $selectedColors = getColors($product->colors);
+        foreach ($selectedColors as $selectedColor) {
+            $selectedColor->is_cover = (int) $selectedColor->id === (int) $product->cover_product_color_id;
+        }
 
         $pricingCountryId = (int) $product->country_id === Country::globalProductId()
             ? (int) auth()->user()->country_id

@@ -14,7 +14,7 @@ class MobileProductRepository
     {
         $limit = $request->get('limit', 10);
         if ($limit > 30) $limit = 30;
-            $products = Product::query()->with(['category', 'colors']);
+            $products = Product::query()->with(['category', 'colors', 'coverColor']);
 
         if ($api)
             $products->has('colors');

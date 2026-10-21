@@ -37,7 +37,7 @@
                         <div class="px-4 flex justify-around">
                             <div class="">
                                 <jet-label for="retail_price" :value="__('Retail Price')" dir="rtl" />
-                                <jet-input ref="price" id="retail_price" type="number" min="0" :step="form.currency?.code === 'SYP' ? 1 : 0.01" class="mt-1 block w-full" v-model="product.price" autocomplete="retail_price" />
+                                <jet-input ref="price" id="retail_price" type="number" min="0" :step="form.currency?.code === 'SYP' ? 1 : 0.01" class="mt-1 block w-full" v-model="product.price" @input="syncModelPrice(product)" autocomplete="retail_price" />
                                 <jet-input-error :message="form.errors.retail_price" class="mt-2" />
                             </div>
 
@@ -200,6 +200,7 @@ import JetInput from '@/Jetstream/Input'
 import JetInputError from '@/Jetstream/InputError'
 import JetButton from '@/Jetstream/Button.vue'
 import Currency from '@/Utils/Currency.js';
+import WholesalePrice from '@/Utils/WholesalePrice.js';
 import Receipt from '@/Utils/Receipt.js';
 import TaxPriceNotice from '@/Components/Admin/TaxPriceNotice.vue';
 import SalesCashboxCard from '@/Components/Admin/SalesCashboxCard.vue';
@@ -258,7 +259,7 @@ export default defineComponent({
                 rate:this.currencies[0].rate
             }),
             workingProduct: null,
-            products: [{barcode: '', qty: '', price: '', product_id: '', name: '', image: '', qty_limit: '',size:''}],
+            products: [{barcode: '', qty: '', price: '', product_id: '', model_id: '', name: '', image: '', qty_limit: '',size:''}],
             isDeleting: false
         }
     },
@@ -393,6 +394,9 @@ export default defineComponent({
                 product.qty = product.qty_limit
             }
         },
+        syncModelPrice(changedProduct) {
+            WholesalePrice.synchronize(this.products, changedProduct)
+        },
         controlProduct(event){
             let newBarcode = event.target.value
             let found = this.products.find(x => x.barcode === newBarcode)
@@ -406,7 +410,7 @@ export default defineComponent({
 
                         element.value = ''
                         this.products.pop()
-                        this.products.push({ barcode: null, qty: '', price: '', product_id: '', name: '', image: '', qty_limit: '',size:'' })
+                        this.products.push({ barcode: null, qty: '', price: '', product_id: '', model_id: '', name: '', image: '', qty_limit: '',size:'' })
 
                         element.form.elements.item(
                             currentIndex < element.form.elements.length - 1 ?
@@ -438,7 +442,7 @@ export default defineComponent({
 
                                             element.value = ''
                                             this.products.pop()
-                                            this.products.push({ barcode: null, qty: '', price: '', product_id: '', name: '', image: '', qty_limit: '',size:'' })
+                                            this.products.push({ barcode: null, qty: '', price: '', product_id: '', model_id: '', name: '', image: '', qty_limit: '',size:'' })
 
                                             element.form.elements.item(
                                                 currentIndex < element.form.elements.length - 1 ?
@@ -461,9 +465,10 @@ export default defineComponent({
                                         lastItem.barcode = response.data[i].barcode;
                                         lastItem.qty_limit = response.data[i].stock
                                         lastItem.product_id = response.data[i].id
+                                        lastItem.model_id = response.data[i].product_color.product_id
                                         lastItem.image = response.data[i].product_color.photo_url
-                                        lastItem.name = response.data[i].product_color.product_name+" - "+response.data.size
-                                        this.products.push({ barcode: '', qty: '', price: '', product_id: '', name: '', image: '', qty_limit: '',size:'' });
+                                        lastItem.name = response.data[i].product_color.product_name+" - "+response.data[i].size
+                                        this.products.push({ barcode: '', qty: '', price: '', product_id: '', model_id: '', name: '', image: '', qty_limit: '',size:'' });
                                     }
                                 }
 

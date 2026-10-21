@@ -10,6 +10,8 @@ use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Redirect;
 use Inertia\Inertia;
 use Inertia\Response;
+use App\Services\StorefrontSliderService;
+use App\Support\Country;
 
 class MobileSliderController extends Controller
 {
@@ -48,11 +50,12 @@ class MobileSliderController extends Controller
 
     public function create(): Response
     {
-        return Inertia::render('Admin/MobileSliders/Create');
+        return Inertia::render('Admin/MobileSliders/Create', ['countries' => $this->countryOptions()]);
     }
 
     public function store(Request $request)
     {
+        $request->validate(['country.value' => ['nullable', 'integer', 'in:1,2,4']]);
         $this->mobileSliderRepository->add($request);
         $request->session()->flash('success', 'تم إنشاء سلايدر الموبايل بنجاح');
         return Redirect::route('mobile-sliders.index');
@@ -63,11 +66,13 @@ class MobileSliderController extends Controller
         $slider = transformItemForVue($mobileSlider, MobileSlider::class);
         return Inertia::render('Admin/MobileSliders/Edit', [
             'slider' => $slider,
+            'countries' => $this->countryOptions(),
         ]);
     }
 
     public function update(MobileSlider $mobileSlider, Request $request): RedirectResponse
     {
+        $request->validate(['country.value' => ['nullable', 'integer', 'in:1,2,4']]);
         $this->mobileSliderRepository->update($request, $mobileSlider);
         $request->session()->flash('success', 'تم تعديل سلايدر الموبايل بنجاح');
         return Redirect::route('mobile-sliders.index');
@@ -76,8 +81,17 @@ class MobileSliderController extends Controller
     public function destroy(MobileSlider $mobileSlider, Request $request)
     {
         $mobileSlider->delete();
-        \Illuminate\Support\Facades\Cache::forget('mobile_home_sliders');
+        app(StorefrontSliderService::class)->clear();
         $request->session()->flash('success', 'تم حذف سلايدر الموبايل بنجاح');
         return Redirect::route('mobile-sliders.index');
+    }
+
+    private function countryOptions(): array
+    {
+        $options = [['name' => 'All Countries', 'value' => '']];
+        foreach (Country::storefront() as $country) {
+            $options[] = ['name' => $country['name'], 'value' => (string) $country['id']];
+        }
+        return $options;
     }
 }

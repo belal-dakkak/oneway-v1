@@ -9,7 +9,8 @@
         "prod": "npm run production",
         "production": "mix --production",
         "test:currency": "node --test tests/Frontend/CurrencyFormattingTest.mjs",
-        "test:receipt": "node --test tests/Frontend/ReceiptPayloadTest.mjs"
+        "test:receipt": "node --test tests/Frontend/ReceiptPayloadTest.mjs",
+        "test:wholesale-price": "node --test tests/Frontend/WholesalePriceTest.mjs"
     },
     "devDependencies": {
         "@inertiajs/inertia": "^0.11.0",

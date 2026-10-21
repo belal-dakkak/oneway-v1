@@ -89,6 +89,10 @@
                                :name="'image'"
                                v-model="product.image"
                            />
+                           <label class="mt-3 flex items-center gap-2 font-semibold text-primary cursor-pointer">
+                               <input type="radio" name="cover-color" :checked="product.is_cover" @change="selectCover(index)">
+                               <span>تحديد صورة هذا اللون كغلاف</span>
+                           </label>
                        </div>
                    </div>
                    <div class="bg-gray-100" v-for="size in product.sizes">
@@ -208,7 +212,7 @@
                 all_categories: false,
                 all_nationalities: false,
                 all_types: false,
-                products: [{ image: '', stock: '', color: '' ,sizes:[{size: '',stock: '0'}]}]
+                products: [{ image: '', stock: '', color: '', is_cover: true, sizes:[{size: '',stock: '0'}]}]
             }
         },
 
@@ -218,7 +222,12 @@
                 this.form[field] = Currency.normalizeInput(this.form[field], this.priceCurrencyCode)
             },
             AddField: function () {
-                this.products.push({ image: '', stock: '', color: '' ,sizes:[{size: '',stock: '0'}]});
+                this.products.push({ image: '', stock: '', color: '', is_cover: false, sizes:[{size: '',stock: '0'}]});
+            },
+            selectCover(index) {
+                this.products.forEach((product, productIndex) => {
+                    product.is_cover = productIndex === index
+                })
             },
             AddSize: function (size) {
                 this.products[size].sizes.push({size: '',stock: '0'});

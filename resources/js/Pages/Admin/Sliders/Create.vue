@@ -8,7 +8,7 @@
 
         <div>
             <div class="max-w-full mx-auto py-10 sm:px-6 lg:px-8">
-                <create-slider-information-form/>
+                <create-slider-information-form :countries="countries" />
 
                 <jet-section-border />
             </div>
@@ -33,6 +33,9 @@ export default defineComponent({
         TwoFactorAuthenticationForm,
         UpdatePasswordForm,
         CreateSliderInformationForm
+    },
+    props: {
+        countries: { type: Array, default: () => [] },
     },
 })
 </script>

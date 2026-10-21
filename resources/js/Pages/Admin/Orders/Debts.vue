@@ -285,7 +285,20 @@ export default {
 
                         if (response.data.success){
                             this.showSuccessMessage('تم إضافة قيمة الدفعة')
-                            this.$inertia.get(this.route('orders.debts'))
+                            const paidInFull = response.data.order?.is_paid === true
+                            const currentPage = Number(this.debtOrders.current_page || 1)
+                            const remainingRows = this.debtOrders.data.filter(order => order.id !== id).length
+                            const targetPage = paidInFull && remainingRows === 0 && currentPage > 1
+                                ? currentPage - 1
+                                : currentPage
+
+                            this.$inertia.get(this.route('orders.debts'), {
+                                ...this.params,
+                                page: targetPage,
+                            }, {
+                                replace: true,
+                                preserveScroll: true,
+                            })
                         } else
                             this.showErrorMessage(response.data.error)
                     })

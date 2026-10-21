@@ -34,7 +34,7 @@
                 <span class="text-2xl">🚚</span>
               </div>
               <h3 class="font-semibold mb-2">{{ store.t('freeShipping') }}</h3>
-              <p class="text-sm text-muted-foreground">{{ store.t('freeShippingDesc') || 'On orders over $100' }}</p>
+              <p class="text-sm text-muted-foreground">{{ freeShippingDescription }}</p>
             </div>
             <div class="text-center">
               <div class="w-16 h-16 bg-accent rounded-full flex items-center justify-center mx-auto mb-4">
@@ -68,6 +68,7 @@
 
     <!-- Footer -->
     <Footer />
+    <FloatingButtons :whatsapp-number="whatsapp" :is-r-t-l="store.isRTL" />
   </div>
 </template>
 
@@ -79,6 +80,7 @@ import CategoriesSlider from '../Components/Website/CategoriesSlider.vue'
 import FeaturedProducts from '../Components/Website/FeaturedProducts.vue'
 import Sitemap from '../Components/Website/Sitemap.vue'
 import Footer from '../Components/Website/Footer.vue'
+import FloatingButtons from '../Components/Website/FloatingButtons.vue'
 import { useStore } from '@/stores/store'
 
 export default {
@@ -88,7 +90,8 @@ export default {
     CategoriesSlider,
     FeaturedProducts,
     Sitemap,
-    Footer
+    Footer,
+    FloatingButtons
   },
   props: {
     products: {
@@ -160,6 +163,11 @@ export default {
     return { store, isMobile }
   },
   computed: {
+    freeShippingDescription() {
+      return this.store.country === 'SY'
+        ? 'شحن مجاني لكافة الأراضي السورية'
+        : (this.store.t('freeShippingDesc') || 'On orders over $100')
+    },
     heroSlides() {
       const activeSliders = (this.isMobile && this.mobileSliders.length > 0) 
         ? this.mobileSliders 
