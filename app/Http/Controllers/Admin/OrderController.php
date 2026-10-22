@@ -609,7 +609,7 @@ class OrderController extends Controller
                     $query->where('country_id', auth()->user()->country_id);
                 })
                 ->findOrFail($request->get('order'));
-            $this->clientAccounts->payOrder($order, (float) $request->get('amount'));
+            $result = $this->clientAccounts->payOrder($order, (float) $request->get('amount'));
             $order->refresh();
         }catch (Exception $exception){
             return response()->json([
@@ -625,6 +625,15 @@ class OrderController extends Controller
                 'remain_price' => (float) $order->remain_price,
                 'is_paid' => (float) $order->remain_price <= 0,
             ],
+            'account' => [
+                'id' => $result['account_id'],
+                'balance' => $result['account_balance'],
+                'currency_code' => $result['currency_code'],
+                'is_closed' => $result['account_closed'],
+            ],
+            'settled_order_ids' => $result['settled_order_ids'],
+            'settled_orders_count' => $result['settled_orders_count'],
+            'reconciliation_total' => $result['reconciliation_total'],
         ]);
     }
 
@@ -934,7 +943,7 @@ class OrderController extends Controller
             'orders' => $orders['orders'],
             'total' => $orders['total'],
             'shops' => $shops,
-            'filters' => $request->all(['search', 'buyerName', 'field', 'direction'])
+            'filters' => $request->all(['search', 'buyerName', 'shop', 'field', 'direction'])
         ]);
     }
 

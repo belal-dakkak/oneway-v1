@@ -238,7 +238,7 @@ export default {
                 searchPhone: this.filters.searchPhone,
                 field: this.filters.field,
                 shop: this.filters.shop,
-                direction: this.direction
+                direction: this.filters.direction
             },
             debitClients: this.clients,
             isLoading: false,
@@ -346,7 +346,7 @@ export default {
                 }).then((result) => {
                     if (result.data.success){
                         this.showSuccessMessage(result.data.msg)
-                        this.$inertia.get(route('clientDebit.clients'));
+                        this.reloadClients();
                     }else{
                         this.showErrorMessage(result.data.error)
                     }
@@ -414,8 +414,11 @@ export default {
                         amount: result.value
                     }).then((response) => {
                         if (response.data.success){
-                            this.showSuccessMessage('تم إضافة قيمة الدفعة')
-                            this.$inertia.get(this.route('clientDebit.clients'))
+                            const settled = Number(response.data.settled_orders_count || 0)
+                            this.showSuccessMessage(settled > 0
+                                ? `تم تسجيل الدفعة وإغلاق ${settled} طلب غير مسدد`
+                                : 'تم تسجيل الدفعة بنجاح')
+                            this.reloadClients()
                         } else
                             this.showErrorMessage(response.data.error)
                     }).catch((error) => {
@@ -455,7 +458,7 @@ export default {
                     }).then((response) => {
                         if (response.data.success){
                             this.showSuccessMessage('تم إضافة قيمة الدفعة')
-                            this.$inertia.get(this.route('clientDebit.clients'))
+                            this.reloadClients()
                         } else
                             this.showErrorMessage(response.data.error)
                     }).catch((error) => {
@@ -483,13 +486,22 @@ export default {
                     }).then((response) => {
                         if (response.data.success){
                             this.showSuccessMessage('تم تسكير حساب الزبون')
-                            this.$inertia.get(this.route('clientDebit.clients'))
+                            this.reloadClients()
                         } else
                             this.showErrorMessage(response.data.error)
                     }).catch((error) => {
                         this.showErrorMessage(error)
                     })
                 }
+            })
+        },
+        reloadClients() {
+            this.$inertia.get(this.route('clientDebit.clients'), {
+                ...this.params,
+                page: Number(this.debitClients.current_page || 1),
+            }, {
+                replace: true,
+                preserveScroll: true,
             })
         },
         showSuccessMessage(msg){

@@ -387,6 +387,7 @@ class MerchantRefundController extends Controller
                 $clientId = (int) $request->get('client_id');
                 $sellerId = null;
                 $currencyCode = null;
+                $account = null;
 
                 foreach ($products as $product) {
                     $qty = (int) $product['qty'];
@@ -487,6 +488,13 @@ class MerchantRefundController extends Controller
                     ]);
 
                     $userProduct->increment('stock', $qty);
+                }
+
+                if ($account) {
+                    $this->clientAccounts->reconcileSettledAccount(
+                        $account,
+                        'account_settled_after_customer_refund'
+                    );
                 }
             }, 3);
         } catch (\Throwable $exception) {

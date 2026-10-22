@@ -14,11 +14,16 @@ class ClientAccountService
 {
     private $currencies;
     private $cashboxes;
+    private $reconciliations;
 
-    public function __construct(CurrencyService $currencies, CashboxService $cashboxes)
-    {
+    public function __construct(
+        CurrencyService $currencies,
+        CashboxService $cashboxes,
+        ClientDebtOrderReconciliationService $reconciliations
+    ) {
         $this->currencies = $currencies;
         $this->cashboxes = $cashboxes;
+        $this->reconciliations = $reconciliations;
     }
 
     public function syncOrderDebt(
@@ -37,7 +42,6 @@ class ClientAccountService
             $this->adjustOrderDebt($order, $newBuyerId, $newCurrency, $newRemain - $oldRemain);
             return;
         }
-
         if ($oldBuyerId && $oldRemain > 0) {
             $this->adjustOrderDebt($order, $oldBuyerId, $oldCurrency, -$oldRemain);
         }
@@ -46,12 +50,24 @@ class ClientAccountService
         }
     }
 
-    public function payOrder(Order $order, float $amount): void
+    public function payOrder(Order $order, float $amount): array
     {
-        DB::transaction(function () use ($order, $amount) {
+        return DB::transaction(function () use ($order, $amount) {
+            $expectedSellerId = (int) $order->seller_id;
+            $expectedBuyerId = $order->buyer_id ? (int) $order->buyer_id : null;
+            $expectedCurrency = strtoupper((string) ($order->curr_type ?: 'USD'));
+            $account = $expectedBuyerId
+                ? $this->findAccount($expectedSellerId, $expectedBuyerId, $expectedCurrency)
+                : null;
+
             $order = Order::query()->lockForUpdate()->findOrFail($order->id);
-            $amount = $this->validatePayment($amount, (float) $order->remain_price);
             $currency = strtoupper((string) ($order->curr_type ?: 'USD'));
+            if ((int) $order->seller_id !== $expectedSellerId
+                || ($order->buyer_id ? (int) $order->buyer_id : null) !== $expectedBuyerId
+                || $currency !== $expectedCurrency) {
+                throw new InvalidArgumentException('Order account identity changed while the payment was being processed. Please retry.');
+            }
+            $amount = $this->validatePayment($amount, (float) $order->remain_price, $currency);
             $this->requireAccountCurrency((int) $order->seller_id, $currency);
             $rate = $this->paymentRate($currency);
 
@@ -60,17 +76,26 @@ class ClientAccountService
                 'exchange_rate' => $rate,
                 'base_amount' => $this->toBase($amount, $rate),
             ]);
+            $newRemain = $this->money((float) $order->remain_price - $amount, $currency);
             $order->update([
-                'paid_price' => (float) $order->paid_price + $amount,
-                'remain_price' => (float) $order->remain_price - $amount,
+                'paid_price' => $newRemain <= 0
+                    ? $this->money($order->total_price, $currency)
+                    : $this->money((float) $order->paid_price + $amount, $currency),
+                'remain_price' => max(0, $newRemain),
             ]);
 
-            if ($order->buyer_id) {
-                $account = $this->findAccount((int) $order->seller_id, (int) $order->buyer_id, $currency);
-                if ($account) {
-                    $account->decrement('amount', $amount);
-                    $this->paymentLog($account, $amount, $rate, "دفعة للفاتورة #{$order->barcode}");
-                }
+            $reconciliation = $this->emptyReconciliationResult($currency);
+            if ($account) {
+                $balanceBefore = $this->money($account->amount, $currency);
+                $account->update(['amount' => $this->money($balanceBefore - $amount, $currency)]);
+                $this->paymentLog($account, $amount, $rate, "Payment for invoice #{$order->barcode}");
+                $account->refresh();
+                $reconciliation = $this->reconciliations->settleLockedAccount(
+                    $account,
+                    'account_settled_after_order_payment',
+                    $this->actorId(),
+                    $balanceBefore
+                );
             }
 
             $this->cashboxes->credit(
@@ -80,15 +105,27 @@ class ClientAccountService
                 "order-payment:{$payment->id}",
                 $this->cashboxContext($currency, $rate, OrderPayment::class, $payment->id, "Payment for order #{$order->barcode}")
             );
+
+            $order->refresh();
+            return array_merge($reconciliation, [
+                'payment_amount' => $amount,
+                'order' => [
+                    'id' => (int) $order->id,
+                    'paid_price' => (float) $order->paid_price,
+                    'remain_price' => (float) $order->remain_price,
+                    'is_paid' => $this->money($order->remain_price, $currency) <= 0,
+                ],
+            ]);
         });
     }
 
-    public function payAccount(ClientDebit $account, float $amount): void
+    public function payAccount(ClientDebit $account, float $amount): array
     {
-        DB::transaction(function () use ($account, $amount) {
+        return DB::transaction(function () use ($account, $amount) {
             $account = ClientDebit::query()->lockForUpdate()->findOrFail($account->id);
-            $amount = $this->validatePayment($amount, max(0, (float) $account->amount));
             $currency = strtoupper((string) ($account->currency_code ?: 'USD'));
+            $balanceBefore = $this->money($account->amount, $currency);
+            $amount = $this->validatePayment($amount, max(0, $balanceBefore), $currency);
             $this->requireAccountCurrency((int) $account->creditor_id, $currency);
             $rate = $this->paymentRate($currency);
             $remaining = $amount;
@@ -104,28 +141,38 @@ class ClientAccountService
                 ->get();
 
             foreach ($orders as $order) {
-                if ($remaining <= 0) {
+                if ($this->money($remaining, $currency) <= 0) {
                     break;
                 }
-                $allocated = min($remaining, (float) $order->remain_price);
+                $orderRemain = $this->money($order->remain_price, $currency);
+                $allocated = $this->money(min($remaining, $orderRemain), $currency);
+                if ($allocated <= 0) {
+                    continue;
+                }
                 $order->payments()->create([
                     'pay_amount' => $allocated,
                     'exchange_rate' => $rate,
                     'base_amount' => $this->toBase($allocated, $rate),
                 ]);
+                $newRemain = $this->money($orderRemain - $allocated, $currency);
                 $order->update([
-                    'paid_price' => (float) $order->paid_price + $allocated,
-                    'remain_price' => (float) $order->remain_price - $allocated,
+                    'paid_price' => $newRemain <= 0
+                        ? $this->money($order->total_price, $currency)
+                        : $this->money((float) $order->paid_price + $allocated, $currency),
+                    'remain_price' => max(0, $newRemain),
                 ]);
-                $remaining -= $allocated;
+                $remaining = $this->money($remaining - $allocated, $currency);
             }
 
-            $account->decrement('amount', $amount);
-            $this->paymentLog($account, $amount, $rate, 'تسديد على حساب الزبون');
-            $payment = ClientDebitPayment::query()
-                ->where('client_debit_id', $account->id)
-                ->latest('id')
-                ->firstOrFail();
+            $account->update(['amount' => $this->money($balanceBefore - $amount, $currency)]);
+            $payment = $this->paymentLog($account, $amount, $rate, 'Customer account payment');
+            $account->refresh();
+            $reconciliation = $this->reconciliations->settleLockedAccount(
+                $account,
+                'account_settled_after_account_payment',
+                $this->actorId(),
+                $balanceBefore
+            );
             $this->cashboxes->credit(
                 (int) $account->creditor_id,
                 $amount,
@@ -133,6 +180,11 @@ class ClientAccountService
                 "client-account-payment:{$payment->id}",
                 $this->cashboxContext($currency, $rate, ClientDebitPayment::class, $payment->id, 'Customer account payment')
             );
+
+            return array_merge($reconciliation, [
+                'payment_amount' => $amount,
+                'unallocated_payment_amount' => max(0, $remaining),
+            ]);
         });
     }
 
@@ -145,7 +197,7 @@ class ClientAccountService
         $currency = strtoupper((string) ($order->curr_type ?: 'USD'));
         $rate = (float) ($order->curr_rate ?: 1);
         $account = $this->account((int) $order->seller_id, (int) $order->buyer_id, $currency);
-        $account->decrement('amount', $amount);
+        $account->update(['amount' => $this->money((float) $account->amount - $amount, $currency)]);
 
         ClientDebitLog::query()->create([
             'client_debit_id' => $account->id,
@@ -154,13 +206,23 @@ class ClientAccountService
             'currency_code' => $currency,
             'exchange_rate' => $rate,
             'base_amount' => -$this->toBase($amount, $rate),
-            'note' => "مرتجع من الفاتورة #{$order->barcode}",
+            'note' => "Refund from invoice #{$order->barcode}",
         ]);
 
-        // Customer-debt refunds are non-cash account adjustments. Cash sale
-        // refunds are posted to the cashbox separately by RefundRepository.
-
         return $account;
+    }
+
+    public function reconcileSettledAccount(ClientDebit $account, string $reason = 'account_already_settled'): array
+    {
+        return DB::transaction(function () use ($account, $reason) {
+            $account = ClientDebit::query()->lockForUpdate()->findOrFail($account->id);
+            return $this->reconciliations->settleLockedAccount(
+                $account,
+                $reason,
+                $this->actorId(),
+                (float) $account->amount
+            );
+        });
     }
 
     public function withdrawCredit(ClientDebit $account, float $amount): void
@@ -168,18 +230,18 @@ class ClientAccountService
         DB::transaction(function () use ($account, $amount) {
             $account = ClientDebit::query()->lockForUpdate()->findOrFail($account->id);
             $available = max(0, -(float) $account->amount);
-            $amount = $this->validatePayment($amount, $available);
             $currency = strtoupper((string) ($account->currency_code ?: 'USD'));
+            $amount = $this->validatePayment($amount, $available, $currency);
             $this->requireAccountCurrency((int) $account->creditor_id, $currency);
             $rate = $this->paymentRate($currency);
-            $account->increment('amount', $amount);
+            $account->update(['amount' => $this->money((float) $account->amount + $amount, $currency)]);
             $log = ClientDebitLog::query()->create([
                 'client_debit_id' => $account->id,
                 'amount' => $amount,
                 'currency_code' => $currency,
                 'exchange_rate' => $rate,
                 'base_amount' => $this->toBase($amount, $rate),
-                'note' => 'سحب من رصيد الزبون',
+                'note' => 'Customer credit withdrawal',
             ]);
             $this->cashboxes->debit(
                 (int) $account->creditor_id,
@@ -221,7 +283,7 @@ class ClientAccountService
             return;
         }
 
-        $account->increment('amount', $delta);
+        $account->update(['amount' => $this->money((float) $account->amount + $delta, $currency)]);
         $rate = (float) ($order->curr_rate ?: 1);
         ClientDebitLog::query()->create([
             'client_debit_id' => $account->id,
@@ -230,7 +292,7 @@ class ClientAccountService
             'currency_code' => strtoupper($currency),
             'exchange_rate' => $rate,
             'base_amount' => $this->toBase($delta, $rate),
-            'note' => "فاتورة #{$order->barcode}: تغير الرصيد بمقدار {$delta} {$currency}",
+            'note' => "Invoice #{$order->barcode}: account changed by {$delta} {$currency}",
         ]);
     }
 
@@ -245,7 +307,7 @@ class ClientAccountService
             ->first();
     }
 
-    private function paymentLog(ClientDebit $account, float $amount, float $rate, string $note): void
+    private function paymentLog(ClientDebit $account, float $amount, float $rate, string $note): ClientDebitPayment
     {
         $payment = ClientDebitPayment::query()->create([
             'client_debit_id' => $account->id,
@@ -262,6 +324,8 @@ class ClientAccountService
             'base_amount' => -$this->toBase($amount, $rate),
             'note' => $note,
         ]);
+
+        return $payment;
     }
 
     private function cashboxContext(string $currency, float $rate, string $sourceType, ?int $sourceId, string $note): array
@@ -287,15 +351,41 @@ class ClientAccountService
         }
     }
 
-    private function validatePayment(float $amount, float $available): float
+    private function validatePayment(float $amount, float $available, string $currency): float
     {
+        $amount = $this->money($amount, $currency);
+        $available = $this->money($available, $currency);
         if ($amount <= 0) {
-            throw new InvalidArgumentException('يجب أن يكون المبلغ أكبر من صفر.');
+            throw new InvalidArgumentException('Payment amount must be greater than zero.');
         }
-        if ($amount > $available + 0.0001) {
-            throw new InvalidArgumentException('المبلغ أكبر من القيمة المستحقة.');
+        if ($amount > $available) {
+            throw new InvalidArgumentException('Payment amount exceeds the outstanding balance.');
         }
         return min($amount, $available);
+    }
+
+    private function money($amount, string $currency): float
+    {
+        return $this->currencies->round((float) $amount, $currency);
+    }
+
+    private function actorId(): ?int
+    {
+        $id = auth()->id();
+        return $id ? (int) $id : null;
+    }
+
+    private function emptyReconciliationResult(string $currency): array
+    {
+        return [
+            'account_id' => null,
+            'account_balance' => null,
+            'account_closed' => false,
+            'settled_order_ids' => [],
+            'settled_orders_count' => 0,
+            'reconciliation_total' => 0.0,
+            'currency_code' => strtoupper($currency),
+        ];
     }
 
     private function toBase(float $amount, float $rate): float

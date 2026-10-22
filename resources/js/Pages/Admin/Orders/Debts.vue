@@ -208,7 +208,7 @@ export default {
                 buyerName: this.filters.buyerName,
                 field: this.filters.field,
                 shop: this.filters.shop,
-                direction: this.direction
+                direction: this.filters.direction
             },
             showModal: false,
             item: null,
@@ -287,7 +287,10 @@ export default {
                             this.showSuccessMessage('تم إضافة قيمة الدفعة')
                             const paidInFull = response.data.order?.is_paid === true
                             const currentPage = Number(this.debtOrders.current_page || 1)
-                            const remainingRows = this.debtOrders.data.filter(order => order.id !== id).length
+                            const settledIds = new Set((response.data.settled_order_ids || []).map(Number))
+                            const remainingRows = this.debtOrders.data.filter(order =>
+                                order.id !== id && !settledIds.has(Number(order.id))
+                            ).length
                             const targetPage = paidInFull && remainingRows === 0 && currentPage > 1
                                 ? currentPage - 1
                                 : currentPage

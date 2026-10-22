@@ -75,6 +75,39 @@ class ClientDebtRefundCashboxTest extends TestCase
         $this->assertDatabaseCount('wallet_movements', 0);
     }
 
+    public function test_customer_credit_after_refund_closes_other_matching_historical_orders_without_cash(): void
+    {
+        [$seller, $buyer, $stock, $order, $item, $account] = $this->saleFixture(90, 40, 1);
+        $historical = Order::query()->create([
+            'seller_id' => $seller->id,
+            'buyer_id' => $buyer->id,
+            'type' => Order::TYPE_FOR_CLIENT,
+            'barcode' => uniqid('historical-', true),
+            'curr_type' => 'AED',
+            'curr_rate' => 3.675,
+            'total_price' => 25,
+            'paid_price' => 0,
+            'remain_price' => 25,
+        ]);
+
+        $this->actingAs($seller)->postJson(route('merchantRefunds.client'), [
+            'client_id' => $buyer->id,
+            'user_products' => json_encode([['order_item_id' => $item->id, 'qty' => 1]]),
+        ])->assertOk();
+
+        $this->assertEquals(-50, $account->fresh()->amount);
+        $this->assertEquals(0, $order->fresh()->remain_price);
+        $this->assertEquals(0, $historical->fresh()->remain_price);
+        $this->assertEquals(25, $historical->fresh()->paid_price);
+        $this->assertDatabaseHas('client_debt_reconciliations', [
+            'client_debit_id' => $account->id,
+            'order_id' => $historical->id,
+            'reason' => 'account_settled_after_customer_refund',
+        ]);
+        $this->assertDatabaseCount('wallet_movements', 0);
+        $this->assertDatabaseCount('order_payments', 0);
+    }
+
     public function test_multi_item_refund_rolls_back_when_any_quantity_is_invalid(): void
     {
         [$seller, $buyer, $stock, $order, $item, $account] = $this->saleFixture(270, 270, 3);

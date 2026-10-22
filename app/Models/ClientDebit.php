@@ -40,4 +40,9 @@ class ClientDebit extends Model
         return $this->hasMany(ClientRefund::class, 'client_debit_id');
     }
 
+    public function reconciliations(): HasMany
+    {
+        return $this->hasMany(ClientDebtReconciliation::class, 'client_debit_id');
+    }
+
 }

@@ -56,7 +56,7 @@ class ClientDebitController extends Controller
         try {
             $request->validate(['debit' => 'required|integer', 'amount' => 'required|numeric|min:0.0001']);
             $debit = $this->authorizedAccount((int) $request->get('debit'));
-            $this->clientAccounts->payAccount($debit, (float) $request->get('amount'));
+            $result = $this->clientAccounts->payAccount($debit, (float) $request->get('amount'));
         } catch (Exception $exception) {
             return response()->json([
                 'error' => $exception->getMessage()
@@ -64,7 +64,16 @@ class ClientDebitController extends Controller
         }
 
         return response()->json([
-            'success' => true
+            'success' => true,
+            'account' => [
+                'id' => $result['account_id'],
+                'balance' => $result['account_balance'],
+                'currency_code' => $result['currency_code'],
+                'is_closed' => $result['account_closed'],
+            ],
+            'settled_order_ids' => $result['settled_order_ids'],
+            'settled_orders_count' => $result['settled_orders_count'],
+            'reconciliation_total' => $result['reconciliation_total'],
         ]);
     }
 
@@ -72,9 +81,9 @@ class ClientDebitController extends Controller
     {
         try {
             $debit = $this->authorizedAccount((int) $request->get('debit'));
-            if ((float) $debit->amount > 0) {
-                $this->clientAccounts->payAccount($debit, (float) $debit->amount);
-            }
+            $result = (float) $debit->amount > 0
+                ? $this->clientAccounts->payAccount($debit, (float) $debit->amount)
+                : $this->clientAccounts->reconcileSettledAccount($debit);
         }catch (Exception $exception){
             return response()->json([
                 'error' => $exception->getMessage()
@@ -82,7 +91,16 @@ class ClientDebitController extends Controller
         }
 
         return response()->json([
-            'success' => true
+            'success' => true,
+            'account' => [
+                'id' => $result['account_id'],
+                'balance' => $result['account_balance'],
+                'currency_code' => $result['currency_code'],
+                'is_closed' => $result['account_closed'],
+            ],
+            'settled_order_ids' => $result['settled_order_ids'],
+            'settled_orders_count' => $result['settled_orders_count'],
+            'reconciliation_total' => $result['reconciliation_total'],
         ]);
     }
 
@@ -131,7 +149,7 @@ class ClientDebitController extends Controller
             'shops' => $shops,
             'sum' => $sum,
             'rate' => 1,
-            'filters' => $request->all(['search', 'field', 'direction'])
+            'filters' => $request->all(['search', 'searchPhone', 'shop', 'currency_code', 'field', 'direction'])
         ]);
     }
 
