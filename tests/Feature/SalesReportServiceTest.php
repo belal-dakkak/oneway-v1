@@ -129,6 +129,75 @@ class SalesReportServiceTest extends TestCase
         $this->assertSame(110.0, (float) $report['total']);
     }
 
+    public function test_debt_summary_counts_all_filtered_orders_and_keeps_currencies_separate(): void
+    {
+        $admin = User::factory()->create(['role_id' => User::ROLE_ADMIN, 'country_id' => User::COUNTRY_SYRIA]);
+        $shop = User::factory()->create(['role_id' => User::ROLE_SHOP, 'country_id' => User::COUNTRY_SYRIA]);
+        $otherShop = User::factory()->create(['role_id' => User::ROLE_SHOP, 'country_id' => User::COUNTRY_SYRIA]);
+        $buyer = User::factory()->create([
+            'name' => 'Summary Buyer',
+            'role_id' => User::ROLE_CLIENT,
+            'country_id' => User::COUNTRY_SYRIA,
+        ]);
+        $this->actingAs($admin);
+
+        foreach (range(1, 12) as $index) {
+            $order = $this->order($shop, "SUMMARY-USD-{$index}", 'USD', 1, 100, now()->toDateTimeString());
+            $order->update(['buyer_id' => $buyer->id, 'paid_price' => 75, 'remain_price' => 25]);
+        }
+        foreach (range(1, 3) as $index) {
+            $order = $this->order($shop, "SUMMARY-SYP-{$index}", 'SYP', 1, 1000, now()->toDateTimeString());
+            $order->update(['buyer_id' => $buyer->id, 'paid_price' => 500, 'remain_price' => 500]);
+        }
+
+        $excluded = $this->order($otherShop, 'SUMMARY-OTHER-SHOP', 'USD', 1, 900, now()->toDateTimeString());
+        $excluded->update(['buyer_id' => $buyer->id, 'paid_price' => 0, 'remain_price' => 900]);
+
+        $report = app(SalesReportService::class)->orders(new Request([
+            'shop' => $shop->id,
+            'buyerName' => 'Summary Buyer',
+        ]), true);
+
+        $this->assertSame(15, $report['orders']->total());
+        $this->assertSame(2, $report['orders']->lastPage());
+        $this->assertCount(10, $report['orders']->items());
+        $this->assertSame(15, $report['debt_summary']['orders_count']);
+        $this->assertSame([
+            'invoice_total' => 3000.0,
+            'remaining_total' => 1500.0,
+            'orders_count' => 3,
+        ], $report['debt_summary']['totals_by_currency']['SYP']);
+        $this->assertSame([
+            'invoice_total' => 1200.0,
+            'remaining_total' => 300.0,
+            'orders_count' => 12,
+        ], $report['debt_summary']['totals_by_currency']['USD']);
+    }
+
+    public function test_debt_summary_groups_legacy_uae_usd_orders_as_aed(): void
+    {
+        $admin = User::factory()->create(['role_id' => User::ROLE_ADMIN, 'country_id' => User::COUNTRY_UAE]);
+        $shop = User::factory()->create(['role_id' => User::ROLE_SHOP, 'country_id' => User::COUNTRY_UAE]);
+        $buyer = User::factory()->create(['role_id' => User::ROLE_CLIENT, 'country_id' => User::COUNTRY_UAE]);
+        $this->actingAs($admin);
+
+        foreach ([['AED', 100, 40], ['USD', 200, 60]] as [$currency, $total, $remaining]) {
+            $order = $this->order($shop, "SUMMARY-{$currency}", $currency, 3.675, $total, now()->toDateTimeString());
+            $order->update([
+                'buyer_id' => $buyer->id,
+                'paid_price' => $total - $remaining,
+                'remain_price' => $remaining,
+            ]);
+        }
+
+        $summary = app(SalesReportService::class)->debtSummary(new Request());
+
+        $this->assertSame(2, $summary['orders_count']);
+        $this->assertSame(['AED'], array_keys($summary['totals_by_currency']));
+        $this->assertSame(300.0, $summary['totals_by_currency']['AED']['invoice_total']);
+        $this->assertSame(100.0, $summary['totals_by_currency']['AED']['remaining_total']);
+    }
+
     public function test_refunds_are_counted_on_refund_day_and_currencies_are_never_merged(): void
     {
         $admin = User::query()->create([

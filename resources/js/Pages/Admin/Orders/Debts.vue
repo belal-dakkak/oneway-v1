@@ -1,7 +1,31 @@
 <template>
   <app-layout title="Products Management">
-      <div class="mt-8 flex justify-around space-x-4">
-          <h3 class="text-2xl font-bold capitalize text-primary">{{ __('Unpaid Orders')}}</h3>
+      <div class="mt-8">
+        <div class="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-around lg:space-x-4">
+          <div class="space-y-3" dir="rtl">
+              <h3 class="text-2xl font-bold capitalize text-primary">{{ __('Unpaid Orders')}}</h3>
+              <div class="flex flex-wrap gap-2">
+                  <div class="rounded-lg bg-primary px-4 py-3 text-white shadow-sm">
+                      <div class="text-xs font-semibold">عدد الطلبيات</div>
+                      <div class="text-xl font-bold">{{ currentDebtSummary.orders_count || 0 }}</div>
+                  </div>
+                  <div
+                      v-for="(amounts, currency) in currentDebtSummary.totals_by_currency"
+                      :key="currency"
+                      class="rounded-lg border border-gray-200 bg-white px-4 py-3 shadow-sm"
+                  >
+                      <div class="mb-1 font-bold text-primary">{{ currency }}</div>
+                      <div class="text-sm text-gray-700">
+                          إجمالي الفواتير:
+                          <span class="font-bold">{{ formatMoney(amounts.invoice_total, currency) }}</span>
+                      </div>
+                      <div class="text-sm text-rose-600">
+                          إجمالي المتبقي:
+                          <span class="font-bold">{{ formatMoney(amounts.remaining_total, currency) }}</span>
+                      </div>
+                  </div>
+              </div>
+          </div>
           <div class="max-w-xs text-right">
               <label>باركود</label>
               <input dir="rtl"  type="search" v-model="params.search" placeholder="بحث..." class="block w-full rounded-md border-gray-300 shadow-sm focus:ring-primary-500 focus:border-primary-500 sm:text-sm">
@@ -33,6 +57,7 @@
                   </template>
               </jet-dropdown>
           </div>
+        </div>
       </div>
       <MeeTable :tableTitle="''">
         <div v-if="debtOrders.data.length === 0" class="my-40 flex items-center justify-center text-xl font-bold text-error">
@@ -199,7 +224,8 @@ export default {
         orders: Object,
         filters: Object,
         shops: Array,
-        total: Number
+        total: Number,
+        debt_summary: Object
     },
     data() {
         return {
@@ -215,11 +241,20 @@ export default {
             products: null,
             debtOrders: this.orders,
             totalSales: this.total,
+            currentDebtSummary: this.debt_summary || { orders_count: 0, totals_by_currency: {} },
             page: 2,
 
         }
     },
     methods: {
+        formatMoney(value, currency) {
+            const code = String(currency || 'USD').toUpperCase()
+            const decimals = code === 'SYP' ? 0 : 2
+            return `${Number(value || 0).toLocaleString(undefined, {
+                minimumFractionDigits: decimals,
+                maximumFractionDigits: decimals,
+            })} ${code}`
+        },
         async showProducts(item) {
             this.showModal = true;
             this.item = item;
@@ -415,6 +450,7 @@ export default {
 
             axios.get(this.route('orders.debts', this.params)).then(response => {
                 this.totalSales = response.data.total
+                this.currentDebtSummary = response.data.debt_summary || { orders_count: 0, totals_by_currency: {} }
                 this.debtOrders = {
                     ...response.data.orders,
                     data: [...response.data.orders.data]

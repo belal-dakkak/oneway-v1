@@ -943,6 +943,7 @@ class OrderController extends Controller
         return Inertia::render('Admin/Orders/Debts', [
             'orders' => $orders['orders'],
             'total' => $orders['total'],
+            'debt_summary' => $orders['debt_summary'],
             'shops' => $shops,
             'filters' => $request->all(['search', 'buyerName', 'shop', 'field', 'direction'])
         ]);

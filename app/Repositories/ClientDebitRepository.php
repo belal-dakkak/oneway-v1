@@ -6,6 +6,7 @@ use App\Models\ClientDebitLog;
 use App\Models\ClientDebit;
 use App\Models\User;
 use Carbon\Carbon;
+use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Http\Request;
 
 class ClientDebitRepository
@@ -13,6 +14,7 @@ class ClientDebitRepository
     public function getClients(Request $request, $search = null, $amount = null, $amountOperator = '=', $searchPhone = null)
     {
         $clients = ClientDebit::query()->with(['creditor.wallet', 'debtor.wallet', 'payments']);
+        $this->excludeRoundedZeroBalances($clients);
         $country = auth()->user()->country_id;
         $clients->whereHas('creditor', function ($query) use ($country){
             $query->where('country_id',$country);
@@ -52,6 +54,7 @@ class ClientDebitRepository
     public function getClientsSum(Request $request, $search = null, $amount = null, $amountOperator = '=', $searchPhone = null)
     {
         $clients = ClientDebit::query()->with(['creditor.wallet', 'debtor.wallet', 'payments']);
+        $this->excludeRoundedZeroBalances($clients);
         $country = auth()->user()->country_id;
         $clients->whereHas('creditor', function ($query) use ($country){
             $query->where('country_id',$country);
@@ -93,6 +96,16 @@ class ClientDebitRepository
             ->pluck('total', 'currency_code')
             ->toArray();
 
+    }
+
+    private function excludeRoundedZeroBalances(Builder $query): void
+    {
+        $query->whereRaw(
+            "ROUND(COALESCE(client_debits.amount, 0), CASE
+                WHEN UPPER(COALESCE(client_debits.currency_code, 'USD')) = 'SYP' THEN 0
+                ELSE 2
+            END) <> 0"
+        );
     }
 
     public function getDebitLogs($id, Request $request, $pagination = true)

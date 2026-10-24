@@ -41,10 +41,61 @@ class SalesReportService
         $this->decorateOrders($orders);
 
         $report = $this->summary($request, $debts);
+        if ($debts) {
+            $report['debt_summary'] = $this->debtSummary($request);
+        }
+
         return array_merge($report, [
             'rows' => $result,
             'orders' => $result,
         ]);
+    }
+
+    /**
+     * Summarize every outstanding order matching the active filters. The
+     * calculation intentionally runs before pagination and counts orders, not
+     * product quantities.
+     */
+    public function debtSummary(Request $request): array
+    {
+        $query = $this->baseOrderQuery($request, true)
+            ->join('users as debt_summary_sellers', 'debt_summary_sellers.id', '=', 'orders.seller_id');
+
+        $currencyExpression = "CASE
+            WHEN debt_summary_sellers.country_id = ?
+                AND UPPER(COALESCE(orders.curr_type, 'USD')) IN ('AED', 'USD')
+                THEN 'AED'
+            ELSE UPPER(COALESCE(orders.curr_type, 'USD'))
+        END";
+
+        $rows = $query
+            ->select([])
+            ->selectRaw("{$currencyExpression} as currency_code", [Country::UAE])
+            ->selectRaw('COUNT(orders.id) as orders_count')
+            ->selectRaw('COALESCE(SUM(orders.total_price), 0) as invoice_total')
+            ->selectRaw('COALESCE(SUM(orders.remain_price), 0) as remaining_total')
+            ->groupByRaw($currencyExpression, [Country::UAE])
+            ->orderBy('currency_code')
+            ->get();
+
+        $totals = [];
+        $ordersCount = 0;
+        foreach ($rows as $row) {
+            $currency = strtoupper((string) ($row->currency_code ?: 'USD'));
+            $decimals = $currency === 'SYP' ? 0 : 2;
+            $count = (int) $row->orders_count;
+            $ordersCount += $count;
+            $totals[$currency] = [
+                'invoice_total' => round((float) $row->invoice_total, $decimals),
+                'remaining_total' => round((float) $row->remaining_total, $decimals),
+                'orders_count' => $count,
+            ];
+        }
+
+        return [
+            'orders_count' => $ordersCount,
+            'totals_by_currency' => $totals,
+        ];
     }
 
     public function monthly(Request $request): array
