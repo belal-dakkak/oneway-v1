@@ -42,11 +42,16 @@ class ReconcileSettledClientOrders extends Command
             @chmod($path, 0600);
 
             $this->info("Preview only: {$report['accounts_count']} accounts and {$report['orders_count']} orders require reconciliation.");
+            $this->line("Warnings: {$report['warnings_count']}; conflicts: {$report['conflicts_count']}.");
             $this->line('Report: ' . $path);
             foreach ($report['reconciliation_total_by_currency'] as $currency => $total) {
                 $this->line("{$currency}: {$total}");
             }
             $this->line('Review the report, then apply it with --apply=' . $path);
+            if ($report['conflicts_count'] > 0) {
+                $this->error('Resolve ambiguous customer accounts and generate a new report before applying.');
+                return 1;
+            }
             return 0;
         } catch (\Throwable $exception) {
             $this->error($exception->getMessage());

@@ -13,6 +13,13 @@ use Illuminate\Support\Collection;
 
 class SalesReportService
 {
+    private $clientDebtOrders;
+
+    public function __construct(ClientDebtOrderScope $clientDebtOrders)
+    {
+        $this->clientDebtOrders = $clientDebtOrders;
+    }
+
     public function orders(Request $request, bool $debts = false, ?array $with = null, bool $paginate = true): array
     {
         $with = $with ?: ['buyer', 'productItems', 'seller', 'shipper', 'items.product.productColor', 'items.refunds'];
@@ -76,6 +83,12 @@ class SalesReportService
         $totals = [];
         foreach ($orders as $order) {
             $currency = strtoupper((string) ($order->curr_type ?: 'USD'));
+            if ($debts) {
+                $currency = $this->clientDebtOrders->effectiveOrderCurrency(
+                    (int) optional($order->seller)->country_id,
+                    $currency
+                );
+            }
             $date = $this->localDate($order->created_at, (int) optional($order->seller)->country_id);
             $key = $date . '|' . $order->seller_id . '|' . $currency;
             $row = &$this->row($rows, $key, $date, (int) $order->seller_id, optional($order->seller)->name, $currency);
@@ -92,6 +105,12 @@ class SalesReportService
                 continue;
             }
             $currency = strtoupper((string) ($refund->currency_code ?: $order->curr_type ?: 'USD'));
+            if ($debts) {
+                $currency = $this->clientDebtOrders->effectiveOrderCurrency(
+                    (int) optional($order->seller)->country_id,
+                    $currency
+                );
+            }
             $date = $this->localDate($refund->created_at, (int) optional($order->seller)->country_id);
             $key = $date . '|' . $order->seller_id . '|' . $currency;
             $row = &$this->row($rows, $key, $date, (int) $order->seller_id, optional($order->seller)->name, $currency);
@@ -163,7 +182,7 @@ class SalesReportService
         $query = Order::query()->select('orders.*')
             ->whereHas('seller', fn ($seller) => $seller->where('country_id', $country))
             ->when(auth()->user()->role_id !== User::ROLE_ADMIN, fn ($q) => $q->where('seller_id', auth()->id()))
-            ->when($debts, fn ($q) => $q->where('remain_price', '>', 0))
+            ->when($debts, fn ($q) => $this->clientDebtOrders->applyAuthoritativeOutstanding($q, 'orders'))
             ->when($request->input('type'), fn ($q, $type) => $q->where('type', $type))
             ->when($request->input('order_type'), fn ($q, $type) => $q->where('order_type', $type))
             ->when($request->input('search'), fn ($q, $search) => $q->where('barcode', 'like', "%{$search}%"))
@@ -187,7 +206,7 @@ class SalesReportService
         $query->whereHas('orderItem.order', function ($order) use ($request, $country, $debts) {
             $order->whereHas('seller', fn ($seller) => $seller->where('country_id', $country))
                 ->when(auth()->user()->role_id !== User::ROLE_ADMIN, fn ($q) => $q->where('seller_id', auth()->id()))
-                ->when($debts, fn ($q) => $q->where('remain_price', '>', 0))
+                ->when($debts, fn ($q) => $this->clientDebtOrders->applyAuthoritativeOutstanding($q, 'orders'))
                 ->when($request->input('type'), fn ($q, $type) => $q->where('type', $type))
                 ->when($request->input('order_type'), fn ($q, $type) => $q->where('order_type', $type))
                 ->when($request->input('buyer_id', $request->input('buyer')), fn ($q, $buyer) => $q->where('buyer_id', $buyer))

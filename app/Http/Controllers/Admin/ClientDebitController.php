@@ -74,6 +74,7 @@ class ClientDebitController extends Controller
             'settled_order_ids' => $result['settled_order_ids'],
             'settled_orders_count' => $result['settled_orders_count'],
             'reconciliation_total' => $result['reconciliation_total'],
+            'reconciliation_conflicts' => $result['reconciliation_conflicts'] ?? [],
         ]);
     }
 
@@ -101,6 +102,7 @@ class ClientDebitController extends Controller
             'settled_order_ids' => $result['settled_order_ids'],
             'settled_orders_count' => $result['settled_orders_count'],
             'reconciliation_total' => $result['reconciliation_total'],
+            'reconciliation_conflicts' => $result['reconciliation_conflicts'] ?? [],
         ]);
     }
 

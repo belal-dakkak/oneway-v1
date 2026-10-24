@@ -284,7 +284,12 @@ export default {
                     }).then((response) => {
 
                         if (response.data.success){
-                            this.showSuccessMessage('تم إضافة قيمة الدفعة')
+                            const conflicts = response.data.reconciliation_conflicts || []
+                            if (conflicts.length > 0) {
+                                this.showErrorMessage('تم تسجيل الدفعة، لكن توجد حسابات زبائن متكررة وتحتاج إلى مراجعة قبل إغلاق الطلبات.')
+                            } else {
+                                this.showSuccessMessage('تم إضافة قيمة الدفعة')
+                            }
                             const paidInFull = response.data.order?.is_paid === true
                             const currentPage = Number(this.debtOrders.current_page || 1)
                             const settledIds = new Set((response.data.settled_order_ids || []).map(Number))

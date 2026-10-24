@@ -415,10 +415,15 @@ export default {
                     }).then((response) => {
                         if (response.data.success){
                             const settled = Number(response.data.settled_orders_count || 0)
-                            this.showSuccessMessage(settled > 0
-                                ? `تم تسجيل الدفعة وإغلاق ${settled} طلب غير مسدد`
-                                : 'تم تسجيل الدفعة بنجاح')
-                            this.reloadClients()
+                            const conflicts = response.data.reconciliation_conflicts || []
+                            if (conflicts.length > 0) {
+                                this.showErrorMessage('تم تسجيل الدفعة، لكن توجد حسابات زبائن متكررة وتحتاج إلى مراجعة قبل إغلاق الطلبات.')
+                            } else {
+                                this.showSuccessMessage(settled > 0
+                                    ? `تم تسجيل الدفعة وإغلاق ${settled} طلب غير مسدد`
+                                    : 'تم تسجيل الدفعة بنجاح')
+                            }
+                            this.reloadClients(response.data.account?.is_closed ? id : null)
                         } else
                             this.showErrorMessage(response.data.error)
                     }).catch((error) => {
@@ -485,8 +490,13 @@ export default {
                         debit: id,
                     }).then((response) => {
                         if (response.data.success){
-                            this.showSuccessMessage('تم تسكير حساب الزبون')
-                            this.reloadClients()
+                            const conflicts = response.data.reconciliation_conflicts || []
+                            if (conflicts.length > 0) {
+                                this.showErrorMessage('تم إغلاق الحساب، لكن توجد حسابات زبائن متكررة وتحتاج إلى مراجعة قبل إغلاق الطلبات.')
+                            } else {
+                                this.showSuccessMessage('تم إغلاق حساب الزبون')
+                            }
+                            this.reloadClients(response.data.account?.is_closed ? id : null)
                         } else
                             this.showErrorMessage(response.data.error)
                     }).catch((error) => {
@@ -495,10 +505,17 @@ export default {
                 }
             })
         },
-        reloadClients() {
+        reloadClients(closedId = null) {
+            const currentPage = Number(this.debitClients.current_page || 1)
+            const remainingRows = closedId === null
+                ? this.debitClients.data.length
+                : this.debitClients.data.filter(account => Number(account.id) !== Number(closedId)).length
+            const targetPage = closedId !== null && remainingRows === 0 && currentPage > 1
+                ? currentPage - 1
+                : currentPage
             this.$inertia.get(this.route('clientDebit.clients'), {
                 ...this.params,
-                page: Number(this.debitClients.current_page || 1),
+                page: targetPage,
             }, {
                 replace: true,
                 preserveScroll: true,

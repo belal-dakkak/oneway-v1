@@ -3,6 +3,7 @@
 namespace Tests\Feature;
 
 use App\Models\Order;
+use App\Models\ClientDebit;
 use App\Models\OrderItem;
 use App\Models\Category;
 use App\Models\Color;
@@ -42,6 +43,90 @@ class SalesReportServiceTest extends TestCase
 
         $this->assertContains($unpaid->id, $ids);
         $this->assertNotContains($paid->id, $ids);
+    }
+
+    public function test_unpaid_report_uses_the_unique_customer_account_as_authority(): void
+    {
+        $admin = User::factory()->create([
+            'role_id' => User::ROLE_ADMIN,
+            'country_id' => User::COUNTRY_UAE,
+        ]);
+        $shop = User::factory()->create([
+            'role_id' => User::ROLE_SHOP,
+            'country_id' => User::COUNTRY_UAE,
+        ]);
+        $closedBuyer = User::factory()->create(['role_id' => User::ROLE_CLIENT, 'country_id' => User::COUNTRY_UAE]);
+        $openBuyer = User::factory()->create(['role_id' => User::ROLE_CLIENT, 'country_id' => User::COUNTRY_UAE]);
+        $missingBuyer = User::factory()->create(['role_id' => User::ROLE_CLIENT, 'country_id' => User::COUNTRY_UAE]);
+        $ambiguousBuyer = User::factory()->create(['role_id' => User::ROLE_CLIENT, 'country_id' => User::COUNTRY_UAE]);
+        $this->actingAs($admin);
+
+        ClientDebit::query()->create([
+            'creditor_id' => $shop->id, 'debtor_id' => $closedBuyer->id,
+            'currency_code' => 'AED', 'amount' => 0,
+        ]);
+        ClientDebit::query()->create([
+            'creditor_id' => $shop->id, 'debtor_id' => $openBuyer->id,
+            'currency_code' => 'AED', 'amount' => 70,
+        ]);
+        ClientDebit::query()->create([
+            'creditor_id' => $shop->id, 'debtor_id' => $ambiguousBuyer->id,
+            'currency_code' => 'AED', 'amount' => 0,
+        ]);
+        ClientDebit::query()->create([
+            'creditor_id' => $shop->id, 'debtor_id' => $ambiguousBuyer->id,
+            'currency_code' => 'AED', 'amount' => 0,
+        ]);
+
+        $closed = $this->order($shop, 'CLOSED-LEGACY-USD', 'USD', 3.675, 90, now()->toDateTimeString());
+        $closed->update(['buyer_id' => $closedBuyer->id, 'paid_price' => 0, 'remain_price' => 90]);
+        $open = $this->order($shop, 'OPEN-LEGACY-USD', 'USD', 3.675, 70, now()->toDateTimeString());
+        $open->update(['buyer_id' => $openBuyer->id, 'paid_price' => 0, 'remain_price' => 70]);
+        $missing = $this->order($shop, 'MISSING-ACCOUNT', 'AED', 3.675, 30, now()->toDateTimeString());
+        $missing->update(['buyer_id' => $missingBuyer->id, 'paid_price' => 0, 'remain_price' => 30]);
+        $ambiguous = $this->order($shop, 'AMBIGUOUS-ACCOUNT', 'AED', 3.675, 40, now()->toDateTimeString());
+        $ambiguous->update(['buyer_id' => $ambiguousBuyer->id, 'paid_price' => 0, 'remain_price' => 40]);
+
+        $report = app(SalesReportService::class)->orders(new Request(), true, [], false);
+        $ids = collect($report['orders'])->pluck('id')->all();
+
+        $this->assertNotContains($closed->id, $ids, 'A zero AED account must hide a legacy USD-labelled UAE order.');
+        $this->assertSame(90.0, (float) $closed->fresh()->remain_price, 'Listing must not mutate historical orders.');
+        $this->assertContains($open->id, $ids);
+        $this->assertContains($missing->id, $ids, 'Missing accounts must remain visible for review.');
+        $this->assertContains($ambiguous->id, $ids, 'Ambiguous accounts must remain visible for review.');
+        $this->assertSame(140.0, (float) $report['total']);
+        $this->assertSame(['AED'], array_keys($report['totals_by_currency']));
+    }
+
+    public function test_authoritative_account_filter_is_applied_to_pagination_and_totals(): void
+    {
+        $admin = User::factory()->create(['role_id' => User::ROLE_ADMIN, 'country_id' => User::COUNTRY_UAE]);
+        $shop = User::factory()->create(['role_id' => User::ROLE_SHOP, 'country_id' => User::COUNTRY_UAE]);
+        $visibleBuyer = User::factory()->create(['role_id' => User::ROLE_CLIENT, 'country_id' => User::COUNTRY_UAE]);
+        $closedBuyer = User::factory()->create(['role_id' => User::ROLE_CLIENT, 'country_id' => User::COUNTRY_UAE]);
+        $this->actingAs($admin);
+
+        ClientDebit::query()->create([
+            'creditor_id' => $shop->id, 'debtor_id' => $closedBuyer->id,
+            'currency_code' => 'AED', 'amount' => 0,
+        ]);
+
+        foreach (range(1, 11) as $index) {
+            $order = $this->order($shop, "VISIBLE-{$index}", 'AED', 3.675, 10, now()->toDateTimeString());
+            $order->update(['buyer_id' => $visibleBuyer->id, 'paid_price' => 0, 'remain_price' => 10]);
+        }
+        foreach (range(1, 3) as $index) {
+            $order = $this->order($shop, "HIDDEN-{$index}", 'USD', 3.675, 100, now()->toDateTimeString());
+            $order->update(['buyer_id' => $closedBuyer->id, 'paid_price' => 0, 'remain_price' => 100]);
+        }
+
+        $report = app(SalesReportService::class)->orders(new Request(), true);
+
+        $this->assertSame(11, $report['orders']->total());
+        $this->assertSame(2, $report['orders']->lastPage());
+        $this->assertCount(10, $report['orders']->items());
+        $this->assertSame(110.0, (float) $report['total']);
     }
 
     public function test_refunds_are_counted_on_refund_day_and_currencies_are_never_merged(): void

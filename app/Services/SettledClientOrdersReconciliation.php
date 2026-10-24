@@ -5,42 +5,108 @@ namespace App\Services;
 use App\Models\ClientDebit;
 use App\Models\ClientDebtReconciliation;
 use App\Models\Order;
+use App\Models\User;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Schema;
 use RuntimeException;
 
 class SettledClientOrdersReconciliation
 {
+    private const REPORT_VERSION = 2;
     private const REASON = 'historical_settled_account';
 
     private $reconciliations;
+    private $orderScope;
 
-    public function __construct(ClientDebtOrderReconciliationService $reconciliations)
+    public function __construct(
+        ClientDebtOrderReconciliationService $reconciliations,
+        ClientDebtOrderScope $orderScope
+    )
     {
         $this->reconciliations = $reconciliations;
+        $this->orderScope = $orderScope;
     }
 
     public function report(): array
     {
         $this->requireAuditTable();
         $rows = [];
+        $warnings = [];
+        $conflicts = [];
 
-        ClientDebit::query()->orderBy('id')->chunkById(200, function ($accounts) use (&$rows) {
-            foreach ($accounts as $account) {
-                $row = $this->snapshot($account);
-                if ($row !== null) {
-                    $rows[] = $row;
-                }
+        $accounts = ClientDebit::query()
+            ->with('creditor:id,country_id')
+            ->orderBy('id')
+            ->get();
+        $accountsByIdentity = $accounts->groupBy(fn (ClientDebit $account) => $this->identityKey(
+            (int) $account->creditor_id,
+            (int) $account->debtor_id
+        ));
+
+        foreach ($accounts as $account) {
+            if ($this->orderScope->matchingAccountCount($account) !== 1) {
+                continue;
             }
-        });
+            $row = $this->snapshot($account);
+            if ($row !== null) {
+                $rows[] = $row;
+            }
+        }
+
+        Order::query()
+            ->select(['id', 'barcode', 'seller_id', 'buyer_id', 'curr_type', 'remain_price'])
+            ->where('remain_price', '>', 0)
+            ->orderBy('id')
+            ->chunkById(500, function ($orders) use ($accountsByIdentity, &$warnings, &$conflicts) {
+                $sellerCountries = User::query()
+                    ->whereIn('id', $orders->pluck('seller_id')->filter()->unique()->values())
+                    ->pluck('country_id', 'id');
+
+                foreach ($orders as $order) {
+                    $countryId = (int) ($sellerCountries[$order->seller_id] ?? 0);
+                    $effectiveCurrency = $this->orderScope->effectiveOrderCurrency($countryId, $order->curr_type);
+                    if ($this->reconciliations->money($order->remain_price, $effectiveCurrency) <= 0) {
+                        continue;
+                    }
+
+                    if (!$order->buyer_id) {
+                        $warnings[] = $this->orderDiagnostic($order, $effectiveCurrency, [], 'order_has_no_customer');
+                        continue;
+                    }
+
+                    $candidates = $accountsByIdentity
+                        ->get($this->identityKey((int) $order->seller_id, (int) $order->buyer_id), collect())
+                        ->filter(fn (ClientDebit $account) => $this->orderScope->currencyMatches(
+                            $countryId,
+                            $order->curr_type,
+                            $account->currency_code
+                        ))
+                        ->values();
+
+                    if ($candidates->isEmpty()) {
+                        $warnings[] = $this->orderDiagnostic($order, $effectiveCurrency, [], 'missing_customer_account');
+                    } elseif ($candidates->count() > 1) {
+                        $conflicts[] = $this->orderDiagnostic(
+                            $order,
+                            $effectiveCurrency,
+                            $candidates->pluck('id')->map(fn ($id) => (int) $id)->all(),
+                            'ambiguous_customer_accounts'
+                        );
+                    }
+                }
+            });
 
         $report = [
-            'version' => 1,
+            'version' => self::REPORT_VERSION,
             'generated_at' => now()->toIso8601String(),
             'reason' => self::REASON,
             'accounts_count' => count($rows),
             'orders_count' => array_sum(array_column($rows, 'orders_count')),
             'reconciliation_total_by_currency' => $this->totals($rows),
+            'warnings_count' => count($warnings),
+            'conflicts_count' => count($conflicts),
+            'warnings' => $warnings,
+            'conflicts' => $conflicts,
             'accounts' => $rows,
         ];
         $report['signature'] = $this->sign($report);
@@ -52,6 +118,9 @@ class SettledClientOrdersReconciliation
     {
         $this->requireAuditTable();
         $this->validateReport($report);
+        if (!empty($report['conflicts'])) {
+            throw new RuntimeException('The report contains ambiguous customer accounts. Resolve them and generate a new report before applying.');
+        }
 
         return DB::transaction(function () use ($report, $actorId) {
             $settled = 0;
@@ -185,7 +254,8 @@ class SettledClientOrdersReconciliation
 
     private function validateReport(array $report): void
     {
-        if (($report['version'] ?? null) !== 1 || !isset($report['accounts'], $report['signature'])) {
+        if (($report['version'] ?? null) !== self::REPORT_VERSION
+            || !isset($report['accounts'], $report['warnings'], $report['conflicts'], $report['signature'])) {
             throw new RuntimeException('Invalid or unsupported reconciliation report.');
         }
         $signature = (string) $report['signature'];
@@ -211,5 +281,25 @@ class SettledClientOrdersReconciliation
         if (!Schema::hasTable('client_debt_reconciliations')) {
             throw new RuntimeException('Run migrations before reconciling settled customer orders.');
         }
+    }
+
+    private function identityKey(int $creditorId, int $debtorId): string
+    {
+        return $creditorId . ':' . $debtorId;
+    }
+
+    private function orderDiagnostic(Order $order, string $effectiveCurrency, array $accountIds, string $reason): array
+    {
+        return [
+            'reason' => $reason,
+            'order_id' => (int) $order->id,
+            'barcode' => (string) $order->barcode,
+            'creditor_id' => (int) $order->seller_id,
+            'debtor_id' => $order->buyer_id ? (int) $order->buyer_id : null,
+            'stored_currency' => strtoupper((string) ($order->curr_type ?: 'USD')),
+            'effective_currency' => $effectiveCurrency,
+            'remain_price' => $this->reconciliations->decimal($order->remain_price, $effectiveCurrency),
+            'matching_account_ids' => $accountIds,
+        ];
     }
 }

@@ -15,15 +15,21 @@ class ClientAccountService
     private $currencies;
     private $cashboxes;
     private $reconciliations;
+    private $debtOrderScope;
+    private $operationalCurrencies;
 
     public function __construct(
         CurrencyService $currencies,
         CashboxService $cashboxes,
-        ClientDebtOrderReconciliationService $reconciliations
+        ClientDebtOrderReconciliationService $reconciliations,
+        ClientDebtOrderScope $debtOrderScope,
+        OperationalCurrency $operationalCurrencies
     ) {
         $this->currencies = $currencies;
         $this->cashboxes = $cashboxes;
         $this->reconciliations = $reconciliations;
+        $this->debtOrderScope = $debtOrderScope;
+        $this->operationalCurrencies = $operationalCurrencies;
     }
 
     public function syncOrderDebt(
@@ -34,9 +40,9 @@ class ClientAccountService
     ): void {
         $newRemain = max(0, (float) $order->remain_price);
         $newBuyerId = $order->buyer_id ? (int) $order->buyer_id : null;
-        $newCurrency = strtoupper((string) ($order->curr_type ?: 'USD'));
+        $newCurrency = $this->accountCurrency((int) $order->seller_id, (string) ($order->curr_type ?: 'USD'));
         $oldBuyerId = $oldBuyerId ?: $newBuyerId;
-        $oldCurrency = strtoupper((string) ($oldCurrency ?: $newCurrency));
+        $oldCurrency = $this->accountCurrency((int) $order->seller_id, (string) ($oldCurrency ?: $newCurrency));
 
         if ($oldBuyerId === $newBuyerId && $oldCurrency === $newCurrency) {
             $this->adjustOrderDebt($order, $newBuyerId, $newCurrency, $newRemain - $oldRemain);
@@ -55,16 +61,18 @@ class ClientAccountService
         return DB::transaction(function () use ($order, $amount) {
             $expectedSellerId = (int) $order->seller_id;
             $expectedBuyerId = $order->buyer_id ? (int) $order->buyer_id : null;
-            $expectedCurrency = strtoupper((string) ($order->curr_type ?: 'USD'));
+            $expectedStoredCurrency = strtoupper((string) ($order->curr_type ?: 'USD'));
+            $expectedCurrency = $this->accountCurrency($expectedSellerId, $expectedStoredCurrency);
             $account = $expectedBuyerId
                 ? $this->findAccount($expectedSellerId, $expectedBuyerId, $expectedCurrency)
                 : null;
 
             $order = Order::query()->lockForUpdate()->findOrFail($order->id);
-            $currency = strtoupper((string) ($order->curr_type ?: 'USD'));
+            $storedCurrency = strtoupper((string) ($order->curr_type ?: 'USD'));
+            $currency = $this->accountCurrency((int) $order->seller_id, $storedCurrency);
             if ((int) $order->seller_id !== $expectedSellerId
                 || ($order->buyer_id ? (int) $order->buyer_id : null) !== $expectedBuyerId
-                || $currency !== $expectedCurrency) {
+                || $storedCurrency !== $expectedStoredCurrency) {
                 throw new InvalidArgumentException('Order account identity changed while the payment was being processed. Please retry.');
             }
             $amount = $this->validatePayment($amount, (float) $order->remain_price, $currency);
@@ -130,10 +138,7 @@ class ClientAccountService
             $rate = $this->paymentRate($currency);
             $remaining = $amount;
 
-            $orders = Order::query()
-                ->where('seller_id', $account->creditor_id)
-                ->where('buyer_id', $account->debtor_id)
-                ->whereRaw('UPPER(curr_type) = ?', [$currency])
+            $orders = $this->debtOrderScope->applyAccountIdentity(Order::query(), $account)
                 ->where('remain_price', '>', 0)
                 ->orderBy('created_at')
                 ->orderBy('id')
@@ -194,7 +199,7 @@ class ClientAccountService
             throw new InvalidArgumentException('The refund order must have a customer.');
         }
 
-        $currency = strtoupper((string) ($order->curr_type ?: 'USD'));
+        $currency = $this->accountCurrency((int) $order->seller_id, (string) ($order->curr_type ?: 'USD'));
         $rate = (float) ($order->curr_rate ?: 1);
         $account = $this->account((int) $order->seller_id, (int) $order->buyer_id, $currency);
         $account->update(['amount' => $this->money((float) $account->amount - $amount, $currency)]);
@@ -255,6 +260,7 @@ class ClientAccountService
 
     public function account(int $creditorId, int $debtorId, string $currency): ClientDebit
     {
+        $currency = $this->accountCurrency($creditorId, $currency);
         $this->requireAccountCurrency($creditorId, $currency);
         $attributes = [
             'creditor_id' => $creditorId,
@@ -298,6 +304,7 @@ class ClientAccountService
 
     private function findAccount(int $creditorId, int $debtorId, string $currency): ?ClientDebit
     {
+        $currency = $this->accountCurrency($creditorId, $currency);
         $this->requireAccountCurrency($creditorId, $currency);
         return ClientDebit::query()
             ->where('creditor_id', $creditorId)
@@ -385,7 +392,14 @@ class ClientAccountService
             'settled_orders_count' => 0,
             'reconciliation_total' => 0.0,
             'currency_code' => strtoupper($currency),
+            'reconciliation_conflicts' => [],
         ];
+    }
+
+    private function accountCurrency(int $ownerId, string $currency): string
+    {
+        $operational = strtoupper($this->operationalCurrencies->code($ownerId));
+        return $operational === 'AED' ? 'AED' : strtoupper($currency ?: 'USD');
     }
 
     private function toBase(float $amount, float $rate): float

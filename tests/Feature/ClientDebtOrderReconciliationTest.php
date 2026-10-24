@@ -119,13 +119,15 @@ class ClientDebtOrderReconciliationTest extends TestCase
         $matching = $this->order($seller, $buyer, 30, 'AED', 'ISO-MATCH');
         $differentBuyer = $this->order($seller, $otherBuyer, 30, 'AED', 'ISO-BUYER');
         $differentSeller = $this->order($otherSeller, $buyer, 30, 'AED', 'ISO-SELLER');
-        $differentCurrency = $this->order($seller, $buyer, 30, 'USD', 'ISO-USD');
+        $legacyUaeCurrency = $this->order($seller, $buyer, 30, 'USD', 'ISO-USD');
+        $differentCurrency = $this->order($seller, $buyer, 30, 'SYP', 'ISO-SYP');
 
         app(ClientAccountService::class)->payAccount($account, 20);
 
         $this->assertSame(0.0, (float) $matching->fresh()->remain_price);
         $this->assertSame(30.0, (float) $differentBuyer->fresh()->remain_price);
         $this->assertSame(30.0, (float) $differentSeller->fresh()->remain_price);
+        $this->assertSame(0.0, (float) $legacyUaeCurrency->fresh()->remain_price);
         $this->assertSame(30.0, (float) $differentCurrency->fresh()->remain_price);
     }
 
@@ -138,6 +140,7 @@ class ClientDebtOrderReconciliationTest extends TestCase
 
         $this->artisan('clients:reconcile-settled-orders', ['--output' => $report])->assertExitCode(0);
         $preview = json_decode(file_get_contents($report), true);
+        $this->assertSame(2, $preview['version']);
         $this->assertSame(1, $preview['accounts_count']);
         $this->assertSame(1, $preview['orders_count']);
         $this->assertSame(55.0, (float) $order->fresh()->remain_price);
@@ -152,6 +155,87 @@ class ClientDebtOrderReconciliationTest extends TestCase
         $this->artisan('clients:reconcile-settled-orders', ['--apply' => $report])->assertExitCode(0);
         $this->assertSame(1, ClientDebtReconciliation::query()->count());
         @unlink($report);
+    }
+
+    public function test_uae_legacy_usd_label_is_paid_and_reconciled_through_the_aed_account(): void
+    {
+        [$seller, $buyer, $account] = $this->accountFixture(100);
+        $paid = $this->order($seller, $buyer, 100, 'USD', 'LEGACY-USD-PAID');
+        $historical = $this->order($seller, $buyer, 25, 'USD', 'LEGACY-USD-HISTORY');
+
+        $result = app(ClientAccountService::class)->payAccount($account, 100);
+
+        $this->assertSame(0.0, (float) $account->fresh()->amount);
+        $this->assertSame(0.0, (float) $paid->fresh()->remain_price);
+        $this->assertSame(0.0, (float) $historical->fresh()->remain_price);
+        $this->assertSame([$historical->id], $result['settled_order_ids']);
+        $this->assertDatabaseHas('wallet_movements', [
+            'user_id' => $seller->id,
+            'currency_code' => 'AED',
+            'direction' => 'credit',
+            'amount' => 100,
+        ]);
+    }
+
+    public function test_ambiguous_accounts_are_reported_and_are_never_reconciled_automatically(): void
+    {
+        [$seller, $buyer, $account] = $this->accountFixture(0);
+        ClientDebit::query()->create([
+            'creditor_id' => $seller->id,
+            'debtor_id' => $buyer->id,
+            'amount' => 0,
+            'currency_code' => 'AED',
+        ]);
+        $order = $this->order($seller, $buyer, 40, 'USD', 'AMBIGUOUS');
+        $report = storage_path('app/test-ambiguous-client-order-reconciliation.json');
+        @unlink($report);
+
+        $result = app(ClientAccountService::class)->reconcileSettledAccount($account);
+        $this->assertSame(40.0, (float) $order->fresh()->remain_price);
+        $this->assertSame('ambiguous_customer_accounts', $result['reconciliation_conflicts'][0]['reason']);
+
+        $this->artisan('clients:reconcile-settled-orders', ['--output' => $report])->assertExitCode(1);
+        $preview = json_decode(file_get_contents($report), true);
+        $this->assertSame(1, $preview['conflicts_count']);
+        $this->assertSame([$account->id, $account->id + 1], $preview['conflicts'][0]['matching_account_ids']);
+        $this->artisan('clients:reconcile-settled-orders', ['--apply' => $report])->assertExitCode(1);
+        $this->assertSame(40.0, (float) $order->fresh()->remain_price);
+        $this->assertDatabaseCount('client_debt_reconciliations', 0);
+        @unlink($report);
+    }
+
+    public function test_report_lists_missing_accounts_as_non_destructive_warnings(): void
+    {
+        $seller = User::factory()->create(['role_id' => User::ROLE_SHOP, 'country_id' => User::COUNTRY_UAE]);
+        $buyer = User::factory()->create(['role_id' => User::ROLE_CLIENT, 'country_id' => User::COUNTRY_UAE]);
+        $order = $this->order($seller, $buyer, 20, 'USD', 'MISSING-ACCOUNT');
+        $report = storage_path('app/test-missing-client-account.json');
+        @unlink($report);
+
+        $this->artisan('clients:reconcile-settled-orders', ['--output' => $report])->assertExitCode(0);
+        $preview = json_decode(file_get_contents($report), true);
+        $this->assertSame(1, $preview['warnings_count']);
+        $this->assertSame('missing_customer_account', $preview['warnings'][0]['reason']);
+        $this->assertSame($order->id, $preview['warnings'][0]['order_id']);
+        @unlink($report);
+    }
+
+    public function test_version_one_report_is_rejected_and_must_be_regenerated(): void
+    {
+        [$seller, $buyer] = $this->accountFixture(0);
+        $this->order($seller, $buyer, 10, 'AED', 'OLD-REPORT');
+        $path = storage_path('app/test-old-client-order-reconciliation.json');
+        @unlink($path);
+
+        $this->artisan('clients:reconcile-settled-orders', ['--output' => $path])->assertExitCode(0);
+        $report = json_decode(file_get_contents($path), true);
+        $report['version'] = 1;
+        file_put_contents($path, json_encode($report));
+
+        $this->artisan('clients:reconcile-settled-orders', ['--apply' => $path])
+            ->expectsOutput('Invalid or unsupported reconciliation report.')
+            ->assertExitCode(1);
+        @unlink($path);
     }
 
     public function test_apply_rejects_a_stale_report_without_partial_changes(): void

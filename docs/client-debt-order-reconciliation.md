@@ -16,16 +16,18 @@
 أنشئ تقرير معاينة خاصًا خارج المجلد العام:
 
 ```text
-clients:reconcile-settled-orders --output=storage/app/client-debt-reconciliation.json
+clients:reconcile-settled-orders --output=storage/app/client-debt-reconciliation-v2.json
 ```
 
 راجع التقرير، ثم طبّقه كما هو:
 
 ```text
-clients:reconcile-settled-orders --apply=storage/app/client-debt-reconciliation.json
+clients:reconcile-settled-orders --apply=storage/app/client-debt-reconciliation-v2.json
 ```
 
 يعيد الأمر فحص الحسابات والطلبات قبل التطبيق. إذا تغير أي سجل بعد إنشاء التقرير، تتراجع المعاملة كاملة ولا يُطبّق جزء منها. ويمكن إعادة تطبيق التقرير المنجز بأمان دون تكرار سجلات التسوية.
+
+التقرير الحالي إصداره `2`، ويطابق طلبات الإمارات القديمة الموسومة `USD` مع حساب الزبون التشغيلي `AED`. التقارير الأقدم مرفوضة ويجب توليد تقرير جديد. الطلب بلا حساب يبقى ظاهرًا ويُسجل كتحذير، أما تكرار الحساب المطابق فيُسجل كتعارض يمنع التطبيق حتى تتم مراجعته.
 
 ## أثر التسوية
 

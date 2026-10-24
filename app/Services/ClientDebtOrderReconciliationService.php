@@ -10,10 +10,12 @@ use App\Models\Order;
 class ClientDebtOrderReconciliationService
 {
     private $currencies;
+    private $orderScope;
 
-    public function __construct(CurrencyService $currencies)
+    public function __construct(CurrencyService $currencies, ClientDebtOrderScope $orderScope)
     {
         $this->currencies = $currencies;
+        $this->orderScope = $orderScope;
     }
 
     /**
@@ -30,6 +32,20 @@ class ClientDebtOrderReconciliationService
         $balanceAfter = $this->money($account->amount, $currency);
         if ($balanceAfter > 0) {
             return $this->emptyResult($account, $balanceAfter);
+        }
+
+        $matchingAccounts = $this->orderScope->matchingAccountCount($account, true);
+        if ($matchingAccounts !== 1) {
+            $result = $this->emptyResult($account, $balanceAfter);
+            $result['account_closed'] = true;
+            $result['reconciliation_conflicts'] = [[
+                'reason' => 'ambiguous_customer_accounts',
+                'matching_accounts_count' => $matchingAccounts,
+                'creditor_id' => (int) $account->creditor_id,
+                'debtor_id' => (int) $account->debtor_id,
+                'currency_code' => $currency,
+            ]];
+            return $result;
         }
 
         $orders = $this->outstandingOrdersQuery($account, $currency)
@@ -88,6 +104,7 @@ class ClientDebtOrderReconciliationService
             'settled_orders_count' => count($settledIds),
             'reconciliation_total' => $total,
             'currency_code' => $currency,
+            'reconciliation_conflicts' => [],
         ];
     }
 
@@ -95,10 +112,7 @@ class ClientDebtOrderReconciliationService
     {
         $currency = strtoupper((string) ($currency ?: $account->currency_code ?: 'USD'));
 
-        return Order::query()
-            ->where('seller_id', $account->creditor_id)
-            ->where('buyer_id', $account->debtor_id)
-            ->whereRaw('UPPER(curr_type) = ?', [$currency])
+        return $this->orderScope->applyAccountIdentity(Order::query(), $account)
             ->where('remain_price', '>', 0)
             ->orderBy('created_at')
             ->orderBy('id');
@@ -144,6 +158,7 @@ class ClientDebtOrderReconciliationService
             'settled_orders_count' => 0,
             'reconciliation_total' => 0.0,
             'currency_code' => strtoupper((string) ($account->currency_code ?: 'USD')),
+            'reconciliation_conflicts' => [],
         ];
     }
 }
