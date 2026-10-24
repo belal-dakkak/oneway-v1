@@ -56,6 +56,7 @@ class WebsiteOrderListSummaryTest extends TestCase
         $this->assertSame('Bayan', $row['first_name']);
         $this->assertSame('+971500000000', $row['phone']);
         $this->assertSame('طقم', $row['product_summary'][0]['name']);
+        $this->assertSame('MODEL-SUMMARY-B', $row['product_summary'][0]['barcode']);
         $this->assertSame('M', $row['product_summary'][0]['size']);
         $this->assertSame(2, $row['product_summary'][0]['qty']);
         $this->assertArrayNotHasKey('items', $row);

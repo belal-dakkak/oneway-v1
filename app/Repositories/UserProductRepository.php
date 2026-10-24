@@ -14,7 +14,6 @@ use App\Notifications\ShopNotification;
 use App\Services\CurrencyService;
 use App\Support\Country;
 use Carbon\Carbon;
-use Illuminate\Contracts\Pagination\LengthAwarePaginator;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Jenssegers\Date\Date;
@@ -596,7 +595,9 @@ class UserProductRepository
             $userProducts->orderByDesc('product_color_id');
         }
 
-        return $userProducts->paginate(10)->appends(request()->query());
+        // Model-aware pagination is applied by the controller after all
+        // filters have run, so colors sharing a barcode prefix stay together.
+        return $userProducts->get();
     }
 
 }

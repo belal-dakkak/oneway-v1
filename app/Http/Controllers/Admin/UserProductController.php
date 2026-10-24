@@ -13,6 +13,7 @@ use App\Repositories\UserProductRepository;
 use App\Services\CurrencyService;
 use App\Services\InventoryTransferService;
 use App\Services\OperationalPriceService;
+use App\Services\UserProductModelGroupingService;
 use App\Support\Country;
 use Carbon\Carbon;
 use Illuminate\Http\RedirectResponse;
@@ -28,14 +29,17 @@ class UserProductController extends Controller
 
     private $productRepository;
     private $inventoryTransfer;
+    private $modelGrouping;
 
     public function __construct(
         UserProductRepository $productRepository,
-        InventoryTransferService $inventoryTransfer
+        InventoryTransferService $inventoryTransfer,
+        UserProductModelGroupingService $modelGrouping
     )
     {
         $this->productRepository = $productRepository;
         $this->inventoryTransfer = $inventoryTransfer;
+        $this->modelGrouping = $modelGrouping;
     }
 
     public function all(Request $request)
@@ -46,6 +50,19 @@ class UserProductController extends Controller
         ]);
 
         $products = $this->productRepository->getUserProductsAll($request, true);
+        $products = $this->modelGrouping->paginate(
+            $products,
+            $request,
+            fn (UserProduct $product) => optional($product->productColor)->barcode,
+            fn (UserProduct $product) => $product->product_color_id,
+            fn (UserProduct $product) => $product->updated_at,
+            fn (UserProduct $product) => sprintf(
+                '%010d:%s:%010d',
+                $product->product_color_id,
+                $product->barcode,
+                $product->id
+            )
+        );
 
         $users = $this->inventoryTransfer->destinationsFor(auth()->user());
         $merchants = User::query()->where('role_id', User::ROLE_MERCHANT)->where('country_id',auth()->user()->country_id)->get();
@@ -186,10 +203,26 @@ class UserProductController extends Controller
         $users = $this->inventoryTransfer->destinationsFor(auth()->user());
         $merchants = User::query()->where('role_id', User::ROLE_MERCHANT)->where('country_id', auth()->user()->country_id)->get();
 
+        $color_products = $this->modelGrouping->paginate(
+            collect($color_products),
+            $request,
+            fn (array $item) => optional($item['product'])->barcode,
+            fn (array $item) => optional($item['product'])->id,
+            function (array $item) {
+                return collect($item['colors'])->max(function (UserProduct $product) {
+                    return optional($product->updated_at)->getTimestamp() ?: 0;
+                });
+            },
+            fn (array $item) => sprintf(
+                '%010d:%s',
+                optional($item['product'])->id,
+                optional(collect($item['colors'])->first())->id
+            )
+        );
+
         if ($request->wantsJson()){
             $rate = app(\App\Services\CurrencyService::class)->rate(\App\Support\Country::defaultCurrency(auth()->user()->country_id));
-            $paginator = paginate($color_products,10,null,['path' => 'userProducts','stock_products' => $allProductsCount]);
-            $paginator->appends($request->query());
+            $paginator = $color_products;
             return response()->json([
                 'data' => $paginator->items(),
                 'current_page' => $paginator->currentPage(),
@@ -212,9 +245,6 @@ class UserProductController extends Controller
                 ]
             ]);
         }
-        $color_products = paginate($color_products,10,null,['path' => 'userProducts','stock_products' => $allProductsCount]);
-        $color_products->appends($request->query());
-
         $rate = app(\App\Services\CurrencyService::class)->rate(\App\Support\Country::defaultCurrency(auth()->user()->country_id));
 
 //        dd($color_products);

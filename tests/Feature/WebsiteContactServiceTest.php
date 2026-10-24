@@ -50,7 +50,8 @@ class WebsiteContactServiceTest extends TestCase
 
         $contacts = app(WebsiteContactService::class)->forStorefrontCountries();
 
-        $this->assertSame('https://wa.me/971501234567', $contacts['AE']['whatsapp_url']);
+        $this->assertSame('+971 564 533 655', $contacts['AE']['whatsapp']);
+        $this->assertSame('https://wa.me/971564533655', $contacts['AE']['whatsapp_url']);
         $this->assertSame('+963947900555', $contacts['SY']['whatsapp']);
         $this->assertSame('https://wa.me/963947900555', $contacts['SY']['whatsapp_url']);
         $this->assertSame('syria@example.test', $contacts['SY']['email']);

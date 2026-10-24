@@ -2,6 +2,7 @@
 
 return [
     'primary_whatsapp' => [
+        'AE' => '+971 564 533 655',
         'SY' => '+963947900555',
     ],
     'branches' => [

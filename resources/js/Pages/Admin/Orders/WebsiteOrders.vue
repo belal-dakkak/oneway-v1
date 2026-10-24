@@ -150,14 +150,18 @@
                                     <img
                                         v-if="product.image_url"
                                         :src="product.image_url"
-                                        class="w-14 h-14 rounded shadow-sm object-cover flex-shrink-0"
+                                        class="w-20 h-20 rounded-md shadow-sm object-cover flex-shrink-0"
                                         alt=""
                                     >
-                                    <div class="flex flex-col text-xs leading-5 text-right">
+                                    <div class="flex min-w-0 flex-1 flex-col text-xs leading-5 text-right">
                                         <span class="font-bold text-gray-800">{{ product.name || product.name_en }}</span>
                                         <span class="text-gray-600">
                                             {{ product.color_name || product.color_name_en }}
                                             <template v-if="product.size"> · {{ product.size }}</template>
+                                        </span>
+                                        <span v-if="product.barcode" class="flex flex-wrap items-center gap-1 text-gray-500">
+                                            <span class="font-semibold">الباركود:</span>
+                                            <span dir="ltr" class="break-all font-mono">{{ product.barcode }}</span>
                                         </span>
                                         <span class="text-gray-700">
                                             الكمية: <strong>{{ product.qty }}</strong>
