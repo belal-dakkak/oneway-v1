@@ -18,9 +18,6 @@
               :style="{ backgroundImage: `url(${slide.image})` }"
             />
 
-            <!-- Gradient Overlay -->
-            <div class="absolute inset-0 bg-gradient-to-t from-black/80 via-black/20 to-transparent md:bg-black/30" />
-
             <!-- Content -->
             <div class="absolute bottom-0 inset-0 flex flex-col justify-end pt-8 md:pt-16 lg:pt-24 p-4 md:pr-8 lg:pr-16 pb-1 md:pb-3 lg:pb-6" :class="store.isRTL ? 'text-right' : 'text-left'">
               <div class="max-w-3xl animate-fade-in-up pl-1 md:pl-8 lg:pl-16">
