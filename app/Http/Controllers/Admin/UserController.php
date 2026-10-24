@@ -39,7 +39,8 @@ class UserController extends Controller
         $request->validate([
             'direction' => ['in:asc,desc', 'nullable'],
             'type' => ['in:1,2,3,4,5,6', 'required'],
-            'field' => ['in:stock,id,user_id', 'nullable']
+            'field' => ['in:stock,id,user_id', 'nullable'],
+            'phone' => ['nullable', 'string', 'max:40'],
         ]);
 
         $users = $this->userRepository->getUsers($request);
@@ -55,7 +56,7 @@ class UserController extends Controller
             'rate' => $rate,
             'users' => $users,
             'type' => $request->get('type'),
-            'filters' => $request->all(['search', 'field', 'direction'])
+            'filters' => $request->all(['search', 'phone', 'field', 'direction'])
         ]);
     }
 

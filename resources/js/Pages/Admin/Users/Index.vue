@@ -8,9 +8,12 @@
                     </jet-button>
                 </inertia-link>
             </div>
-            <div class="mt-8 flex justify-between space-x-4">
-                <div class="max-w-xs">
+            <div class="mt-8 flex flex-wrap items-center justify-end gap-4">
+                <div class="w-full sm:w-64">
                     <input dir="rtl"  type="search" v-model="params.search" :placeholder="__('Search')" class="block w-full rounded-md border-gray-300 shadow-sm focus:ring-primary-500 focus:border-primary-500 sm:text-sm">
+                </div>
+                <div class="w-full sm:w-64">
+                    <input dir="ltr" type="search" inputmode="tel" v-model="params.phone" :placeholder="__('Phone Number')" class="block w-full rounded-md border-gray-300 shadow-sm focus:ring-primary-500 focus:border-primary-500 sm:text-sm">
                 </div>
                 <h3 class="text-2xl font-bold capitalize text-primary">{{ getPluralName(type) }}</h3>
             </div>
@@ -145,11 +148,13 @@
       data() {
           return {
               params: {
-                  search: this.filters.search,
-                  field: this.filters.field,
-                  direction: this.direction
+                  search: this.filters.search || '',
+                  phone: this.filters.phone || '',
+                  field: this.filters.field || '',
+                  direction: this.filters.direction || ''
               },
               allUsers: this.users,
+              filterRequestId: 0,
           }
       },
       methods: {
@@ -242,23 +247,26 @@
           },
       },
       watch: {
+          users(value) {
+              this.allUsers = value
+          },
           params: {
               handler: throttle(function () {
-                  let params = this.params;
-                  Object.keys(params).forEach(key => {
-                      if (params[key] == ''){
-                          delete params[key]
-                      }
-                  }, 150);
-                  this.params['type'] = this.type;
+                  const params = Object.fromEntries(
+                      Object.entries(this.params).filter(([, value]) => value !== '' && value !== null && value !== undefined)
+                  )
+                  params.type = this.type
+                  params.page = 1
+                  const requestId = ++this.filterRequestId
 
-                  axios.get(this.route('users.index', this.params)).then(response => {
+                  axios.get(this.route('users.index', params)).then(response => {
+                      if (requestId !== this.filterRequestId) return
                       this.allUsers = {
                           ...response.data,
                           data: [...response.data.data]
                       }
-                  });
-              }),
+                  })
+              }, 300),
               deep: true
           }
       },

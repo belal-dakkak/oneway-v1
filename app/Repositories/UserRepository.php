@@ -76,6 +76,50 @@ class UserRepository
                     ->orWhere('email', 'LIKE', "%$search%");
             });
 
+        if ($request->filled('phone')) {
+            $phone = trim((string) $request->get('phone'));
+            $normalizedPhone = preg_replace('/\D+/', '', $phone);
+
+            if ($normalizedPhone !== '') {
+                $phoneExpression = "REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(phone, ' ', ''), '-', ''), '(', ''), ')', ''), '+', ''), '.', '')";
+                $phoneCandidates = [$normalizedPhone];
+
+                if (strlen($normalizedPhone) >= 8) {
+                    $internationalPhone = Str::startsWith($normalizedPhone, '00')
+                        ? substr($normalizedPhone, 2)
+                        : $normalizedPhone;
+                    $phoneCandidates[] = $internationalPhone;
+
+                    $dialCode = [
+                        User::COUNTRY_LB => '961',
+                        User::COUNTRY_UAE => '971',
+                        User::COUNTRY_SYRIA => '963',
+                    ][$countryId] ?? null;
+
+                    if ($dialCode && Str::startsWith($internationalPhone, $dialCode)) {
+                        $subscriberNumber = substr($internationalPhone, strlen($dialCode));
+                        $phoneCandidates[] = $subscriberNumber;
+                        $phoneCandidates[] = '0'.$subscriberNumber;
+                    } elseif (Str::startsWith($internationalPhone, '0')) {
+                        $subscriberNumber = substr($internationalPhone, 1);
+                        $phoneCandidates[] = $subscriberNumber;
+                        if ($dialCode) {
+                            $phoneCandidates[] = $dialCode.$subscriberNumber;
+                        }
+                    }
+                }
+
+                $phoneCandidates = array_values(array_unique(array_filter($phoneCandidates)));
+                $users->where(function ($query) use ($phoneExpression, $phoneCandidates) {
+                    foreach ($phoneCandidates as $candidate) {
+                        $query->orWhereRaw("{$phoneExpression} LIKE ?", ["%{$candidate}%"]);
+                    }
+                });
+            } else {
+                $users->where('phone', 'LIKE', "%{$phone}%");
+            }
+        }
+
         if ($request->has(['field', 'direction'])){
             $field = $request->get('field');
             $direction = $request->get('direction');
