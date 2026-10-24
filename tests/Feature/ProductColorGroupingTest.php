@@ -64,6 +64,25 @@ class ProductColorGroupingTest extends TestCase
         );
     }
 
+    public function test_catalog_search_can_match_a_color_barcode_with_country_scope(): void
+    {
+        $admin = User::factory()->create([
+            'role_id' => User::ROLE_ADMIN,
+            'country_id' => Country::UAE,
+        ]);
+        $this->actingAs($admin);
+        $category = Category::query()->create(['name' => 'Catalog search']);
+        $black = Color::query()->create(['name' => 'Black', 'name_en' => 'Black', 'code' => '#000000']);
+        $product = $this->product($category, 'MODEL-18225');
+        $matchedColor = $this->productColor($product, $black, '18225K70');
+
+        $request = Request::create('/admin/productColors', 'GET', ['search' => 'K70']);
+        $rows = app(ProductColorRepository::class)->getProducts($request)->items();
+
+        $this->assertCount(1, $rows);
+        $this->assertSame($matchedColor->id, $rows[0]->id);
+    }
+
     private function product(Category $category, string $barcode): Product
     {
         return Product::query()->create([

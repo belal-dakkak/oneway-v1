@@ -183,7 +183,7 @@ class ProductColorRepository
         }
 
         if ($search !== '') {
-            $products->where(function ($query) use ($search) {
+            $products->where(function ($query) use ($search, $countryIds, $color) {
                 $query->where('name', 'LIKE', "%$search%")
                     ->orWhere('name_en', 'LIKE', "%$search%")
                     ->orWhere('barcode', 'LIKE', "%$search%")
