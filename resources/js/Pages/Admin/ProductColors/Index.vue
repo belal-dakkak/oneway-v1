@@ -388,7 +388,7 @@ export default {
             this.lsizes = catalogSizes
             this.clsizes = catalogSizes.map(size => ({
                 ...size,
-                quantity: 0,
+                quantity: Number(size.stock) || 0,
             }))
             this.stock = item.stock;
             this.wholesale_price = Currency.normalizeInput(item.product.cost_price_value, this.currency.code);
