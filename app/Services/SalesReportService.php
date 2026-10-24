@@ -10,6 +10,7 @@ use Carbon\Carbon;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Http\Request;
 use Illuminate\Support\Collection;
+use Illuminate\Support\Facades\DB;
 
 class SalesReportService
 {
@@ -58,7 +59,7 @@ class SalesReportService
      */
     public function debtSummary(Request $request): array
     {
-        $query = $this->baseOrderQuery($request, true)
+        $source = $this->baseOrderQuery($request, true)
             ->join('users as debt_summary_sellers', 'debt_summary_sellers.id', '=', 'orders.seller_id');
 
         $currencyExpression = "CASE
@@ -68,13 +69,25 @@ class SalesReportService
             ELSE UPPER(COALESCE(orders.curr_type, 'USD'))
         END";
 
-        $rows = $query
+        $source
             ->select([])
             ->selectRaw("{$currencyExpression} as currency_code", [Country::UAE])
-            ->selectRaw('COUNT(orders.id) as orders_count')
-            ->selectRaw('COALESCE(SUM(orders.total_price), 0) as invoice_total')
-            ->selectRaw('COALESCE(SUM(orders.remain_price), 0) as remaining_total')
-            ->groupByRaw($currencyExpression, [Country::UAE])
+            ->addSelect([
+                'orders.id as order_id',
+                'orders.total_price as invoice_total',
+                'orders.remain_price as remaining_total',
+            ]);
+
+        // Aggregate the projected currency in an outer query. MySQL/MariaDB
+        // with ONLY_FULL_GROUP_BY can reject a selected CASE expression even
+        // when that expression is repeated verbatim in GROUP BY.
+        $rows = DB::query()
+            ->fromSub($source->toBase(), 'outstanding_debt_orders')
+            ->select('currency_code')
+            ->selectRaw('COUNT(order_id) as orders_count')
+            ->selectRaw('COALESCE(SUM(invoice_total), 0) as invoice_total')
+            ->selectRaw('COALESCE(SUM(remaining_total), 0) as remaining_total')
+            ->groupBy('currency_code')
             ->orderBy('currency_code')
             ->get();
 
