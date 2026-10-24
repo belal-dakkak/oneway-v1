@@ -380,6 +380,47 @@ class InventoryTransferTest extends TestCase
         return ['Syria base USD' => [4, 'USD', 1], 'UAE local AED' => [2, 'AED', 3.67]];
     }
 
+    public function test_legacy_merchant_account_returns_validation_error_without_partial_transfer(): void
+    {
+        $admin = $this->user(User::ROLE_ADMIN, 2, 'legacy-transfer-admin@example.test');
+        $shop = $this->user(User::ROLE_SHOP, 2, 'legacy-transfer-shop@example.test');
+        $merchant = $this->user(User::ROLE_MERCHANT, 2, 'legacy-transfer-merchant@example.test');
+        $productColor = $this->productColor(2, [
+            ['size' => 'M', 'barcode' => 'LEGACY-M', 'stock' => 4],
+        ]);
+        $accountId = DB::table('merchant_debits')->insertGetId([
+            'creditor_id' => $merchant->id,
+            'debtor_id' => $shop->id,
+            'amount' => 100,
+            'currency_code' => 'USD',
+            'exchange_rate' => 1,
+            'created_at' => now(),
+            'updated_at' => now(),
+        ]);
+
+        $this->actingAs($admin)->postJson(route('userProducts.store'), [
+            'source_type' => InventoryTransferService::SOURCE_CATALOG,
+            'destination_user_id' => $shop->id,
+            'merchant_id' => $merchant->id,
+            'product_color_id' => $productColor->id,
+            'currency_code' => 'AED',
+            'retail_price' => 73.40,
+            'wholesale_price' => 36.70,
+            'items' => [
+                ['size' => 'M', 'barcode' => 'LEGACY-M', 'quantity' => 2],
+            ],
+        ])->assertStatus(422)->assertJsonValidationErrors('merchant_id');
+
+        $this->assertDatabaseHas('merchant_debits', [
+            'id' => $accountId,
+            'amount' => 100,
+            'currency_code' => 'USD',
+        ]);
+        $this->assertDatabaseCount('user_products', 0);
+        $this->assertDatabaseCount('debits', 0);
+        $this->assertDatabaseCount('debit_logs', 0);
+    }
+
     public function test_transfer_destinations_follow_catalog_and_inventory_source_rules(): void
     {
         $warehouse = $this->user(User::ROLE_WAREHOUSE, 4, 'source-warehouse@example.test');

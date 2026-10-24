@@ -84,6 +84,15 @@ class InventoryTransferService
                         'merchant_id' => 'The selected merchant is not available in this country.',
                     ]);
                 }
+
+                $existingMerchantDebit = MerchantDebit::query()
+                    ->where('creditor_id', $merchant->id)
+                    ->where('debtor_id', $destination->id)
+                    ->lockForUpdate()
+                    ->first();
+                if ($existingMerchantDebit) {
+                    $this->merchantAccountCode($existingMerchantDebit);
+                }
             }
 
             $centralSizes = $this->decodeSizes($productColor->getRawOriginal('sizes'));
@@ -357,7 +366,7 @@ class InventoryTransferService
             'creditor_id' => $merchant->id,
             'debtor_id' => $destination->id,
         ], ['amount' => 0]);
-        $code = app(OperationalCurrency::class)->accountCode($merchantDebit);
+        $code = $this->merchantAccountCode($merchantDebit);
         $amount = app(OperationalCurrency::class)->fromBase($amount, $code);
         $merchantDebit->increment('amount', $amount);
 
@@ -394,6 +403,17 @@ class InventoryTransferService
             'note' => $note,
             'type' => 'store',
         ]);
+    }
+
+    private function merchantAccountCode(MerchantDebit $account): string
+    {
+        try {
+            return app(OperationalCurrency::class)->accountCode($account);
+        } catch (\InvalidArgumentException $exception) {
+            throw ValidationException::withMessages([
+                'merchant_id' => 'حساب هذا التاجر قديم بعملة مختلفة. يجب تحويل الحساب إلى عملة المحل قبل إرسال بضاعة جديدة.',
+            ]);
+        }
     }
 
     private function transferMessage(
