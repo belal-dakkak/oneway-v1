@@ -30,10 +30,14 @@ class Order extends Model
         'status','payment_type','curr_type','curr_rate','display_currency','display_rate','notes',
         'tax_ratio','tax_value','price_without_tax','trn','order_type',
         'first_name', 'last_name', 'email', 'phone', 'address', 'city', 'building_name', 'flat_number',
-        'shipping_fee', 'cod_fee',
+        'shipping_fee', 'cod_fee', 'unpaid_tab_archived_at',
     ];
 
-    protected $casts = ['curr_rate' => 'float', 'display_rate' => 'float'];
+    protected $casts = [
+        'curr_rate' => 'float',
+        'display_rate' => 'float',
+        'unpaid_tab_archived_at' => 'datetime',
+    ];
 
     protected $appends = ['date', 'sent_date','payment_label', 'invoice_links'];
 
@@ -97,6 +101,11 @@ class Order extends Model
     public function payments(): HasMany
     {
         return $this->hasMany(OrderPayment::class);
+    }
+
+    public function unpaidArchive(): HasOne
+    {
+        return $this->hasOne(UnpaidOrderArchive::class);
     }
 
     public function refund(): HasOne

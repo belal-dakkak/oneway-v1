@@ -85,20 +85,21 @@
                 </td>
                 <td class="mx-auto max-w-sm p-6 text-sm leading-6 sm:text-base sm:leading-7">
                     <div class="ml-4">
-                        <div v-if="Number(item.amount) < 0" class="text-sm font-medium text-white bg-emerald-500 p-2 rounded-md my-4 text-center">{{ formatMoney(Math.abs(item.amount), item.currency_code) }} رصيد للزبون</div>
-                        <div v-else class="text-sm font-medium text-white bg-rose-500 p-2 rounded-md my-4 text-center">{{ formatMoney(item.amount, item.currency_code) }} دين</div>
+                        <div v-if="isCredit(item)" class="text-sm font-medium text-white bg-emerald-500 p-2 rounded-md my-4 text-center">{{ formatMoney(Math.abs(item.amount), item.currency_code) }} رصيد للزبون</div>
+                        <div v-else-if="isDebt(item)" class="text-sm font-medium text-white bg-rose-500 p-2 rounded-md my-4 text-center">{{ formatMoney(item.amount, item.currency_code) }} دين</div>
+                        <div v-else class="text-sm font-medium text-white bg-gray-500 p-2 rounded-md my-4 text-center">مسدد</div>
                     </div>
                 </td>
                 <td class="flex flex-wrap mx-auto max-w-sm p-6 text-sm leading-6 sm:text-base sm:leading-7">
 
-                    <div v-if="Number(item.amount) > 0" class="m-4">
+                    <div v-if="isDebt(item)" class="m-4">
                         <button @click="addPayment(item.id)" class="w-full flex justify-between rounded-md text-white bg-teal-400 hover:bg-teal-600 hover:text-white">
                             <p class="m-1 p-1">تسديد</p>
                             <vue-feather class="m-2 mt-3" :type="'credit-card'" stroke-width="2"></vue-feather>
                         </button>
                     </div>
 
-                    <div v-if="Number(item.amount) < 0" class="m-4">
+                    <div v-if="isCredit(item)" class="m-4">
                         <button @click="addWithdraw(item.id)" class="w-full flex justify-between rounded-md text-white bg-fuchsia-600 hover:bg-fuchsia-800 hover:text-white">
                             <p class="m-1 p-1">سحب</p>
                             <vue-feather class="m-2 mt-3" :type="'credit-card'" stroke-width="2"></vue-feather>
@@ -270,6 +271,18 @@ export default {
                 maximumFractionDigits: decimals
             }) + ' ' + currency;
         },
+        roundedAccountAmount(item) {
+            const currency = String(item.currency_code || 'USD').toUpperCase()
+            const factor = currency === 'SYP' ? 1 : 100
+            const amount = Number(item.amount) || 0
+            return Math.sign(amount) * Math.round((Math.abs(amount) + Number.EPSILON) * factor) / factor
+        },
+        isDebt(item) {
+            return this.roundedAccountAmount(item) > 0
+        },
+        isCredit(item) {
+            return this.roundedAccountAmount(item) < 0
+        },
         controlProduct(event){
             let model = event.target.value
             let element = event.target;
@@ -423,7 +436,7 @@ export default {
                                     ? `تم تسجيل الدفعة وإغلاق ${settled} طلب غير مسدد`
                                     : 'تم تسجيل الدفعة بنجاح')
                             }
-                            this.reloadClients(response.data.account?.is_closed ? id : null)
+                            this.reloadClients()
                         } else
                             this.showErrorMessage(response.data.error)
                     }).catch((error) => {
@@ -496,7 +509,7 @@ export default {
                             } else {
                                 this.showSuccessMessage('تم إغلاق حساب الزبون')
                             }
-                            this.reloadClients(response.data.account?.is_closed ? id : null)
+                            this.reloadClients()
                         } else
                             this.showErrorMessage(response.data.error)
                     }).catch((error) => {
@@ -505,17 +518,11 @@ export default {
                 }
             })
         },
-        reloadClients(closedId = null) {
+        reloadClients() {
             const currentPage = Number(this.debitClients.current_page || 1)
-            const remainingRows = closedId === null
-                ? this.debitClients.data.length
-                : this.debitClients.data.filter(account => Number(account.id) !== Number(closedId)).length
-            const targetPage = closedId !== null && remainingRows === 0 && currentPage > 1
-                ? currentPage - 1
-                : currentPage
             this.$inertia.get(this.route('clientDebit.clients'), {
                 ...this.params,
-                page: targetPage,
+                page: currentPage,
             }, {
                 replace: true,
                 preserveScroll: true,

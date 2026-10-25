@@ -46,6 +46,7 @@ class ClientDebtOrderScope
         $balance = "(SELECT MAX(ROUND(COALESCE(debt_accounts.amount, 0), CASE WHEN UPPER(COALESCE(debt_accounts.currency_code, 'USD')) = 'SYP' THEN 0 ELSE 2 END)) FROM client_debits debt_accounts WHERE {$match})";
 
         return $query
+            ->whereNull("{$table}.unpaid_tab_archived_at")
             ->whereRaw("{$remain} > 0")
             ->whereRaw("({$count} <> 1 OR {$balance} > 0)");
     }

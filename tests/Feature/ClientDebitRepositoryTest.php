@@ -13,7 +13,7 @@ class ClientDebitRepositoryTest extends TestCase
 {
     use RefreshDatabase;
 
-    public function test_client_list_and_totals_exclude_balances_that_round_to_zero(): void
+    public function test_client_list_keeps_settled_accounts_and_totals_remain_financially_correct(): void
     {
         $admin = User::factory()->create([
             'role_id' => User::ROLE_ADMIN,
@@ -37,14 +37,16 @@ class ClientDebitRepositoryTest extends TestCase
         $ids = collect($clients->items())->pluck('id')->all();
         $totals = $repository->getClientsSum(new Request());
 
-        $this->assertNotContains($zero->id, $ids);
-        $this->assertNotContains($roundedUsdZero->id, $ids);
-        $this->assertNotContains($roundedSypZero->id, $ids);
+        $this->assertContains($zero->id, $ids);
+        $this->assertContains($roundedUsdZero->id, $ids);
+        $this->assertContains($roundedSypZero->id, $ids);
         $this->assertContains($positive->id, $ids);
         $this->assertContains($negative->id, $ids, 'A customer credit is not a zero account.');
         $this->assertContains($sypDebt->id, $ids);
         $this->assertEqualsWithDelta(5.12, (float) $totals['USD'], 0.00001);
         $this->assertSame(2.0, (float) $totals['SYP']);
+
+        $this->get(route('clientDebit.log', $zero->id))->assertOk();
     }
 
     private function account(User $shop, string $name, string $currency, float $amount): ClientDebit
