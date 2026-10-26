@@ -19,6 +19,10 @@ export function storefrontProductPrice(product, kind, currency, exchangeRate) {
     : Number((basePrice * Number(exchangeRate || 1)).toFixed(currency === 'SYP' ? 0 : 2))
 }
 
+export function storefrontProductImage(product, fallback = '/api/placeholder/300/400') {
+  return product?.image_url || product?.photo_url || product?.image || fallback
+}
+
 export function convertCurrencyAmount(value, fromRate, toRate, toCode) {
   const amount = Number(value || 0)
   const sourceRate = Number(fromRate || 1)

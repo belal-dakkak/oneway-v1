@@ -203,10 +203,13 @@
                             :href="phone.whatsapp_url"
                             target="_blank"
                             rel="noopener noreferrer"
-                            class="text-gray-300 hover:text-white transition-colors"
-                            dir="ltr"
+                            class="text-gray-300 hover:text-white transition-colors inline-flex items-center gap-2"
                         >
-                            {{ phone.number }}
+                            <WhatsAppIcon class="h-5 w-5 shrink-0" />
+                            <span dir="ltr">{{ phone.number }}</span>
+                            <span v-if="phone.labels" class="text-xs font-semibold">
+                                {{ phone.labels.ar }} / {{ phone.labels.en }}
+                            </span>
                         </a>
                     </div>
                 </div>
@@ -299,8 +302,9 @@ import { usePage } from '@inertiajs/inertia-vue3';
 import { computed } from 'vue';
 import { brandLogo } from '@/Utils/brand';
 import FloatingButtons from '@/Components/Website/FloatingButtons.vue';
+import WhatsAppIcon from '@/Components/Website/WhatsAppIcon.vue';
 
-const components = { Carousel, Slide, Pagination, Navigation, Arrow, ArrowDown, ProductCarousel, ColorTag, FloatingButtons }
+const components = { Carousel, Slide, Pagination, Navigation, Arrow, ArrowDown, ProductCarousel, ColorTag, FloatingButtons, WhatsAppIcon }
 
 export default {
     props:{

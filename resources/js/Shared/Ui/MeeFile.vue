@@ -54,7 +54,7 @@ import axios from 'axios'
 
 export default {
     props: {
-        modelValue: { required: true, type: String, default: '' },
+        modelValue: { required: true, type: [String, Array], default: '' },
         title: {
             required: true,
             default: 'اسحب الملف هنا'
@@ -119,8 +119,11 @@ export default {
                     })
                         .then((response) => {
                             media.uploaded = true
-                            if (!this.selectedFiles.includes(response.data)){
-                                this.selectedFiles = [...this.selectedFiles, response.data]
+                            const uploadedPath = Array.isArray(response.data)
+                                ? response.data[0]
+                                : response.data
+                            if (!this.selectedFiles.includes(uploadedPath)){
+                                this.selectedFiles = [...this.selectedFiles, uploadedPath]
                             }
                             this.$emit('update:modelValue', this.selectedFiles[0])
                         })

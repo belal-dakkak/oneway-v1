@@ -77,6 +77,7 @@ class OrderRepository
             foreach (['', '_m'] as $suffix) {
                 Cache::forget("home_new_products_{$countryId}{$suffix}");
                 Cache::forget("home_offer_products_{$countryId}{$suffix}");
+                Cache::forget("home_offer_products_v2_{$countryId}{$suffix}");
                 Cache::forget("home_random_products_{$countryId}{$suffix}");
             }
         }

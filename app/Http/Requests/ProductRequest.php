@@ -2,6 +2,9 @@
 
 namespace App\Http\Requests;
 
+use App\Models\Product;
+use App\Models\ProductColor;
+use App\Support\ProductColorImage;
 use App\Support\Country;
 use Illuminate\Foundation\Http\FormRequest;
 
@@ -39,6 +42,13 @@ class ProductRequest extends FormRequest
             'country.id' => 'nullable|integer|in:1,2,3,4',
             'price_currency_code' => 'required|string|in:USD,AED,SYP',
             'selected_products' => 'required|array|min:1',
+            'selected_products.*.id' => 'nullable|integer',
+            'selected_products.*.image' => 'required',
+            'selected_products.*.color' => 'required|array',
+            'selected_products.*.color.id' => 'required|integer|exists:colors,id',
+            'selected_products.*.sizes' => 'required|array|min:1',
+            'selected_products.*.sizes.*.size.id' => 'required',
+            'selected_products.*.sizes.*.stock' => 'required|numeric|min:0',
             'selected_products.*.is_cover' => 'nullable|boolean',
         ];
     }
@@ -76,6 +86,30 @@ class ProductRequest extends FormRequest
                 ->count();
             if ($coverCount > 1) {
                 $validator->errors()->add('selected_products', 'يمكن اختيار صورة غلاف واحدة فقط.');
+            }
+
+            $routeProduct = $this->route('product');
+            $productId = $routeProduct instanceof Product
+                ? $routeProduct->getKey()
+                : (is_numeric($routeProduct) ? (int) $routeProduct : null);
+
+            foreach ($this->input('selected_products', []) as $index => $selectedProduct) {
+                if (ProductColorImage::path($selectedProduct['image'] ?? null) === null) {
+                    $validator->errors()->add("selected_products.$index.image", 'صورة اللون مطلوبة.');
+                }
+
+                if (!$productId || empty($selectedProduct['id'])) {
+                    continue;
+                }
+
+                $belongsToProduct = ProductColor::query()
+                    ->whereKey($selectedProduct['id'])
+                    ->where('product_id', $productId)
+                    ->exists();
+
+                if (!$belongsToProduct) {
+                    $validator->errors()->add("selected_products.$index.id", 'لون المنتج المحدد غير صالح.');
+                }
             }
         });
     }

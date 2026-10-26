@@ -313,6 +313,55 @@ class ProductRepositoryUpdateTest extends TestCase
         ]);
     }
 
+    public function test_update_accepts_ui_string_images_and_switches_the_existing_cover(): void
+    {
+        $admin = User::factory()->create([
+            'role_id' => User::ROLE_ADMIN,
+            'country_id' => 2,
+        ]);
+        $this->actingAs($admin);
+
+        [$product, $categoryId] = $this->makeProduct();
+        $blackId = DB::table('colors')->insertGetId([
+            'name' => 'Black', 'name_en' => 'Black', 'code' => '#000000',
+            'created_at' => now(), 'updated_at' => now(),
+        ]);
+        $whiteId = DB::table('colors')->insertGetId([
+            'name' => 'White', 'name_en' => 'White', 'code' => '#ffffff',
+            'created_at' => now(), 'updated_at' => now(),
+        ]);
+        $black = ProductColor::query()->create([
+            'product_id' => $product->id, 'image' => 'black-old.jpg', 'color_id' => $blackId,
+            'stock' => 1, 'barcode' => 'MODEL-ATOMIC-B', 'sizes' => json_encode([['stock' => 1, 'size' => 'M']]),
+            'country_id' => 2,
+        ]);
+        $white = ProductColor::query()->create([
+            'product_id' => $product->id, 'image' => 'white-old.jpg', 'color_id' => $whiteId,
+            'stock' => 1, 'barcode' => 'MODEL-ATOMIC-W', 'sizes' => json_encode([['stock' => 1, 'size' => 'M']]),
+            'country_id' => 2,
+        ]);
+        $product->update(['cover_product_color_id' => $black->id]);
+
+        $request = $this->makeUpdateRequest($categoryId, '90', [
+            [
+                'id' => $black->id, 'image' => 'products/colors/black-new.jpg',
+                'color' => ['id' => $blackId], 'barcode' => 'MODEL-ATOMIC-B',
+                'sizes' => [['stock' => 1, 'size' => ['id' => 'M']]], 'is_cover' => false,
+            ],
+            [
+                'id' => $white->id, 'image' => 'products/colors/white-new.jpg',
+                'color' => ['id' => $whiteId], 'barcode' => 'MODEL-ATOMIC-W',
+                'sizes' => [['stock' => 1, 'size' => ['id' => 'M']]], 'is_cover' => true,
+            ],
+        ]);
+
+        app(ProductRepository::class)->update($request, $product);
+
+        $this->assertSame($white->id, (int) $product->fresh()->cover_product_color_id);
+        $this->assertSame('products/colors/black-new.jpg', $black->fresh()->image);
+        $this->assertSame('products/colors/white-new.jpg', $white->fresh()->image);
+    }
+
     private function makeProduct(array $prices = []): array
     {
         $categoryId = DB::table('categories')->insertGetId([

@@ -7,6 +7,7 @@ use App\Models\ProductColor;
 use App\Models\User;
 use App\Services\OperationalPriceService;
 use App\Support\Country;
+use App\Support\ProductColorImage;
 use Illuminate\Contracts\Pagination\LengthAwarePaginator;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Cache;
@@ -24,7 +25,7 @@ class ProductRepository
     private function clearHomeCache()
     {
         foreach (Country::allowedIds() as $countryId) {
-            foreach (['home_new_products_', 'home_offer_products_', 'home_random_products_'] as $prefix) {
+            foreach (['home_new_products_', 'home_offer_products_', 'home_offer_products_v2_', 'home_random_products_'] as $prefix) {
                 Cache::forget($prefix.$countryId);
                 Cache::forget($prefix.$countryId.'_m');
             }
@@ -94,7 +95,7 @@ class ProductRepository
                         $sizes[$key]['barcode'] = $subProductBarcode.convertSizeToNumber($size['size']);
                     }
                     $productColor->update([
-                        'image' => is_array($subProduct['image']) ? $subProduct['image'][0] : $productColor->image,
+                        'image' => ProductColorImage::path($subProduct['image'], $productColor->image),
                         'color_id' => $subProduct['color']['id'] ?? $productColor->color_id,
                         'stock' => $stock,
                         'barcode' => $subProductBarcode,
@@ -128,7 +129,7 @@ class ProductRepository
 
                 $productColor = ProductColor::query()->create([
                     'product_id' => $product->id,
-                    'image' => $subProduct['image'][0],
+                    'image' => ProductColorImage::path($subProduct['image']),
                     'color_id' => $subProduct['color']['id'],
                     'stock' => $stock,
                     'barcode' => $subProductBarcode,

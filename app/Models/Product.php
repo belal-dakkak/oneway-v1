@@ -2,9 +2,9 @@
 
 namespace App\Models;
 
-use App\Services\CurrencyService;
 use App\Support\Country;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
+use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
@@ -43,6 +43,11 @@ class Product extends Model
     public function reviews(): HasMany
     {
         return $this->hasMany(Review::class, 'product_id');
+    }
+
+    public function scopeCurrentOffer(Builder $query): Builder
+    {
+        return $query->where('products.price_before_discount', '>', 0);
     }
 
     public function calculateRate()
@@ -238,23 +243,16 @@ class Product extends Model
 
     public function getPriceBeforeDiscountAttribute($val)
     {
-        // Prioritize explicit price_before_discount from products table
-        if ($val) {
+        if ($val !== null && $val !== '' && (float) $val > 0) {
             return $val;
         }
 
-        // Secondary priority: shadowed attribute from join (if needed, but usually we want local)
-        if (isset($this->attributes['user_price_before_discount']) && $this->attributes['user_price_before_discount']) {
+        if (isset($this->attributes['user_price_before_discount'])
+            && (float) $this->attributes['user_price_before_discount'] > 0) {
             return $this->attributes['user_price_before_discount'];
         }
 
-        // Fake discount logic
-        $aedRetailPrice = $this->retail_price * app(CurrencyService::class)->rate('AED');
-        if ($aedRetailPrice > 150) {
-            return $this->retail_price / 0.4;
-        } else {
-            return $this->retail_price / 0.5;
-        }
+        return 0;
     }
 
     public function getWholesalePriceValueAttribute()

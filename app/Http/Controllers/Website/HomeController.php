@@ -85,14 +85,11 @@ class HomeController extends Controller
 
         // Offer Products
         $offerProducts = Cache::remember(
-            "home_offer_products_{$countryId}{$merchantSuffix}",
+            "home_offer_products_v2_{$countryId}{$merchantSuffix}",
             600,
             function () use ($baseQuery) {
                 return $baseQuery()
-                    ->where(function($q) {
-                        $q->whereNotNull('products.price_before_discount')
-                          ->orWhere('products.price_before_discount','>', 0);
-                    })
+                    ->currentOffer()
                     ->limit(12)
                     ->get();
             }
@@ -228,10 +225,7 @@ class HomeController extends Controller
 
         // Sale Filter
         if ($request->boolean('sale')) {
-            $query->where(function($q) {
-                $q->whereNotNull('products.price_before_discount')
-                  ->orWhere('products.price_before_discount', '>', 0);
-            });
+            $query->currentOffer();
         }
 
         // Sorting

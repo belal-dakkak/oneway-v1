@@ -38,6 +38,22 @@ class WebsiteContactServiceTest extends TestCase
         ], collect($directory)->flatMap(function (array $branch) {
             return array_column($branch['phones'], 'whatsapp_url');
         })->values()->all());
+        $this->assertSame([
+            ['sale_type' => 'wholesale', 'labels' => ['ar' => 'جملة', 'en' => 'Wholesale']],
+            ['sale_type' => 'retail', 'labels' => ['ar' => 'مفرق', 'en' => 'Retail']],
+        ], collect($directory[0]['phones'])->map(fn (array $phone) => [
+            'sale_type' => $phone['sale_type'],
+            'labels' => $phone['labels'],
+        ])->all());
+        $this->assertSame([
+            ['sale_type' => 'wholesale', 'labels' => ['ar' => 'جملة', 'en' => 'Wholesale']],
+            ['sale_type' => 'retail', 'labels' => ['ar' => 'مفرق', 'en' => 'Retail']],
+        ], collect($directory[1]['phones'])->map(fn (array $phone) => [
+            'sale_type' => $phone['sale_type'],
+            'labels' => $phone['labels'],
+        ])->all());
+        $this->assertArrayNotHasKey('sale_type', $directory[2]['phones'][0]);
+        $this->assertArrayNotHasKey('labels', $directory[3]['phones'][0]);
     }
 
     public function test_whatsapp_links_are_country_specific_and_unconfigured_numbers_are_hidden(): void

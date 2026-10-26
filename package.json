@@ -10,6 +10,7 @@
         "production": "mix --production",
         "test:currency": "node --test tests/Frontend/CurrencyFormattingTest.mjs",
         "test:receipt": "node --test tests/Frontend/ReceiptPayloadTest.mjs",
+        "test:storefront-image": "node --test tests/Frontend/StorefrontProductImageTest.mjs",
         "test:wholesale-price": "node --test tests/Frontend/WholesalePriceTest.mjs"
     },
     "devDependencies": {

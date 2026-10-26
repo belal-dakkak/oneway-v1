@@ -420,6 +420,7 @@ import ProductCarousel from '../Components/Website/ProductCarousel.vue'
 import ProductGallery from '../Components/Website/ProductGallery.vue'
 import { ref, computed, onMounted } from 'vue'
 import { useStore } from '@/stores/store'
+import { storefrontProductImage } from '@/Utils/StorefrontPricing'
 import ShareButton from '../Components/Website/Share.vue'
 import Button from "@/Jetstream/Button.vue";
 
@@ -457,7 +458,7 @@ export default {
       return {
         id: product.id,
         name: this.store.locale === 'ar' ? (product.name || product.name) : (product.name_en || product.name),
-        image: product.image_url || product.photo_url || product.image || '/api/placeholder/300/400',
+        image: storefrontProductImage(product),
         retail_price: product.retail_price,
         price_before_discount: product.price_before_discount,
         price_before_discount_value: product.price_before_discount_value,

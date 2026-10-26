@@ -119,6 +119,7 @@ import Sitemap from '../Components/Website/Sitemap.vue'
 import Footer from '../Components/Website/Footer.vue'
 import FloatingButtons from '../Components/Website/FloatingButtons.vue'
 import { useStore } from '@/stores/store'
+import { storefrontProductImage } from '@/Utils/StorefrontPricing'
 
 export default {
   components: {
@@ -271,7 +272,7 @@ export default {
       return {
         id: product.id,
         name: this.store.locale === 'ar' ? (product.name || product.name) : (product.name_en || product.name),
-        image: product.photo_url || product.image_url || product.image || '/api/placeholder/300/400',
+        image: storefrontProductImage(product),
         retail_price: product.retail_price,
         price_before_discount: product.price_before_discount,
         price_before_discount_value: product.price_before_discount_value,

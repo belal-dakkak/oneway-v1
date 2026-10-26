@@ -13,7 +13,12 @@ class WebsiteContactService
      *     name: array{ar: string, en: string},
      *     address: array{ar: string, en: string},
      *     map_url: string,
-     *     phones: array<int, array{number: string, whatsapp_url: string}>
+     *     phones: array<int, array{
+     *         number: string,
+     *         whatsapp_url: string,
+     *         sale_type?: string,
+     *         labels?: array{ar: string, en: string}
+     *     }>
      * }>
      */
     public function directory(): array
@@ -21,13 +26,27 @@ class WebsiteContactService
         return collect(config('website_contacts.branches', []))
             ->map(function (array $branch): array {
                 $branch['phones'] = collect($branch['phones'] ?? [])
-                    ->map(function (string $number): array {
+                    ->map(function ($phone): array {
+                        $phone = is_array($phone) ? $phone : ['number' => $phone];
+                        $number = trim((string) ($phone['number'] ?? ''));
                         $digits = $this->internationalDigits($number);
 
-                        return [
+                        $result = [
                             'number' => $number,
                             'whatsapp_url' => 'https://wa.me/'.$digits,
                         ];
+
+                        if (!empty($phone['sale_type'])) {
+                            $result['sale_type'] = (string) $phone['sale_type'];
+                        }
+                        if (!empty($phone['labels']) && is_array($phone['labels'])) {
+                            $result['labels'] = [
+                                'ar' => (string) ($phone['labels']['ar'] ?? ''),
+                                'en' => (string) ($phone['labels']['en'] ?? ''),
+                            ];
+                        }
+
+                        return $result;
                     })
                     ->values()
                     ->all();

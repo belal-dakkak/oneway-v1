@@ -82,9 +82,12 @@
                         target="_blank"
                         rel="noopener noreferrer"
                         class="text-muted-foreground hover:text-primary transition-colors flex items-center gap-2"
-                        dir="ltr"
                       >
-                        <span>WhatsApp</span> {{ phone.number }}
+                        <WhatsAppIcon class="h-5 w-5 shrink-0" />
+                        <span dir="ltr">{{ phone.number }}</span>
+                        <span v-if="phone.labels" class="text-xs font-semibold">
+                          {{ phone.labels.ar }} / {{ phone.labels.en }}
+                        </span>
                       </a>
                     </div>
                   </div>
@@ -270,6 +273,7 @@ import { ref, reactive, computed } from 'vue'
 import { usePage } from '@inertiajs/inertia-vue3'
 import { Inertia } from '@inertiajs/inertia'
 import FlagIcon from '../Components/Website/FlagIcon.vue'
+import WhatsAppIcon from '../Components/Website/WhatsAppIcon.vue'
 import Header from '../Components/Website/Header.vue'
 import Sitemap from '../Components/Website/Sitemap.vue'
 import Footer from '../Components/Website/Footer.vue'
@@ -281,7 +285,8 @@ export default {
     Sitemap,
     Footer,
     FloatingButtons,
-    FlagIcon
+    FlagIcon,
+    WhatsAppIcon
   },
   props: {
     categories: Array,

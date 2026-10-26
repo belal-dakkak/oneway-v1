@@ -24,7 +24,7 @@ class UserProductRepository
     private function clearHomeCache()
     {
         foreach (Country::allowedIds() as $countryId) {
-            foreach (['home_new_products_', 'home_offer_products_', 'home_random_products_'] as $prefix) {
+            foreach (['home_new_products_', 'home_offer_products_', 'home_offer_products_v2_', 'home_random_products_'] as $prefix) {
                 Cache::forget($prefix.$countryId);
                 Cache::forget($prefix.$countryId.'_m');
             }

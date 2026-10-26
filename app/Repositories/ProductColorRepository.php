@@ -7,6 +7,7 @@ use App\Models\ProductColor;
 use App\Models\User;
 use App\Services\OperationalPriceService;
 use App\Support\Country;
+use App\Support\ProductColorImage;
 use Illuminate\Contracts\Pagination\LengthAwarePaginator;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Cache;
@@ -24,7 +25,7 @@ class ProductColorRepository
     private function clearHomeCache()
     {
         foreach (Country::allowedIds() as $countryId) {
-            foreach (['home_new_products_', 'home_offer_products_', 'home_random_products_'] as $prefix) {
+            foreach (['home_new_products_', 'home_offer_products_', 'home_offer_products_v2_', 'home_random_products_'] as $prefix) {
                 Cache::forget($prefix.$countryId);
                 Cache::forget($prefix.$countryId.'_m');
             }
@@ -95,7 +96,7 @@ class ProductColorRepository
                     }
                     $productColor = ProductColor::query()->create([
                         'product_id' => $product->id,
-                        'image' => $subProduct['image'][0],
+                        'image' => ProductColorImage::path($subProduct['image']),
                         'color_id' => $subProduct['color']['id'],
                         // 'stock' => $subProduct['stock']??0,
                         'stock' => $stock,

@@ -17,7 +17,18 @@ return [
                 'en' => 'Ajman Industrial 2 Beirut Street',
             ],
             'map_url' => 'https://maps.app.goo.gl/ANRzyQkoRjKN2cTs6?g_st=iwb',
-            'phones' => ['+971 545 516 995', '+971 564 533 655'],
+            'phones' => [
+                [
+                    'number' => '+971 545 516 995',
+                    'sale_type' => 'wholesale',
+                    'labels' => ['ar' => 'جملة', 'en' => 'Wholesale'],
+                ],
+                [
+                    'number' => '+971 564 533 655',
+                    'sale_type' => 'retail',
+                    'labels' => ['ar' => 'مفرق', 'en' => 'Retail'],
+                ],
+            ],
         ],
         [
             'code' => 'SY',
@@ -30,7 +41,18 @@ return [
                 'en' => 'Syria – Aleppo',
             ],
             'map_url' => 'https://maps.app.goo.gl/rCXcEwsCYmNpxiU7A?g_st=ic',
-            'phones' => ['+963 958 900 555', '+963 947 900 555'],
+            'phones' => [
+                [
+                    'number' => '+963 958 900 555',
+                    'sale_type' => 'wholesale',
+                    'labels' => ['ar' => 'جملة', 'en' => 'Wholesale'],
+                ],
+                [
+                    'number' => '+963 947 900 555',
+                    'sale_type' => 'retail',
+                    'labels' => ['ar' => 'مفرق', 'en' => 'Retail'],
+                ],
+            ],
         ],
         [
             'code' => 'LB',
