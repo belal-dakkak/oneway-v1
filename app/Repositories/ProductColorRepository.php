@@ -7,7 +7,7 @@ use App\Models\ProductColor;
 use App\Models\User;
 use App\Services\OperationalPriceService;
 use App\Support\Country;
-use App\Support\ProductColorImage;
+use App\Support\UploadedMediaPath;
 use Illuminate\Contracts\Pagination\LengthAwarePaginator;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Cache;
@@ -96,7 +96,7 @@ class ProductColorRepository
                     }
                     $productColor = ProductColor::query()->create([
                         'product_id' => $product->id,
-                        'image' => ProductColorImage::path($subProduct['image']),
+                        'image' => UploadedMediaPath::normalize($subProduct['image']),
                         'color_id' => $subProduct['color']['id'],
                         // 'stock' => $subProduct['stock']??0,
                         'stock' => $stock,

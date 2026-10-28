@@ -14,46 +14,30 @@ class SliderRepository
         app(StorefrontSliderService::class)->clear();
     }
 
-    private function countryId(Request $request): ?int
+    public function add(array $data): Slider
     {
-        $country = $request->input('country');
-        $value = is_array($country) ? ($country['id'] ?? $country['value'] ?? null) : $country;
-        return $value === null || $value === '' ? null : (int) $value;
-    }
-
-    public function add(Request $request): Slider
-    {
-        $slider = null;
-        if ($id = $request->get('id'))
-        {
-            $slider =  Slider::find($id);
-            $place = $request->get('place');
-            $slider->type = is_array($place) ? $place['value'] : $place;
-            $slider->country_id = $this->countryId($request);
-            if ($request->get('image') && is_array($request->get('image')))
-                $slider->image = $request->get('image')[0];
-            $slider->save();
-        } else {
-            $slider =  new Slider();
-            $slider->type = $request->get('place')['value'];
-            $slider->country_id = $this->countryId($request);
-            if ($request->get('image') && is_array($request->get('image')))
-                $slider->image = $request->get('image')[0];
-            $slider->save();
-        }
+        $slider = Slider::query()->create([
+            'image' => $data['image_path'],
+            'type' => (int) $data['type'],
+            'country_id' => $data['country_id'] === null ? null : (int) $data['country_id'],
+        ]);
         $this->clearSliderCache();
         return $slider;
     }
 
-    public function update(Request $request, Slider $slider)
+    public function update(array $data, Slider $slider): Slider
     {
-        if ($request->get('image') && is_array($request->get('image')))
-            $slider->image = $request->get('image')[0];
-        $place = $request->get('place', $request->get('value'));
-        $slider->type = is_array($place) ? $place['value'] : $place;
-        $slider->country_id = $this->countryId($request);
-        $slider->save();
+        $values = [
+            'type' => (int) $data['type'],
+            'country_id' => $data['country_id'] === null ? null : (int) $data['country_id'],
+        ];
+        if (!empty($data['image_path'])) {
+            $values['image'] = $data['image_path'];
+        }
+
+        $slider->update($values);
         $this->clearSliderCache();
+        return $slider;
     }
 
     public function getSliders(Request $request): LengthAwarePaginator

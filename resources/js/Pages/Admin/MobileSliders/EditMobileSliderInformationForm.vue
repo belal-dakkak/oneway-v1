@@ -5,19 +5,20 @@
                 <div>
                     <div class="col-span-8 sm:col-span-4" dir="rtl">
                         <jet-label for="place" :value="__('Position')" />
-                        <Multiselect v-model="form.value" :options="[{ name: 'Left', value: '1' },{ name: 'Center', value: '2' },{ name: 'Right', value: '3' }]" :multiple="false" :close-on-select="true" placeholder="اختر مكان التموضع" label="name" track-by="value" />
-                        <jet-input-error :message="form.errors.value" class="mt-2" />
+                        <Multiselect v-model="form.place" :options="positions" :multiple="false" :close-on-select="true" placeholder="اختر مكان التموضع" label="name" track-by="value" />
+                        <jet-input-error :message="form.errors.type || form.errors.place" class="mt-2" />
                     </div>
                     <div class="col-span-8 sm:col-span-4 mt-4" dir="rtl">
                         <jet-label for="country" value="Country (الدولة)" />
                         <Multiselect v-model="form.country" :options="countries" :multiple="false" :close-on-select="true" placeholder="اختر الدولة" label="name" track-by="value" />
-                        <jet-input-error :message="form.errors.country" class="mt-2" />
+                        <jet-input-error :message="form.errors.country_id || form.errors.country" class="mt-2" />
                     </div>
                     <MeeFile
                         :title="__('Drag files here to add image')"
                         :name="'image'"
                         v-model="form.image"
                     />
+                    <jet-input-error :message="form.errors.image_path || form.errors.image" class="mt-2" />
                 </div>
             </div>
         </template>
@@ -58,11 +59,15 @@ export default defineComponent({
         countries: { type: Array, default: () => [] }
     },
     data() {
+        const positions = [
+            { name: 'Left', value: '1' },
+            { name: 'Center', value: '2' },
+            { name: 'Right', value: '3' },
+        ]
         return {
+            positions,
             form: this.$inertia.form({
-                _method: 'PUT',
-                id: this.slider.id,
-                value: this.slider.type,
+                place: positions.find(position => Number(position.value) === Number(this.slider.type)) || null,
                 image: this.slider.image,
                 country: this.countries.find(country => Number(country.value) === Number(this.slider.country_id)) || this.countries[0] || null,
             }),

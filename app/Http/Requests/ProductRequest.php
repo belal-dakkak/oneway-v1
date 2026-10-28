@@ -4,8 +4,8 @@ namespace App\Http\Requests;
 
 use App\Models\Product;
 use App\Models\ProductColor;
-use App\Support\ProductColorImage;
 use App\Support\Country;
+use App\Support\UploadedMediaPath;
 use Illuminate\Foundation\Http\FormRequest;
 
 class ProductRequest extends FormRequest
@@ -94,7 +94,7 @@ class ProductRequest extends FormRequest
                 : (is_numeric($routeProduct) ? (int) $routeProduct : null);
 
             foreach ($this->input('selected_products', []) as $index => $selectedProduct) {
-                if (ProductColorImage::path($selectedProduct['image'] ?? null) === null) {
+                if (UploadedMediaPath::normalize($selectedProduct['image'] ?? null) === null) {
                     $validator->errors()->add("selected_products.$index.image", 'صورة اللون مطلوبة.');
                 }
 

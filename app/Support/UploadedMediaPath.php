@@ -2,13 +2,13 @@
 
 namespace App\Support;
 
-final class ProductColorImage
+final class UploadedMediaPath
 {
     /**
-     * Normalize the media endpoint's legacy array response and the current
-     * string value into the path stored on product_colors.
+     * Normalize both the current string response and legacy nested arrays
+     * returned by the shared asynchronous media uploader.
      */
-    public static function path($value, ?string $fallback = null): ?string
+    public static function normalize($value, ?string $fallback = null): ?string
     {
         while (is_array($value)) {
             if ($value === []) {

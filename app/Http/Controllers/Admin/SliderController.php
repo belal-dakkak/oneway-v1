@@ -3,6 +3,7 @@
 namespace App\Http\Controllers\Admin;
 
 use App\Http\Controllers\Controller;
+use App\Http\Requests\SliderRequest;
 use App\Models\Slider;
 use App\Repositories\SliderRepository;
 use Illuminate\Http\RedirectResponse;
@@ -52,10 +53,9 @@ class SliderController extends Controller
         return Inertia::render('Admin/Sliders/Create', ['countries' => $this->countryOptions()]);
     }
 
-    public function store(Request $request)
+    public function store(SliderRequest $request)
     {
-        $request->validate(['country.value' => ['nullable', 'integer', 'in:1,2,4']]);
-        $this->sliderRepository->add($request);
+        $this->sliderRepository->add($request->validated());
         $request->session()->flash('success', 'تم إنشاء السلايدر بنجاح');
         return Redirect::route('sliders.index');
     }
@@ -70,10 +70,9 @@ class SliderController extends Controller
         ]);
     }
 
-    public function update(Slider $slider, Request $request): RedirectResponse
+    public function update(Slider $slider, SliderRequest $request): RedirectResponse
     {
-        $request->validate(['country.value' => ['nullable', 'integer', 'in:1,2,4']]);
-        $this->sliderRepository->update($request, $slider);
+        $this->sliderRepository->update($request->validated(), $slider);
         $request->session()->flash('success', 'تم تعديل السلايدر بنجاح');
         return Redirect::route('sliders.index');
     }

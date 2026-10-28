@@ -7,7 +7,7 @@ use App\Models\ProductColor;
 use App\Models\User;
 use App\Services\OperationalPriceService;
 use App\Support\Country;
-use App\Support\ProductColorImage;
+use App\Support\UploadedMediaPath;
 use Illuminate\Contracts\Pagination\LengthAwarePaginator;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Cache;
@@ -95,7 +95,7 @@ class ProductRepository
                         $sizes[$key]['barcode'] = $subProductBarcode.convertSizeToNumber($size['size']);
                     }
                     $productColor->update([
-                        'image' => ProductColorImage::path($subProduct['image'], $productColor->image),
+                        'image' => UploadedMediaPath::normalize($subProduct['image'], $productColor->image),
                         'color_id' => $subProduct['color']['id'] ?? $productColor->color_id,
                         'stock' => $stock,
                         'barcode' => $subProductBarcode,
@@ -129,7 +129,7 @@ class ProductRepository
 
                 $productColor = ProductColor::query()->create([
                     'product_id' => $product->id,
-                    'image' => ProductColorImage::path($subProduct['image']),
+                    'image' => UploadedMediaPath::normalize($subProduct['image']),
                     'color_id' => $subProduct['color']['id'],
                     'stock' => $stock,
                     'barcode' => $subProductBarcode,

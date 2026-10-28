@@ -3,6 +3,7 @@
 namespace App\Http\Controllers\Admin;
 
 use App\Http\Controllers\Controller;
+use App\Http\Requests\SliderRequest;
 use App\Models\MobileSlider;
 use App\Repositories\MobileSliderRepository;
 use Illuminate\Http\RedirectResponse;
@@ -53,10 +54,9 @@ class MobileSliderController extends Controller
         return Inertia::render('Admin/MobileSliders/Create', ['countries' => $this->countryOptions()]);
     }
 
-    public function store(Request $request)
+    public function store(SliderRequest $request)
     {
-        $request->validate(['country.value' => ['nullable', 'integer', 'in:1,2,4']]);
-        $this->mobileSliderRepository->add($request);
+        $this->mobileSliderRepository->add($request->validated());
         $request->session()->flash('success', 'تم إنشاء سلايدر الموبايل بنجاح');
         return Redirect::route('mobile-sliders.index');
     }
@@ -70,10 +70,9 @@ class MobileSliderController extends Controller
         ]);
     }
 
-    public function update(MobileSlider $mobileSlider, Request $request): RedirectResponse
+    public function update(MobileSlider $mobileSlider, SliderRequest $request): RedirectResponse
     {
-        $request->validate(['country.value' => ['nullable', 'integer', 'in:1,2,4']]);
-        $this->mobileSliderRepository->update($request, $mobileSlider);
+        $this->mobileSliderRepository->update($request->validated(), $mobileSlider);
         $request->session()->flash('success', 'تم تعديل سلايدر الموبايل بنجاح');
         return Redirect::route('mobile-sliders.index');
     }
