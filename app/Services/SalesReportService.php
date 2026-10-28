@@ -165,7 +165,7 @@ class SalesReportService
 
         foreach ($refunds as $refund) {
             $order = optional($refund->orderItem)->order;
-            if (!$order) {
+            if (!$order || $this->isSignedReturn($order, $refund->orderItem)) {
                 continue;
             }
             $currency = strtoupper((string) ($refund->currency_code ?: $order->curr_type ?: 'USD'));
@@ -179,7 +179,7 @@ class SalesReportService
             $key = $date . '|' . $order->seller_id . '|' . $currency;
             $row = &$this->row($rows, $key, $date, (int) $order->seller_id, optional($order->seller)->name, $currency);
             $row['refund_total'] += $this->refundTotal($refund, $order);
-            $row['refund_qty'] += (int) $refund->qty;
+            $row['refund_qty'] += abs((int) $refund->qty);
             $row['refund_net'] += $this->refundNet($refund, $order);
             $row['refund_tax'] += $this->refundTax($refund);
             $row['refund_profit'] += $this->refundTotal($refund, $order) - $this->refundCost($refund, $order);
@@ -292,8 +292,11 @@ class SalesReportService
             $refundTotal = $refundQty = $refundProfit = 0;
             foreach ($order->items as $item) {
                 foreach ($item->refunds as $refund) {
+                    if ($this->isSignedReturn($order, $item)) {
+                        continue;
+                    }
                     $refundTotal += $this->refundTotal($refund, $order);
-                    $refundQty += (int) $refund->qty;
+                    $refundQty += abs((int) $refund->qty);
                     $refundProfit += $this->refundTotal($refund, $order) - $this->refundCost($refund, $order);
                 }
             }
@@ -316,10 +319,11 @@ class SalesReportService
         $grossQty = $grossNet = $grossTax = $cost = 0;
         foreach ($order->items as $item) {
             $qty = (int) ($item->sold_qty ?? ((int) $item->qty + (int) $item->refunds()->sum('qty')));
-            $grossQty += $qty;
-            $grossNet += (float) ($item->price_without_tax_paid ?: $item->item_price_paid ?: ((float) $item->item_price * $rate)) * $qty;
-            $grossTax += (float) ($item->tax_value_paid ?: 0) * $qty;
-            $cost += (float) ($item->unit_cost ?? optional($item->product)->wholesale_price ?? 0) * $rate * $qty;
+            $signedQty = $this->isSignedReturn($order, $item) ? -abs($qty) : $qty;
+            $grossQty += $signedQty;
+            $grossNet += abs((float) ($item->price_without_tax_paid ?: $item->item_price_paid ?: ((float) $item->item_price * $rate))) * $signedQty;
+            $grossTax += abs((float) ($item->tax_value_paid ?: 0)) * $signedQty;
+            $cost += abs((float) ($item->unit_cost ?? optional($item->product)->wholesale_price ?? 0) * $rate) * $signedQty;
         }
         $grossSales = (float) $order->total_price;
         // Order-level values are the immutable invoice snapshot and include the
@@ -327,7 +331,11 @@ class SalesReportService
         // only as a fallback for historical rows that predate those snapshots.
         $snapshotNet = (float) ($order->price_without_tax ?? 0);
         $snapshotTax = (float) ($order->tax_value ?? 0);
-        if ($snapshotNet > 0 || $snapshotTax > 0 || $grossSales == 0.0) {
+        if ($this->isSignedReturn($order)) {
+            $snapshotNet = -abs($snapshotNet);
+            $snapshotTax = -abs($snapshotTax);
+        }
+        if ($snapshotNet != 0.0 || $snapshotTax != 0.0 || $grossSales == 0.0) {
             $grossNet = $snapshotNet;
             $grossTax = $snapshotTax;
         }
@@ -342,33 +350,51 @@ class SalesReportService
 
     private function refundTotal(Refund $refund, Order $order): float
     {
-        return (float) ($refund->total_price_paid ?: ((float) $refund->total_price * (float) ($order->curr_rate ?: 1)));
+        return abs((float) ($refund->total_price_paid ?: ((float) $refund->total_price * (float) ($order->curr_rate ?: 1))));
     }
 
     private function refundNet(Refund $refund, Order $order): float
     {
         if ($refund->net_amount !== null) {
-            return (float) $refund->net_amount;
+            return abs((float) $refund->net_amount);
         }
         $item = $refund->orderItem;
-        return (float) ($item->price_without_tax_paid ?: $item->item_price_paid ?: 0) * (int) $refund->qty;
+        return abs((float) ($item->price_without_tax_paid ?: $item->item_price_paid ?: 0) * (int) $refund->qty);
     }
 
     private function refundTax(Refund $refund): float
     {
-        return $refund->tax_amount !== null
+        return abs($refund->tax_amount !== null
             ? (float) $refund->tax_amount
-            : (float) optional($refund->orderItem)->tax_value_paid * (int) $refund->qty;
+            : (float) optional($refund->orderItem)->tax_value_paid * (int) $refund->qty);
     }
 
     private function refundCost(Refund $refund, Order $order): float
     {
         if ($refund->cost_amount !== null) {
-            return (float) $refund->cost_amount;
+            return abs((float) $refund->cost_amount);
         }
         $item = $refund->orderItem;
-        return (float) ($item->unit_cost ?? optional($item->product)->wholesale_price ?? 0)
-            * (float) ($order->curr_rate ?: 1) * (int) $refund->qty;
+        return abs((float) ($item->unit_cost ?? optional($item->product)->wholesale_price ?? 0)
+            * (float) ($order->curr_rate ?: 1) * (int) $refund->qty);
+    }
+
+    private function isSignedReturn(Order $order, $item = null): bool
+    {
+        if ((float) $order->total_price < 0) {
+            return true;
+        }
+
+        if (!$item) {
+            return false;
+        }
+
+        return (int) $item->qty < 0
+            || ($item->sold_qty !== null && (int) $item->sold_qty < 0)
+            || (float) $item->item_price < 0
+            || (float) $item->total_price < 0
+            || (float) $item->item_price_paid < 0
+            || (float) $item->total_price_paid < 0;
     }
 
     private function &row(array &$rows, string $key, string $date, int $shopId, ?string $shopName, string $currency): array

@@ -292,6 +292,81 @@ class SalesReportServiceTest extends TestCase
         $this->assertStringStartsWith('%PDF-', $dailyPdf);
     }
 
+    public function test_profit_report_sums_losses_signed_returns_and_legacy_negative_refunds_once(): void
+    {
+        $admin = User::factory()->create(['role_id' => User::ROLE_ADMIN, 'country_id' => User::COUNTRY_UAE]);
+        $shop = User::factory()->create(['role_id' => User::ROLE_SHOP, 'country_id' => User::COUNTRY_UAE]);
+        $otherShop = User::factory()->create(['role_id' => User::ROLE_SHOP, 'country_id' => User::COUNTRY_UAE]);
+        $buyer = User::factory()->create(['role_id' => User::ROLE_CLIENT, 'country_id' => User::COUNTRY_UAE]);
+        $this->actingAs($admin);
+
+        $category = Category::query()->create(['name' => 'Profit reports']);
+        $colorOption = Color::query()->create(['name' => 'Black', 'code' => '#000000']);
+        $product = Product::query()->create([
+            'name' => 'Profit product', 'barcode' => 'PROFIT-1', 'country_id' => User::COUNTRY_UAE,
+            'category_id' => $category->id, 'cost_price' => 40,
+        ]);
+        $color = ProductColor::query()->create([
+            'product_id' => $product->id, 'color_id' => $colorOption->id,
+            'country_id' => User::COUNTRY_UAE, 'barcode' => 'PROFIT-C', 'sizes' => '[]', 'stock' => 0,
+        ]);
+        $stock = UserProduct::query()->create([
+            'product_color_id' => $color->id, 'user_id' => $shop->id,
+            'country_id' => User::COUNTRY_UAE, 'size' => 'M', 'barcode' => 'PROFIT-M',
+            'stock' => 10, 'wholesale_price' => 40, 'retail_price' => 100,
+        ]);
+        $date = '2026-10-20 12:00:00';
+
+        $profitable = $this->order($shop, 'PROFITABLE', 'AED', 1, 100, $date);
+        $profitable->update(['buyer_id' => $buyer->id]);
+        $this->item($profitable, $stock, 1, 1, 100, 40);
+
+        $loss = $this->order($shop, 'LOSS', 'AED', 1, 50, $date);
+        $loss->update(['buyer_id' => $buyer->id]);
+        $this->item($loss, $stock, 1, 1, 50, 80);
+
+        $signedReturn = $this->order($shop, 'SIGNED-RETURN', 'AED', 1, -100, $date);
+        $signedReturn->update(['buyer_id' => $buyer->id]);
+        $signedReturnItem = $this->item($signedReturn, $stock, -1, -1, 100, 40);
+        Refund::query()->create([
+            'order_item_id' => $signedReturnItem->id, 'qty' => 1,
+            'item_price' => -100, 'total_price' => -100, 'total_price_paid' => -100,
+            'currency_code' => 'AED', 'net_amount' => -100, 'tax_amount' => 0, 'cost_amount' => -40,
+            'item_barcode' => 'PROFIT-M', 'order_barcode' => 'SIGNED-RETURN',
+        ])->forceFill(['created_at' => Carbon::parse($date), 'updated_at' => Carbon::parse($date)])->save();
+
+        $refundedSale = $this->order($shop, 'NEGATIVE-REFUND', 'AED', 1, 100, $date);
+        $refundedSale->update(['buyer_id' => $buyer->id]);
+        $refundedItem = $this->item($refundedSale, $stock, 1, 0, 100, 40);
+        Refund::query()->create([
+            'order_item_id' => $refundedItem->id, 'qty' => 1,
+            'item_price' => -100, 'total_price' => -100, 'total_price_paid' => -100,
+            'currency_code' => 'AED', 'net_amount' => -100, 'tax_amount' => 0, 'cost_amount' => -40,
+            'item_barcode' => 'PROFIT-M', 'order_barcode' => 'NEGATIVE-REFUND',
+        ])->forceFill(['created_at' => Carbon::parse($date), 'updated_at' => Carbon::parse($date)])->save();
+
+        $excluded = $this->order($otherShop, 'OTHER-SHOP-LOSS', 'AED', 1, -1000, $date);
+        $excluded->update(['buyer_id' => $buyer->id]);
+
+        $report = app(SalesReportService::class)->orders(new Request([
+            'shop' => $shop->id,
+            'buyer' => $buyer->id,
+            'date' => '2026-10-20',
+        ]), false);
+
+        $this->assertSame(4, $report['orders']->total());
+        $this->assertSame(-30.0, (float) $report['profits_by_currency']['AED']);
+        $this->assertSame(-30.0, (float) $report['profit']);
+
+        $orders = collect($report['orders']->items())->keyBy('barcode');
+        $this->assertSame(60.0, (float) $orders['PROFITABLE']->net_profit);
+        $this->assertSame(-30.0, (float) $orders['LOSS']->net_profit);
+        $this->assertSame(-60.0, (float) $orders['SIGNED-RETURN']->net_profit);
+        $this->assertSame(0.0, (float) $orders['NEGATIVE-REFUND']->net_profit);
+        $this->assertSame(-1, (int) $orders['SIGNED-RETURN']->net_qty);
+        $this->assertSame(0.0, (float) $orders['SIGNED-RETURN']->refund_total, 'A signed return must not be subtracted twice.');
+    }
+
     private function order(User $shop, string $barcode, string $currency, float $rate, float $total, string $createdAt): Order
     {
         $order = Order::query()->create([

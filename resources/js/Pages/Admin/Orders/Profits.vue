@@ -2,7 +2,12 @@
   <app-layout title="Products Management">
       <div class="mt-8 flex justify-around space-x-4">
           <div class="flex flex-wrap gap-2" dir="rtl">
-              <div v-for="(value, code) in profitsByCurrency" :key="code" class="rounded-md bg-emerald-500 px-3 py-2 text-white">
+              <div
+                  v-for="(value, code) in profitsByCurrency"
+                  :key="code"
+                  class="rounded-md px-3 py-2 text-white"
+                  :class="Number(value) < 0 ? 'bg-rose-600' : 'bg-emerald-500'"
+              >
                   صافي الأرباح: {{ money(value, code) }}
               </div>
           </div>
@@ -212,7 +217,10 @@
                 </td>
                 <td class="mx-auto max-w-sm p-6 text-sm leading-6 sm:text-base sm:leading-7">
                     <div class="ml-4">
-                        <div class="text-sm font-medium">{{ money(item.net_profit, item.currency_code || item.curr_type) }}</div>
+                        <div
+                            class="text-sm font-bold"
+                            :class="Number(item.net_profit) < 0 ? 'text-rose-600' : 'text-emerald-600'"
+                        >{{ money(item.net_profit, item.currency_code || item.curr_type) }}</div>
                     </div>
                 </td>
             </tr>
