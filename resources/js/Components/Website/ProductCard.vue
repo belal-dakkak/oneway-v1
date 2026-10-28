@@ -6,12 +6,7 @@
     <div class="relative">
       <div class="aspect-[9/16] overflow-hidden bg-muted">
         <img
-            :src="product.colors && product.colors[0]?.stock > 0 && product.colors[0]?.photo_url
-            ||
-            product.colors && product.colors[1]?.stock > 0 && product.colors[1]?.photo_url
-            ||
-            product.colors && product.colors[2]?.stock > 0 && product.colors[2]?.photo_url
-             || product.image || '/api/placeholder/300/400'"
+          :src="cardImage"
           :alt="product.name"
           class="w-full h-full object-contain group-hover:scale-105 transition-transform duration-300"
         />
@@ -109,6 +104,7 @@
 <script>
 import {computed, ref} from 'vue'
 import { useStore } from '@/stores/store'
+import { storefrontProductImage } from '@/Utils/StorefrontPricing'
 import ShareButton from './Share.vue'
 
 export default {
@@ -129,6 +125,7 @@ export default {
     const store = useStore()
 
     const selectedColor = ref(props.product.colors?.[0] || null)
+    const cardImage = computed(() => storefrontProductImage(props.product))
 
     const displayBarcode = computed(() => {
       const barcode = selectedColor.value?.barcode || ''
@@ -236,6 +233,7 @@ export default {
 
     return {
       store,
+      cardImage,
       retailPrice,
       wholesalePrice,
       beforeDiscountPrice,
