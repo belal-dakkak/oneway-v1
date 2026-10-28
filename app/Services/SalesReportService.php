@@ -134,7 +134,7 @@ class SalesReportService
         if ($start) {
             $ordersQuery->whereBetween('orders.created_at', [$start, $end]);
         }
-        $orders = $ordersQuery->with(['seller', 'items'])->get();
+        $orders = $ordersQuery->with(['seller', 'items.product', 'items.refunds'])->get();
 
         $refundsQuery = Refund::query()->with(['orderItem.order.seller', 'orderItem.product']);
         $this->constrainRefunds($refundsQuery, $request, $debts);
@@ -145,6 +145,7 @@ class SalesReportService
 
         $rows = [];
         $totals = [];
+        $positiveProfits = [];
         foreach ($orders as $order) {
             $currency = strtoupper((string) ($order->curr_type ?: 'USD'));
             if ($debts) {
@@ -156,9 +157,14 @@ class SalesReportService
             $date = $this->localDate($order->created_at, (int) optional($order->seller)->country_id);
             $key = $date . '|' . $order->seller_id . '|' . $currency;
             $row = &$this->row($rows, $key, $date, (int) $order->seller_id, optional($order->seller)->name, $currency);
-            $metrics = $this->saleMetrics($order);
+            $profitMetrics = $this->orderProfitMetrics($order);
+            $metrics = $profitMetrics['sale'];
             foreach ($metrics as $field => $value) {
                 $row[$field] += $value;
+            }
+            if ($profitMetrics['net_profit'] > 0) {
+                $positiveProfits[$currency] = ($positiveProfits[$currency] ?? 0)
+                    + $profitMetrics['net_profit'];
             }
             unset($row);
         }
@@ -224,8 +230,17 @@ class SalesReportService
         }
         unset($total);
 
+        $profitsByCurrency = [];
+        foreach (array_keys($totals) as $currency) {
+            $profitsByCurrency[$currency] = round(
+                max(0, (float) ($positiveProfits[$currency] ?? 0)),
+                $currency === 'SYP' ? 0 : 2
+            );
+        }
+
         usort($rows, fn ($a, $b) => [$b['date'], $b['shop_name'], $b['currency']] <=> [$a['date'], $a['shop_name'], $a['currency']]);
         $single = count($totals) === 1 ? reset($totals) : null;
+        $singlePositiveProfit = count($profitsByCurrency) === 1 ? reset($profitsByCurrency) : 0;
 
         return [
             'rows' => array_values($rows),
@@ -235,8 +250,8 @@ class SalesReportService
             'total_price_without_tax' => $single['net_amount'] ?? 0,
             'total_tax_value' => $single['tax_amount'] ?? 0,
             'totalRefunds' => $single['refund_total'] ?? 0,
-            'profit' => $single['net_profit'] ?? 0,
-            'profits_by_currency' => collect($totals)->map(fn ($total) => $total['net_profit'])->all(),
+            'profit' => $singlePositiveProfit,
+            'profits_by_currency' => $profitsByCurrency,
         ];
     }
 
@@ -288,29 +303,44 @@ class SalesReportService
     private function decorateOrders(Collection $orders): void
     {
         foreach ($orders as $order) {
-            $sale = $this->saleMetrics($order);
-            $refundTotal = $refundQty = $refundProfit = 0;
-            foreach ($order->items as $item) {
-                foreach ($item->refunds as $refund) {
-                    if ($this->isSignedReturn($order, $item)) {
-                        continue;
-                    }
-                    $refundTotal += $this->refundTotal($refund, $order);
-                    $refundQty += abs((int) $refund->qty);
-                    $refundProfit += $this->refundTotal($refund, $order) - $this->refundCost($refund, $order);
-                }
-            }
+            $metrics = $this->orderProfitMetrics($order);
+            $sale = $metrics['sale'];
             $order->setAttribute('currency_code', strtoupper((string) ($order->curr_type ?: 'USD')));
             $order->setAttribute('gross_total', $sale['gross_sales']);
-            $order->setAttribute('refund_total', $refundTotal);
-            $order->setAttribute('net_total', $sale['gross_sales'] - $refundTotal);
+            $order->setAttribute('refund_total', $metrics['refund_total']);
+            $order->setAttribute('net_total', $sale['gross_sales'] - $metrics['refund_total']);
             $order->setAttribute('gross_qty', $sale['gross_qty']);
-            $order->setAttribute('returned_qty', $refundQty);
-            $order->setAttribute('net_qty', $sale['gross_qty'] - $refundQty);
+            $order->setAttribute('returned_qty', $metrics['refund_qty']);
+            $order->setAttribute('net_qty', $sale['gross_qty'] - $metrics['refund_qty']);
             $order->setAttribute('gross_profit', $sale['gross_profit']);
-            $order->setAttribute('refund_profit', $refundProfit);
-            $order->setAttribute('net_profit', $sale['gross_profit'] - $refundProfit);
+            $order->setAttribute('refund_profit', $metrics['refund_profit']);
+            $order->setAttribute('net_profit', $metrics['net_profit']);
         }
+    }
+
+    private function orderProfitMetrics(Order $order): array
+    {
+        $sale = $this->saleMetrics($order);
+        $refundTotal = $refundQty = $refundProfit = 0;
+
+        foreach ($order->items as $item) {
+            foreach ($item->refunds as $refund) {
+                if ($this->isSignedReturn($order, $item)) {
+                    continue;
+                }
+                $refundTotal += $this->refundTotal($refund, $order);
+                $refundQty += abs((int) $refund->qty);
+                $refundProfit += $this->refundTotal($refund, $order) - $this->refundCost($refund, $order);
+            }
+        }
+
+        return [
+            'sale' => $sale,
+            'refund_total' => $refundTotal,
+            'refund_qty' => $refundQty,
+            'refund_profit' => $refundProfit,
+            'net_profit' => $sale['gross_profit'] - $refundProfit,
+        ];
     }
 
     private function saleMetrics(Order $order): array

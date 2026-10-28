@@ -257,6 +257,7 @@ class SalesReportServiceTest extends TestCase
         $this->assertSame(-100.0, (float) $report['totals_by_currency']['SYP']['net_sales']);
         $this->assertSame(-1, $report['totals_by_currency']['SYP']['net_qty']);
         $this->assertSame(-60.0, (float) $report['totals_by_currency']['SYP']['net_profit']);
+        $this->assertSame(0.0, (float) $report['profits_by_currency']['SYP']);
         $this->assertSame(50.0, (float) $report['totals_by_currency']['USD']['net_sales']);
         $this->assertSame(48.0, (float) $report['totals_by_currency']['USD']['gross_net']);
         $this->assertSame(2.0, (float) $report['totals_by_currency']['USD']['gross_tax']);
@@ -292,7 +293,7 @@ class SalesReportServiceTest extends TestCase
         $this->assertStringStartsWith('%PDF-', $dailyPdf);
     }
 
-    public function test_profit_report_sums_losses_signed_returns_and_legacy_negative_refunds_once(): void
+    public function test_profit_card_sums_only_positive_orders_and_keeps_negative_rows_visible(): void
     {
         $admin = User::factory()->create(['role_id' => User::ROLE_ADMIN, 'country_id' => User::COUNTRY_UAE]);
         $shop = User::factory()->create(['role_id' => User::ROLE_SHOP, 'country_id' => User::COUNTRY_UAE]);
@@ -345,6 +346,16 @@ class SalesReportServiceTest extends TestCase
             'item_barcode' => 'PROFIT-M', 'order_barcode' => 'NEGATIVE-REFUND',
         ])->forceFill(['created_at' => Carbon::parse($date), 'updated_at' => Carbon::parse($date)])->save();
 
+        $partiallyRefunded = $this->order($shop, 'PARTIAL-REFUND', 'AED', 1, 200, $date);
+        $partiallyRefunded->update(['buyer_id' => $buyer->id]);
+        $partiallyRefundedItem = $this->item($partiallyRefunded, $stock, 2, 1, 100, 40);
+        Refund::query()->create([
+            'order_item_id' => $partiallyRefundedItem->id, 'qty' => 1,
+            'item_price' => 100, 'total_price' => 100, 'total_price_paid' => 100,
+            'currency_code' => 'AED', 'net_amount' => 100, 'tax_amount' => 0, 'cost_amount' => 40,
+            'item_barcode' => 'PROFIT-M', 'order_barcode' => 'PARTIAL-REFUND',
+        ])->forceFill(['created_at' => Carbon::parse($date), 'updated_at' => Carbon::parse($date)])->save();
+
         $excluded = $this->order($otherShop, 'OTHER-SHOP-LOSS', 'AED', 1, -1000, $date);
         $excluded->update(['buyer_id' => $buyer->id]);
 
@@ -354,15 +365,17 @@ class SalesReportServiceTest extends TestCase
             'date' => '2026-10-20',
         ]), false);
 
-        $this->assertSame(4, $report['orders']->total());
-        $this->assertSame(-30.0, (float) $report['profits_by_currency']['AED']);
-        $this->assertSame(-30.0, (float) $report['profit']);
+        $this->assertSame(5, $report['orders']->total());
+        $this->assertSame(30.0, (float) $report['totals_by_currency']['AED']['net_profit']);
+        $this->assertSame(120.0, (float) $report['profits_by_currency']['AED']);
+        $this->assertSame(120.0, (float) $report['profit']);
 
         $orders = collect($report['orders']->items())->keyBy('barcode');
         $this->assertSame(60.0, (float) $orders['PROFITABLE']->net_profit);
         $this->assertSame(-30.0, (float) $orders['LOSS']->net_profit);
         $this->assertSame(-60.0, (float) $orders['SIGNED-RETURN']->net_profit);
         $this->assertSame(0.0, (float) $orders['NEGATIVE-REFUND']->net_profit);
+        $this->assertSame(60.0, (float) $orders['PARTIAL-REFUND']->net_profit);
         $this->assertSame(-1, (int) $orders['SIGNED-RETURN']->net_qty);
         $this->assertSame(0.0, (float) $orders['SIGNED-RETURN']->refund_total, 'A signed return must not be subtracted twice.');
     }

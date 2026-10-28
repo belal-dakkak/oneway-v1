@@ -5,8 +5,7 @@
               <div
                   v-for="(value, code) in profitsByCurrency"
                   :key="code"
-                  class="rounded-md px-3 py-2 text-white"
-                  :class="Number(value) < 0 ? 'bg-rose-600' : 'bg-emerald-500'"
+                  class="rounded-md bg-emerald-500 px-3 py-2 text-white"
               >
                   صافي الأرباح: {{ money(value, code) }}
               </div>
