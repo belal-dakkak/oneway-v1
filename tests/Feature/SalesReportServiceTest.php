@@ -380,6 +380,89 @@ class SalesReportServiceTest extends TestCase
         $this->assertSame(0.0, (float) $orders['SIGNED-RETURN']->refund_total, 'A signed return must not be subtracted twice.');
     }
 
+    public function test_monthly_pdf_summary_columns_match_their_values_and_currency_precision(): void
+    {
+        $html = view('includes.monthly_orders_template', [
+            'seller' => null,
+            'orders' => [],
+            'all_orders' => [
+                'orders' => [],
+                'totals_by_currency' => [
+                    'AED' => [
+                        'gross_sales' => 1882.25,
+                        'gross_net' => 1792.61,
+                        'gross_tax' => 89.64,
+                        'refund_total' => 102.50,
+                        'net_sales' => 1779.75,
+                        'gross_qty' => 19,
+                        'refund_qty' => 2,
+                        'net_qty' => 17,
+                    ],
+                    'SYP' => [
+                        'gross_sales' => 150000.40,
+                        'gross_net' => 140000.40,
+                        'gross_tax' => 10000,
+                        'refund_total' => 5000,
+                        'net_sales' => 145000.40,
+                        'gross_qty' => 8,
+                        'refund_qty' => 1,
+                        'net_qty' => 7,
+                    ],
+                ],
+            ],
+            'settings' => [],
+            'startDate' => null,
+            'endDate' => null,
+        ])->render();
+
+        $document = new \DOMDocument();
+        @$document->loadHTML('<?xml encoding="utf-8" ?>'.$html);
+        $xpath = new \DOMXPath($document);
+        $text = static fn (\DOMNode $node): string => trim((string) preg_replace('/\s+/u', ' ', $node->textContent));
+
+        $headers = array_map($text, iterator_to_array($xpath->query('//*[@id="monthly-sales-summary"]/thead/tr/th')));
+        $this->assertSame([
+            'عملة الدفع',
+            'إجمالي المبيعات الأصلي',
+            'الأصلي غير شامل الضريبة',
+            'الضريبة الأصلية',
+            'إجمالي المرتجعات',
+            'صافي المبيعات',
+            'القطع مباعة / مرتجعة / صافي',
+        ], $headers);
+
+        $rows = $xpath->query('//*[@id="monthly-sales-summary"]/tbody/tr');
+        $this->assertCount(2, $rows);
+
+        $aedCells = array_map($text, iterator_to_array($xpath->query('./td', $rows->item(0))));
+        $this->assertSame(['AED', '1,882.25', '1,792.61', '89.64', '102.50', '1,779.75', '19 / 2 / 17'], $aedCells);
+        $this->assertSame('ltr', $xpath->query('./td[7]', $rows->item(0))->item(0)->getAttribute('dir'));
+
+        $sypCells = array_map($text, iterator_to_array($xpath->query('./td', $rows->item(1))));
+        $this->assertSame(['SYP', '150,000', '140,000', '10,000', '5,000', '145,000', '8 / 1 / 7'], $sypCells);
+    }
+
+    public function test_monthly_pdf_summary_uses_one_seven_column_empty_row(): void
+    {
+        $html = view('includes.monthly_orders_template', [
+            'seller' => null,
+            'orders' => [],
+            'all_orders' => ['orders' => [], 'totals_by_currency' => []],
+            'settings' => [],
+            'startDate' => null,
+            'endDate' => null,
+        ])->render();
+
+        $document = new \DOMDocument();
+        @$document->loadHTML('<?xml encoding="utf-8" ?>'.$html);
+        $xpath = new \DOMXPath($document);
+        $cells = $xpath->query('//*[@id="monthly-sales-summary"]/tbody/tr/td');
+
+        $this->assertCount(1, $cells);
+        $this->assertSame('7', $cells->item(0)->getAttribute('colspan'));
+        $this->assertSame('لا توجد بيانات', trim($cells->item(0)->textContent));
+    }
+
     private function order(User $shop, string $barcode, string $currency, float $rate, float $total, string $createdAt): Order
     {
         $order = Order::query()->create([

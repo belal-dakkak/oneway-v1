@@ -233,42 +233,39 @@
 
 
         <div class="row">
-            <table height="82" class=" " style=" width:100%;">
+            <table id="monthly-sales-summary" height="82" class=" " style="width:100%;">
+                <thead>
                 <tr class="bg_color1">
-                    <td colspan="3" style="width: 23% !important" class="td-med"></td>
-                    <td class="td-med"> إجمالي المبيعات الأصلي </td>
-                    <td class="td-med"> الأصلي غير شامل الضريبة </td>
-                    <td class="td-med"> الضريبة الأصلية </td>
-                    <td class="td-med"> إجمالي المرتجعات </td>
-                    <td class="td-med"> صافي المبيعات </td>
-                    <td class="td-med"> القطع مباعة / مرتجعة / صافي </td>
-
+                    <th class="td-med"> عملة الدفع </th>
+                    <th class="td-med"> إجمالي المبيعات الأصلي </th>
+                    <th class="td-med"> الأصلي غير شامل الضريبة </th>
+                    <th class="td-med"> الضريبة الأصلية </th>
+                    <th class="td-med"> إجمالي المرتجعات </th>
+                    <th class="td-med"> صافي المبيعات </th>
+                    <th class="td-med"> القطع مباعة / مرتجعة / صافي </th>
                 </tr>
+                </thead>
 
+                <tbody>
                 @if(!empty($all_orders['totals_by_currency']))
                     @foreach($all_orders['totals_by_currency'] as $currencyCode => $summary)
                     @php($moneyDecimals = $currencyCode === 'SYP' ? 0 : 2)
                     <tr class=" ">
-                        <td colspan="2" class="td-med">{{ $currencyCode }}</td>
+                        <td class="td-med">{{ $currencyCode }}</td>
                         <td class="td-med">{{ number_format($summary['gross_sales'], $moneyDecimals) }}</td>
                         <td class="td-med">{{ number_format($summary['gross_net'], $moneyDecimals) }}</td>
                         <td class="td-med">{{ number_format($summary['gross_tax'], $moneyDecimals) }}</td>
                         <td class="td-med">{{ number_format($summary['refund_total'], $moneyDecimals) }}</td>
                         <td class="td-med">{{ number_format($summary['net_sales'], $moneyDecimals) }}</td>
-                        <td class="td-med">{{ $summary['gross_qty'] }} / {{ $summary['refund_qty'] }} / {{ $summary['net_qty'] }}</td>
+                        <td class="td-med" dir="ltr">{{ $summary['gross_qty'] }} / {{ $summary['refund_qty'] }} / {{ $summary['net_qty'] }}</td>
                     </tr>
                     @endforeach
                 @else
-                <tr class=" ">
-                    <td colspan="3" style="width: 23% !important" class="td-med"></td>
-                    <td class="td-med"> {{ $all_orders != null && array_key_exists('totalRefunds',$all_orders) ? number_format($all_orders['totalRefunds'],2) : 0 }} </td>
-                    <td class="td-med"> {{ $all_orders != null && array_key_exists('count',$all_orders) ? number_format($all_orders['count'],2) : 0 }} </td>
-                    <td class="td-med"> {{ $all_orders != null && array_key_exists('total_price_without_tax',$all_orders) ? number_format($all_orders['total_price_without_tax'],2) : 0 }} </td>
-                    <td class="td-med"> {{ $all_orders != null && array_key_exists('total_tax_value',$all_orders) ? number_format($all_orders['total_tax_value'],2) : 0 }} </td>
-                    <td class="td-med"> {{ $all_orders != null && array_key_exists('total',$all_orders) ? number_format($all_orders['total'],2) : 0 }} </td>
-
+                <tr>
+                    <td colspan="7" class="td-med"> لا توجد بيانات </td>
                 </tr>
                 @endif
+                </tbody>
             </table>
         </div>
 
